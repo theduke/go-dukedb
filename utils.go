@@ -211,6 +211,8 @@ func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
 	case reflect.Uint64:
 		x, err := strconv.ParseUint(value, 10, 64)
 		return interface{}(x), err
+	case reflect.String:
+		return interface{}(value), nil
 	default:
 		return nil, errors.New(fmt.Sprintf("cannot_convert_to_%v", typ))
 	}
@@ -283,11 +285,23 @@ func NewModelInfo(model Model) (*ModelInfo, error) {
 	}
 
 	modelVal := reflect.ValueOf(model).Elem()
+	buildFieldInfo(&info, modelVal)
+
+	return &info, nil
+}
+
+func buildFieldInfo(info *ModelInfo, modelVal reflect.Value) {
 	modelType := modelVal.Type()
 
 	for i := 0; i < modelVal.NumField(); i++ {
-		//field := modelVal.Field(i)
+		field := modelVal.Field(i)
 		fieldType := modelType.Field(i)
+
+		if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
+			// Embedded struct. Find nested fields.
+			buildFieldInfo(info, field)
+			continue
+		}
 
 		fieldInfo := ParseFieldTag(fieldType.Tag.Get("db"))	
 		if fieldInfo.Name == "" {
@@ -298,6 +312,4 @@ func NewModelInfo(model Model) (*ModelInfo, error) {
 
 		info.FieldInfo[fieldType.Name] = fieldInfo
 	}
-
-	return &info, nil
 }
