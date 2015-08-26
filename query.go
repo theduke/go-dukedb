@@ -378,17 +378,17 @@ func (q *Query) JoinOn(name, targetField, joinKey, joinedKey string) *Query {
  * Backend functions.
  */
 
-func (q *Query) Find() ([]Model, error) {
+func (q *Query) Find() ([]Model, DbError) {
 	if q.Backend == nil {
-		return nil, errors.New("cant_find_on_query_without_backend")
+		return nil, Error{Code: "cant_find_on_query_without_backend"}
 	}
 
 	return q.Backend.Query(q)
 }
 
-func (q *Query) First() (Model, error) {
+func (q *Query) First() (Model, DbError) {
 	if q.Backend == nil {
-		return nil, errors.New("cant_find_on_query_without_backend")
+		return nil, Error{Code: "cant_find_on_query_without_backend"}
 	}
 
 	return q.Backend.QueryOne(q)

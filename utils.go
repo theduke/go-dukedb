@@ -187,6 +187,13 @@ func ModelFindPrimaryKey(model interface{}) (string, error) {
 	}
 
 	if pkName == "" {
+		// Try To Find pk in embedded structs.
+		for i := 0; i < item.NumField(); i++ {
+			fieldType := typ.Field(i)
+			if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
+				return ModelFindPrimaryKey(item.Field(i).Addr().Interface())
+			}
+		}
 		return "", errors.New("no_id_field_found")
 	}
 

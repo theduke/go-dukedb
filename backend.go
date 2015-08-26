@@ -21,8 +21,7 @@ func(b *BaseBackend) SetDebug(x bool) {
 func (b *BaseBackend) RegisterModel(m Model) error {
 	info, err := NewModelInfo(m)
 	if err != nil {
-		fmt.Printf("Could not register model '%v': %v\n", m.GetCollection(), err)
-		return err
+		panic(fmt.Sprintf("Could not register model '%v': %v\n", m.GetCollection(), err))
 	}
 
 	b.ModelInfo[m.GetCollection()] = info
@@ -39,7 +38,7 @@ func (b BaseBackend) HasModel(name string) bool {
 	return ok
 }
 
-func (b BaseBackend) NewModel(name string) (interface{}, error) {
+func (b BaseBackend) NewModel(name string) (interface{}, DbError) {
 	info, ok := b.ModelInfo[name]
 	if !ok {
 		return nil, Error{
@@ -51,7 +50,7 @@ func (b BaseBackend) NewModel(name string) (interface{}, error) {
 	return NewStruct(info.Item), nil
 }
 
-func (b BaseBackend) NewModelSlice(name string) (interface{}, error) {
+func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
 	info, ok := b.ModelInfo[name]
 	if !ok {
 		return nil, Error{
@@ -68,7 +67,7 @@ func (b BaseBackend) NewModelSlice(name string) (interface{}, error) {
  */
 
  // Find first model with primary key ID.
-func (b BaseBackend) FindOne(modelType string, id string) (Model, error) {
+func (b BaseBackend) FindOne(modelType string, id string) (Model, DbError) {
 	info := b.GetModelInfo(modelType)
 	if info == nil {
 		return nil, Error{
@@ -79,17 +78,17 @@ func (b BaseBackend) FindOne(modelType string, id string) (Model, error) {
 
 	val, err := ConvertToType(id, info.FieldInfo[info.PkField].Type)
 	if err != nil {
-		return nil, err
+		return nil, Error{Code: err.Error()}
 	}
 
-	return b.Backend.Q(modelType).Filter(info.PkField, val).First()
+	return b.Backend.Q(modelType).Filter(info.FieldInfo[info.PkField].Name, val).First()
 }
 
-func (b BaseBackend) FindBy(modelType, field string, value interface{}) ([]Model, error) {
+func (b BaseBackend) FindBy(modelType, field string, value interface{}) ([]Model, DbError) {
 	return b.Backend.Q(modelType).Filter(field, value).Find()
 }
 
-func (b BaseBackend) FindOneBy(modelType, field string, value interface{}) (Model, error) {
+func (b BaseBackend) FindOneBy(modelType, field string, value interface{}) (Model, DbError) {
 	return b.Backend.Q(modelType).Filter(field, value).First()
 }
 

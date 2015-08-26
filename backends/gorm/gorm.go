@@ -101,7 +101,7 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 	return sql, args
 }
 
-func (b Backend) buildQuery(q *db.Query) (*gorm.DB, error) {
+func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
 	gormQ := b.Db
 	if b.Debug() {
 		gormQ = gormQ.Debug()
@@ -170,7 +170,7 @@ func (b Backend) buildQuery(q *db.Query) (*gorm.DB, error) {
 }
 
 // Perform a query.	
-func (b Backend) Query(q *db.Query) ([]db.Model, error) {
+func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	slice, err := b.NewModelSlice(q.Model)
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, error) {
 	return models, nil
 }
 
-func (b Backend) QueryOne(q *db.Query) (db.Model, error) {
+func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
 	res, err := b.Query(q)
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (b Backend) QueryOne(q *db.Query) (db.Model, error) {
 
 // Convenience methods.
 	 
-func (b Backend) Create(m db.Model) error {
+func (b Backend) Create(m db.Model) db.DbError {
 	if err := b.Db.Create(m).Error; err != nil {
 		return db.Error{Code: "gorm_error", Message: err.Error()}
 	}
@@ -224,7 +224,7 @@ func (b Backend) Create(m db.Model) error {
 	return nil
 }
 
-func (b Backend) Update(m db.Model) error {
+func (b Backend) Update(m db.Model) db.DbError {
 	if err := b.Db.Save(m).Error; err != nil {
 		return db.Error{Code: "gorm_error", Message: err.Error()}
 	}
@@ -232,7 +232,7 @@ func (b Backend) Update(m db.Model) error {
 	return nil
 }
 
-func (b Backend) Delete(m db.Model) error {
+func (b Backend) Delete(m db.Model) db.DbError {
 	if err := b.Db.Delete(m).Error; err != nil {
 		return db.Error{Code: "gorm_error", Message: err.Error()}
 	}
