@@ -1,5 +1,9 @@
 package dukedb
 
+import (
+	"time"
+)
+
 type DbError interface {
 	GetCode() string
 	GetMessage() string
@@ -13,8 +17,12 @@ type Backend interface {
 	Debug() bool
 	SetDebug(bool)
 
+	// Duplicate the backend.
+	Copy() Backend
+
 	RegisterModel(Model) error
 	GetModelInfo(string) *ModelInfo
+	GetAllModelInfo() map[string]*ModelInfo
 
 	// Determine if a model type is registered with the backend.
 	HasModel(string) bool
@@ -42,6 +50,44 @@ type Backend interface {
 	Create(Model) DbError
 	Update(Model) DbError
 	Delete(Model) DbError
+}
+
+type Transaction interface {
+	Backend
+	Rollback() DbError
+	Commit() DbError
+}
+
+type TransactionBackend interface {
+	Backend
+	BeginTransaction() Transaction
+}
+
+type MigrationAttempt interface {
+	Model
+	GetVersion() int
+	SetVersion(int)
+
+	GetStartedAt() time.Time
+	SetStartedAt(time.Time)
+
+	GetFinishedAt() time.Time
+	SetFinishedAt(time.Time)
+
+	GetComplete() bool
+	SetComplete(bool)
+}
+
+type MigrationBackend interface {
+	Backend
+	GetMigrationHandler() *MigrationHandler
+
+	MigrationsSetup() DbError
+
+	IsMigrationLocked() (bool, DbError)
+	DetermineMigrationVersion() (int, DbError)
+
+	NewMigrationAttempt() MigrationAttempt
 }
 
 type Model interface {

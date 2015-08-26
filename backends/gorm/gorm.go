@@ -12,8 +12,9 @@ import (
 
 type Backend struct {
 	db.BaseBackend
-
 	Db *gorm.DB
+
+	MigrationHandler *db.MigrationHandler
 }
 
 func New(gorm *gorm.DB) *Backend {
@@ -22,13 +23,22 @@ func New(gorm *gorm.DB) *Backend {
 	}
 
 	b.ModelInfo = make(map[string]*db.ModelInfo)
+	b.MigrationHandler = db.NewMigrationHandler(&b)
 
-	b.BaseBackend.Backend = &b
 	return &b
 }
 
 func (b Backend) GetName() string {
 	return "gorm"
+}
+
+func (b Backend) Copy() db.Backend {
+	copied := Backend{
+		Db: b.Db,
+	}
+	copied.ModelInfo = b.ModelInfo
+	copied.SetDebug(b.Debug())
+	return &copied
 }
 
 
@@ -189,7 +199,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 
 	// Do joins.
 	if len(q.Joins) > 0 {
-		if err := b.DoJoins(q.Model, models, q.Joins); err != nil {
+		if err := db.BackendDoJoins(&b, q.Model, models, q.Joins); err != nil {
 			return nil, db.Error{
 				Code: "join_error",
 				Message: err.Error(),
@@ -212,6 +222,19 @@ func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
 
 	m := res[0].(db.Model)
 	return m, nil
+}
+
+// Find first model with primary key ID.
+func (b Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
+	return db.BackendFindOne(&b, modelType, id)	
+}
+
+func (b Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
+	return b.Q(modelType).Filter(field, value).Find()
+}
+
+func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
+	return b.Q(modelType).Filter(field, value).First()
 }
 
 // Convenience methods.

@@ -7,7 +7,6 @@ import (
 type BaseBackend struct {
 	debug bool
 	ModelInfo map[string]*ModelInfo
-	Backend Backend
 }
 
 func(b *BaseBackend) Debug() bool {
@@ -31,6 +30,10 @@ func (b *BaseBackend) RegisterModel(m Model) error {
 func (b BaseBackend) GetModelInfo(name string) *ModelInfo {
 	info, _ := b.ModelInfo[name]
 	return info
+}
+
+func (b BaseBackend) GetAllModelInfo() map[string]*ModelInfo {
+	return b.ModelInfo
 }
 
 func (b BaseBackend) HasModel(name string) bool {
@@ -66,8 +69,7 @@ func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
  * Convenience functions.
  */
 
- // Find first model with primary key ID.
-func (b BaseBackend) FindOne(modelType string, id string) (Model, DbError) {
+func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 	info := b.GetModelInfo(modelType)
 	if info == nil {
 		return nil, Error{
@@ -81,24 +83,16 @@ func (b BaseBackend) FindOne(modelType string, id string) (Model, DbError) {
 		return nil, Error{Code: err.Error()}
 	}
 
-	return b.Backend.Q(modelType).Filter(info.FieldInfo[info.PkField].Name, val).First()
-}
-
-func (b BaseBackend) FindBy(modelType, field string, value interface{}) ([]Model, DbError) {
-	return b.Backend.Q(modelType).Filter(field, value).Find()
-}
-
-func (b BaseBackend) FindOneBy(modelType, field string, value interface{}) (Model, DbError) {
-	return b.Backend.Q(modelType).Filter(field, value).First()
+	return b.Q(modelType).Filter(info.FieldInfo[info.PkField].Name, val).First()
 }
 
 /**
  * Join logic.
  */
 
-func (b BaseBackend) DoJoins(model string, objs []Model, joins []*Query) error {
+func BackendDoJoins(b Backend, model string, objs []Model, joins []*Query) error {
 	for _, joinQ := range joins {
-		err := b.doJoin(model, objs, joinQ)
+		err := doJoin(b, model, objs, joinQ)
 		if err != nil {
 			return err
 		}
@@ -107,7 +101,9 @@ func (b BaseBackend) DoJoins(model string, objs []Model, joins []*Query) error {
 	return nil
 }
 
-func (b BaseBackend) doJoin(model string, objs []Model, joinQ *Query) error {
+
+
+func doJoin(b Backend, model string, objs []Model, joinQ *Query) error {
 	info := b.GetModelInfo(model)
 	joinInfo := b.GetModelInfo(joinQ.Model)
 	if joinInfo == nil {
@@ -133,7 +129,7 @@ func (b BaseBackend) doJoin(model string, objs []Model, joinQ *Query) error {
 		return err
 	}
 
-	query := b.Backend.Q(joinQ.Model).FilterCond(joinInfo.FieldInfo[joinQ.JoinField].Name, "in", vals)
+	query := b.Q(joinQ.Model).FilterCond(joinInfo.FieldInfo[joinQ.JoinField].Name, "in", vals)
 	if joinQ.Filters != nil {
 		for _, filter := range joinQ.Filters {
 			query = query.Query(filter)
