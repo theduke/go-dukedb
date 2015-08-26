@@ -393,3 +393,25 @@ func (q *Query) First() (Model, DbError) {
 
 	return q.Backend.QueryOne(q)
 }
+
+func (q *Query) Last() (Model, DbError) {
+	if q.Backend == nil {
+		return nil, Error{
+			Code: "cant_last_on_query_without_backend",
+			Message: "A query without a backend cant call .Last()",
+		}
+	}
+	return q.Backend.Last(q)
+}
+
+func (q *Query) Count() (uint64, DbError) {
+	if q.Backend == nil {
+		return 0, Error{
+			Code: "cant_count_on_query_without_backend",
+			Message: "A query without a backend cant call .Count()",
+		}
+	}
+	return q.Backend.Count(q)
+}
+
+

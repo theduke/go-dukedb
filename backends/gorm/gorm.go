@@ -224,6 +224,35 @@ func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
 	return m, nil
 }
 
+func (b Backend) Count(q *db.Query) (uint64, db.DbError) {
+	var count int
+
+	info := b.GetModelInfo(q.Model)
+	if info == nil {
+		return 0, db.Error{
+			Code: "unknown_model",
+			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.Model),
+		}
+	}
+
+	b.Db.Model(info.Item).Count(&count)
+	return uint64(count), nil
+}
+
+func (b Backend) Last(q *db.Query) (db.Model, db.DbError) {
+	orders := len(q.Orders)
+	if orders > 0 {
+		for i := 0; i < orders; i++ {
+			q.Orders[i].Ascending = !q.Orders[i].Ascending
+		}
+	} else {
+		info := b.GetModelInfo(q.Model)
+		q = q.Order(info.GetPkName(), false)
+	}
+
+	return b.QueryOne(q.Limit(1))
+}
+
 // Find first model with primary key ID.
 func (b Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
 	return db.BackendFindOne(&b, modelType, id)	

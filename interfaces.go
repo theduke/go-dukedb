@@ -39,6 +39,9 @@ type Backend interface {
 	Query(*Query) ([]Model, DbError)
 	QueryOne(*Query) (Model, DbError)
 
+	Last(*Query) (Model, DbError)
+	Count(*Query) (uint64, DbError)
+
 	// Convenience methods.
 	 
 	// Find first model with primary key ID.

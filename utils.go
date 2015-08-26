@@ -259,6 +259,10 @@ type ModelInfo struct {
 	FieldInfo map[string]*FieldInfo
 }
 
+func (m ModelInfo) GetPkName() string {
+	return m.FieldInfo[m.PkField].Name
+}
+
 /**
  * Given a database field name, return the struct field name.
  */
