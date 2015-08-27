@@ -25,6 +25,8 @@ func New(gorm *gorm.DB) *Backend {
 	b.ModelInfo = make(map[string]*db.ModelInfo)
 	b.MigrationHandler = db.NewMigrationHandler(&b)
 
+	b.RegisterModel(&MigrationAttempt{})
+
 	return &b
 }
 
@@ -39,6 +41,54 @@ func (b Backend) Copy() db.Backend {
 	copied.ModelInfo = b.ModelInfo
 	copied.SetDebug(b.Debug())
 	return &copied
+}
+
+func (b Backend) CreateCollection(name string) db.DbError {
+	info := b.GetModelInfo(name)
+	if info == nil {
+		return db.Error{
+			Code: "unknown_model",
+			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
+		}
+	}
+
+	if err := b.Db.CreateTable(info.Item).Error; err != nil {
+		return db.Error {
+			Code: "gorm_create_table_failed",
+			Message: err.Error(),
+		}
+	}
+
+	return nil
+}
+
+func (b Backend) DropCollection(name string) db.DbError {
+	info := b.GetModelInfo(name)
+	if info == nil {
+		return db.Error{
+			Code: "unknown_model",
+			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
+		}
+	}
+
+	if err := b.Db.DropTableIfExists(info.Item).Error; err != nil {
+		return db.Error {
+			Code: "gorm_create_table_failed",
+			Message: err.Error(),
+		}
+	}
+
+	return nil
+}
+
+func (b Backend) DropAllCollections() db.DbError {
+	for name := range b.ModelInfo {
+		if err := b.DropCollection(name); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 
@@ -318,5 +368,77 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
 		}
 	}
 
+	return nil
+}
+
+/**
+ * M2M
+ */
+
+func (b Backend) GetM2MCollection(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
+	assoc := b.Db.Model(obj).Association(name)
+	col := M2MCollection{
+		Association: assoc,
+	}
+
+	if err := assoc.Find(&col.Items).Error; err != nil {
+		return nil, db.Error{
+			Code: "gorm_error",
+			Message: err.Error(),
+		}
+	}
+
+	return &col, nil
+}
+
+type M2MCollection struct {
+	db.BaseM2MCollection
+	Association *gorm.Association		
+}
+
+
+func (c *M2MCollection) Add(items ...db.Model) db.DbError {
+	if err := c.Association.Append(db.ModelToInterfaceSlice(items)).Error; err != nil {
+		return db.Error{
+			Code: "gorm_error",
+			Message: err.Error(),
+		}
+	}
+
+	for _, item := range items {
+		if !c.Contains(item) {
+			c.Items = append(c.Items, item)
+		}
+	}
+	return nil
+}
+
+func (c *M2MCollection) Delete(items ...db.Model) db.DbError {
+	if err := c.Association.Delete(db.ModelToInterfaceSlice(items)).Error; err != nil {
+		return db.Error{
+			Code: "gorm_error",
+			Message: err.Error(),
+		}
+	}
+
+	for _, item := range items {
+		for index, curItem := range c.Items {
+			if curItem.GetID() == item.GetID() {
+				c.Items = append(c.Items[:index], c.Items[index+1:]...)
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (c *M2MCollection) Clear() db.DbError {
+	if err := c.Association.Clear().Error; err != nil {
+		return db.Error{
+			Code: "gorm_error",
+			Message: err.Error(),
+		}
+	}
+	c.Items = make([]db.Model, 0)
 	return nil
 }

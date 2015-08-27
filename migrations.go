@@ -29,9 +29,11 @@ func (m *MigrationHandler) HasMigration(version int) bool {
 	return len(m.migrations) >= version
 }
 
-func (m *MigrationHandler) Add(migration Migration) {
-	migration.Version = len(m.migrations) + 1
-	m.migrations = append(m.migrations, &migration)
+func (m *MigrationHandler) Add(migrations ...Migration) {
+	for _, migration := range migrations {
+		migration.Version = len(m.migrations) + 1
+		m.migrations = append(m.migrations, &migration)
+	}
 }
 
 func (m *MigrationHandler) Get(version int) *Migration {

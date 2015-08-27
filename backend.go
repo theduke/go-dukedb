@@ -4,6 +4,38 @@ import (
 	"fmt"
 )
 
+type BaseM2MCollection struct {
+	Name string
+	Items []Model	
+}
+
+
+func (c BaseM2MCollection) Count() uint64 {
+	return uint64(len(c.Items))
+}
+
+func (c BaseM2MCollection) Contains(m Model) bool {
+	return c.GetByID(m.GetID()) != nil
+}
+
+func (c BaseM2MCollection) ContainsID(id string) bool {
+	return c.GetByID(id) != nil
+}
+
+func (c BaseM2MCollection) All() []Model {
+	return c.Items
+}
+
+func (c BaseM2MCollection) GetByID(id string) Model {
+	for _, item := range c.Items {
+		if item.GetID() == id {
+			return item
+		}
+	}
+
+	return nil
+}
+
 type BaseBackend struct {
 	debug bool
 	ModelInfo map[string]*ModelInfo

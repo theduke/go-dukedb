@@ -105,6 +105,15 @@ func InterfaceToModelSlice(slicePtr interface{}) []Model {
 	return result
 }
 
+func ModelToInterfaceSlice(models []Model) []interface{} {
+	slice := make([]interface{}, len(models))
+	for _, m := range models {
+		slice = append(slice, m.(interface{}))
+	}
+
+	return slice
+}
+
 func NewStruct(typ interface{}) interface{} {
 	// Build new struct.
 	item := reflect.ValueOf(typ).Elem().Interface()

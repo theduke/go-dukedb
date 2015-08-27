@@ -35,6 +35,12 @@ type Backend interface {
 	// Build a slice of a model.
 	NewModelSlice(string) (interface{}, DbError)
 
+	// Create the specified collection in the backend.
+	// (eg the table or the mongo collection)
+	CreateCollection(name string) DbError
+	DropCollection(name string) DbError
+	DropAllCollections() DbError
+
 	// Return a new query connected to the backend.
 	Q(modelType string) *Query
 	
@@ -45,8 +51,13 @@ type Backend interface {
 	Last(*Query) (Model, DbError)
 	Count(*Query) (uint64, DbError)
 
-	// Relationship stuff.
+	// Based on a RelationQuery, return a query for the specified
+	// relation.
 	BuildRelationQuery(q *RelationQuery) (*Query, DbError)
+
+	// Return a M2MCollection instance for a model, which allows 
+	// to add/remove/clear items in the m2m relationship.
+	GetM2MCollection(obj Model, name string) (M2MCollection, DbError)
 
 	// Convenience methods.
 	 
@@ -60,6 +71,18 @@ type Backend interface {
 	Update(Model) DbError
 	Delete(Model) DbError
 	DeleteMany(*Query) DbError
+}
+
+type M2MCollection interface {
+	Add(...Model) DbError
+	Delete(...Model) DbError
+	Clear() DbError
+
+	Count() uint64
+	Contains(Model) bool
+	ContainsID(string) bool
+	GetByID(string) Model
+	All() []Model
 }
 
 type Transaction interface {
