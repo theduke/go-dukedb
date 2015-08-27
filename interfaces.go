@@ -23,9 +23,12 @@ type Backend interface {
 	RegisterModel(Model) error
 	GetModelInfo(string) *ModelInfo
 	GetAllModelInfo() map[string]*ModelInfo
-
 	// Determine if a model type is registered with the backend.
 	HasModel(string) bool
+	
+	// After all models have been registered, build the relationship 
+	// info.
+	BuildRelationshipInfo()
 
 	// Get a new struct instance to a model struct.
 	NewModel(string) (interface{}, DbError)
@@ -42,6 +45,9 @@ type Backend interface {
 	Last(*Query) (Model, DbError)
 	Count(*Query) (uint64, DbError)
 
+	// Relationship stuff.
+	BuildRelationQuery(q *RelationQuery) (*Query, DbError)
+
 	// Convenience methods.
 	 
 	// Find first model with primary key ID.
@@ -53,6 +59,7 @@ type Backend interface {
 	Create(Model) DbError
 	Update(Model) DbError
 	Delete(Model) DbError
+	DeleteMany(*Query) DbError
 }
 
 type Transaction interface {

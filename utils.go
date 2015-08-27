@@ -155,51 +155,6 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) {
 	}
 }
 
-func ModelFindPrimaryKey(model interface{}) (string, error) {
-	if reflect.TypeOf(model).Kind() != reflect.Ptr {
-		return "", errors.New("pointer_expected")
-	}
-	if reflect.ValueOf(model).Elem().Kind() != reflect.Struct {
-		return "", errors.New("pointer_to_struct_expected")
-	}
-
-	item := reflect.ValueOf(model).Elem()
-	typ := item.Type()
-
-	var pkName string
-
-	for i := 0; i < item.NumField(); i++ {
-		//field := item.Field(i)
-		fieldType := typ.Field(i)
-
-		name := fieldType.Name
-		lowerName := strings.ToLower(name)
-
-		if lowerName == "id" {
-			pkName = name
-		}
-
-		tag := fieldType.Tag.Get("db")
-		if strings.Contains(tag, "primary_key") {
-			pkName = name
-			break
-		}
-	}
-
-	if pkName == "" {
-		// Try To Find pk in embedded structs.
-		for i := 0; i < item.NumField(); i++ {
-			fieldType := typ.Field(i)
-			if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
-				return ModelFindPrimaryKey(item.Field(i).Addr().Interface())
-			}
-		}
-		return "", errors.New("no_id_field_found")
-	}
-
-	return pkName, nil
-}
-
 func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
 	switch typ {
 	case reflect.Int:
@@ -218,31 +173,58 @@ func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
 	}
 }
 
-type FieldInfo struct {
-	PrimaryKey bool
-	Ignore bool
-	Name string
-	Type reflect.Kind
-}
+
 
 func ParseFieldTag(tag string) *FieldInfo  {
 	info := FieldInfo{}
 
 	parts := strings.Split(tag, ";")
 	for _, part := range parts {
-		if part == "primary_key" {
-			info.PrimaryKey = true
-			continue
-		} else if part == "-" {
-			info.Ignore = true
-			continue
+		itemParts := strings.Split(part, ":")
+
+		specifier := part
+		var value string
+		if len(itemParts) == 2 {
+			specifier = itemParts[0]	
+			value = itemParts[1]
 		}
 
-		itemParts := strings.Split(part, "=")
-		if len(itemParts) == 2 {
-			switch itemParts[0] {
+		switch specifier {
+		case "primary_key":
+			info.PrimaryKey = true
+		case "-":
+			info.Ignore = true
+		case "m2m":
+			info.M2M = true
+			if value != "" {
+				info.M2MCollection = value
+			}
+		case "has-one":
+			info.HasOne = true
+			if value != "" {
+				subVal := strings.Split(value, ":")
+				if len(subVal) < 2 {
+					panic(fmt.Sprintf("Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'"))
+				}
+				info.HasOneField = subVal[0]
+				info.HasOneForeignField = subVal[1]
+			}
+		case "belongs-to":
+			info.BelongsTo = true
+			if value != "" {
+				subVal := strings.Split(value, ":")
+				if len(subVal) < 2 {
+					panic(fmt.Sprintf("Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'"))
+				}
+				info.BelongsToField = subVal[0]
+				info.BelongsToForeignField = subVal[1]
+			}
+		}
+
+		if value != "" {
+			switch specifier {
 			case "name":
-				info.Name =  itemParts[1]
+				info.Name = value
 			}
 		}
 	}
@@ -250,11 +232,39 @@ func ParseFieldTag(tag string) *FieldInfo  {
 	return &info
 }
 
+type FieldInfo struct {
+	PrimaryKey bool
+	Ignore bool
+	Name string
+	Type reflect.Kind
+
+
+	/**
+	 * Relationship related fields
+	 */
+	 
+	M2M bool
+	M2MCollection string
+
+	HasOne bool
+	HasOneField string
+	HasOneForeignField string
+
+	BelongsTo bool
+	BelongsToField string
+	BelongsToForeignField string
+
+	RelationItem Model
+	RealtionIsMany bool
+}
+
 type ModelInfo struct {
 	// Name of the struct field.
 	PkField string
 
-	Item interface{}
+	Item Model
+	ItemName string
+	ItemCollection string
 
 	FieldInfo map[string]*FieldInfo
 }
@@ -268,8 +278,8 @@ func (m ModelInfo) GetPkName() string {
  */
 func (m ModelInfo) MapFieldName(name string) string {
 	for key := range m.FieldInfo {
-		if key == name {
-			return m.FieldInfo[key].Name
+		if m.FieldInfo[key].Name == name {
+			return key
 		}
 	}
 
@@ -277,33 +287,47 @@ func (m ModelInfo) MapFieldName(name string) string {
 }
 
 func NewModelInfo(model Model) (*ModelInfo, error) {
-	pkName, err := ModelFindPrimaryKey(model)
-	if err != nil {
-		return nil, err
-	}
-
 	info := ModelInfo{
-		PkField: pkName,
 		Item: model,
+		ItemName: reflect.ValueOf(model).Elem().Type().Name(),
+		ItemCollection: model.GetCollection(),
 		FieldInfo: make(map[string]*FieldInfo),
 	}
 
-	modelVal := reflect.ValueOf(model).Elem()
-	buildFieldInfo(&info, modelVal)
+	info.buildFieldInfo(reflect.ValueOf(model).Elem())
+
+	// Ensure primary key exists.
+	for name := range info.FieldInfo {
+		if info.FieldInfo[name].PrimaryKey {
+			info.PkField = name
+		}
+	}
+	if info.PkField == "" {
+		// No explicit primary key found, check for ID field.
+		if _, ok := info.FieldInfo["ID"]; ok {
+			info.PkField = "ID"
+		}
+	}
+	if info.PkField == "" {
+		panic(fmt.Sprintf("Primary key could not be determined for model %v", reflect.ValueOf(model)))
+	}
+
+	
 
 	return &info, nil
 }
 
-func buildFieldInfo(info *ModelInfo, modelVal reflect.Value) {
+func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) {
 	modelType := modelVal.Type()
 
 	for i := 0; i < modelVal.NumField(); i++ {
 		field := modelVal.Field(i)
 		fieldType := modelType.Field(i)
+		fieldKind := fieldType.Type.Kind()
 
-		if fieldType.Type.Kind() == reflect.Struct && fieldType.Anonymous {
+		if fieldKind == reflect.Struct && fieldType.Anonymous {
 			// Embedded struct. Find nested fields.
-			buildFieldInfo(info, field)
+			info.buildFieldInfo(field)
 			continue
 		}
 
@@ -312,8 +336,152 @@ func buildFieldInfo(info *ModelInfo, modelVal reflect.Value) {
 			fieldInfo.Name = CamelCaseToUnderscore(fieldType.Name)
 		}
 
-		fieldInfo.Type = fieldType.Type.Kind()
+		// Find relationship type for structs and slices.
 
+		if fieldKind == reflect.Struct {
+			// Field is a direct struct.
+			// RelationItem type is the struct.
+			if relItem, ok := reflect.New(fieldType.Type).Interface().(Model); ok {
+				fieldInfo.RelationItem = relItem
+			}
+		} else if fieldKind == reflect.Ptr {
+			// Field is a pointer.
+			// Check if it points to a Model.
+			ptrType := fieldType.Type.Elem()
+			if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
+				// Points to a model.
+				fieldInfo.RelationItem = relItem
+			}
+		} else if fieldKind == reflect.Slice {
+			// Field is slice.
+			// Check if slice items are models or pointers to models.
+			sliceType := fieldType.Type.Elem()
+			sliceKind := sliceType.Kind()
+
+			if sliceKind == reflect.Struct {
+				// Slice contains structs.
+				// Same as above code for plain structs.
+				if relItem, ok := reflect.New(sliceType).Interface().(Model); ok {
+					fieldInfo.RelationItem = relItem
+					fieldInfo.RealtionIsMany = true
+				}
+			} else if sliceKind == reflect.Ptr {
+				// Slice contains pointers. 
+				// Check if it points to a model. Same as above for pointers.
+				ptrType := sliceType.Elem()
+				if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
+					// Points to a model.
+					fieldInfo.RelationItem = relItem
+					fieldInfo.RealtionIsMany = true
+				}
+			}
+		}
+
+		fieldInfo.Type = fieldType.Type.Kind()
 		info.FieldInfo[fieldType.Name] = fieldInfo
 	}
 }
+
+func BuildAllRelationInfo(models map[string]*ModelInfo) {
+	for key := range models {
+		buildRealtionShipInfo(models, models[key])
+	}
+}
+
+func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) {
+	for name := range model.FieldInfo {
+		fieldInfo := model.FieldInfo[name]
+
+		if fieldInfo.RelationItem == nil {
+			// Only process fields with a relation.
+			continue
+		}
+		if fieldInfo.Ignore {
+			// Ignored field.
+			continue
+		}
+
+		modelName := reflect.ValueOf(model.Item).Elem().Type().Name()
+		relatedItem := fieldInfo.RelationItem
+		relatedName := reflect.ValueOf(relatedItem).Elem().Type().Name()
+		relatedCollection := relatedItem.GetCollection()
+
+		// Check that related model is contained in models info.
+		if _, ok := models[relatedCollection]; !ok {
+			panic(fmt.Sprintf(
+				"Model %v contains relationship %v, but relationship target %v was not registred with backend",
+				modelName, name, relatedName))
+		}
+
+		relatedInfo := models[relatedItem.GetCollection()]
+		relatedFields := relatedInfo.FieldInfo
+
+		if !(fieldInfo.BelongsTo || fieldInfo.HasOne || fieldInfo.M2M) {
+			// No explicit relationship defined. Try to determine it.	
+
+			// Can be either HasOne or BelongsTo, since m2m needs to be explicitly specified.
+
+			// Check for HasOne first.
+			if !fieldInfo.RealtionIsMany {
+				// Try to fiend ID field.
+				relField := relatedName + "ID"
+				if _, ok := model.FieldInfo[relField]; ok {
+					// Related field exists.
+					fieldInfo.HasOne = true
+					fieldInfo.HasOneField = relField
+					fieldInfo.HasOneForeignField = relatedInfo.PkField
+				}
+			}
+
+			if !fieldInfo.HasOne {
+				// Not has one, check for belongsTo.
+				relField := modelName + "ID"
+				if _, ok := relatedFields[relField]; ok {
+					// realted field found. Is belongsTo.
+					fieldInfo.BelongsTo = true
+					fieldInfo.BelongsToForeignField = relField
+				}
+			}
+		}
+
+		if fieldInfo.HasOne {
+			if fieldInfo.HasOneField == "" {
+				panic(fmt.Sprintf("has-one specified on model %v, but field %v not found. Specify ID field.",
+					modelName, relatedName + "ID"))
+			}
+			if _, ok := model.FieldInfo[fieldInfo.HasOneField]; !ok {
+				panic(fmt.Sprintf("Specified has-one field %v not found on model %v",
+					fieldInfo.HasOneField, modelName))
+			}
+
+			if _, ok := relatedFields[fieldInfo.HasOneForeignField]; !ok {
+				panic(fmt.Sprintf(
+					"has-one specified on model %v with foreign key %v which does not exist on target %v",
+					modelName, fieldInfo.HasOneForeignField, relatedName))
+			}
+		} else if fieldInfo.BelongsTo {
+			if fieldInfo.BelongsToForeignField == "" {
+				panic(fmt.Sprintf("belongs-to specified on model %v, but field %v not found. Specify ID field.",
+					modelName, modelName + "ID"))
+			}
+			if _, ok := relatedFields[fieldInfo.BelongsToForeignField]; !ok {
+				panic(fmt.Sprintf("Specified belongs-to field %v not found on model %v",
+					fieldInfo.BelongsToForeignField, relatedName))
+			}
+
+			if fieldInfo.BelongsToField == "" {
+				fieldInfo.BelongsToField = model.PkField
+			}	
+
+			if _, ok := model.FieldInfo[fieldInfo.BelongsToField]; !ok {
+				panic(fmt.Sprintf("Model %v has no field %v", modelName, fieldInfo.BelongsToField))
+			}
+		}
+
+		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {
+			panic(fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the neccessary relation fields.",
+				modelName, relatedName, name))
+		}
+	}
+}
+

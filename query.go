@@ -217,7 +217,7 @@ type Query struct {
 	JoinField string // The DB name of the field that s joined on. (on the model this query is for)
 	JoinedField string // The DB name of the field to join on. (in the parent)
 
-	Joins []*Query
+	Joins []*RelationQuery
 
 	LimitNum int	
 	OffsetNum int
@@ -230,17 +230,6 @@ type Query struct {
 func Q(model string) *Query {
 	q := Query{}
 	q.Model = model
-
-	return &q
-}
-
-func JoinQ(model, targetField, joinKey, joinedKey string) *Query {
-	q := Query{
-		Model: model,
-		JoinTargetField: targetField,
-		JoinField: joinKey,
-		JoinedField: joinedKey,
-	}
 
 	return &q
 }
@@ -359,19 +348,120 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
  * Joins.
  */
 
-func (q *Query) JoinQ(jq *Query) *Query {
+func (q *Query) JoinQ(jq *RelationQuery) *Query {
+	jq.BaseQuery = q
 	q.Joins = append(q.Joins, jq)
 	return q
 }
 
-func (q *Query) Join(name, targetField string) *Query {
-	q.Joins = append(q.Joins, JoinQ(name, targetField, "", ""))
+func (q *Query) Join(fieldName string) *Query {
+	q.Joins = append(q.Joins, RelQ(q, fieldName))
 	return q
 }
 
-func (q *Query) JoinOn(name, targetField, joinKey, joinedKey string) *Query {
-	q.Joins = append(q.Joins, JoinQ(name, targetField, joinKey, joinedKey))
-	return q
+/**
+ * RelationQuery.
+ */
+
+func (q *Query) Related(name string) *RelationQuery {
+	return RelQ(q, name)
+}
+
+func (q *Query) RelatedCustom(name, joinKey, foreignKey string) *RelationQuery {
+	return RelQCustom(q, name, joinKey, foreignKey)
+}
+
+type RelationQuery struct {
+	Query
+
+	BaseQuery *Query
+	RelationName string
+
+	JoinFieldName string
+	ForeignFieldName string
+}
+
+func RelQ(q *Query, name string) *RelationQuery {
+	relQ := RelationQuery{
+		BaseQuery: q,
+		RelationName: name,
+	}
+	relQ.Backend = q.Backend
+
+	return &relQ
+}
+
+func RelQCustom(q *Query, name, joinKey, foreignKey string) *RelationQuery {
+	relQ := RelationQuery{
+		BaseQuery: q,
+		JoinFieldName: joinKey,
+		ForeignFieldName: foreignKey,
+	}
+	relQ.Model = name
+	relQ.Backend = q.Backend
+
+	return &relQ
+}
+
+func (q *RelationQuery) Find() ([]Model, DbError) {
+	if q.Backend == nil {
+		panic("Callind .Find() on a query without backend")
+	}
+
+	newQ, err := q.Backend.BuildRelationQuery(q)
+	if err != nil {
+		return nil, err
+	}
+	return newQ.Find()
+}
+
+func (q *RelationQuery) First() (Model, DbError) {
+	if q.Backend == nil {
+		panic("Callind .First() on a query without backend")
+	}
+
+	newQ, err := q.Backend.BuildRelationQuery(q)
+	if err != nil {
+		return nil, err
+	}
+	return newQ.First()
+}
+
+func (q *RelationQuery) Last() (Model, DbError) {
+	if q.Backend == nil {
+		panic("Callind .Last() on a query without backend")
+	}
+
+	newQ, err := q.Backend.BuildRelationQuery(q)
+	if err != nil {
+		return nil, err
+	}
+	return newQ.Last()
+}
+
+
+func (q *RelationQuery) Count() (uint64, DbError) {
+	if q.Backend == nil {
+		panic("Callind .Count() on a query without backend")
+	}
+
+	newQ, err := q.Backend.BuildRelationQuery(q)
+	if err != nil {
+		return 0, err
+	}
+	return newQ.Count()
+}
+
+func (q *RelationQuery) Delete() DbError {
+	if q.Backend == nil {
+		panic("Callind .Delete() on a query without backend")
+	}
+
+	newQ, err := q.Backend.BuildRelationQuery(q)
+	if err != nil {
+		return err
+	}
+	return newQ.Delete()
 }
 
 /**
@@ -380,7 +470,7 @@ func (q *Query) JoinOn(name, targetField, joinKey, joinedKey string) *Query {
 
 func (q *Query) Find() ([]Model, DbError) {
 	if q.Backend == nil {
-		return nil, Error{Code: "cant_find_on_query_without_backend"}
+		panic("Calling .Find() on query without backend")
 	}
 
 	return q.Backend.Query(q)
@@ -388,7 +478,7 @@ func (q *Query) Find() ([]Model, DbError) {
 
 func (q *Query) First() (Model, DbError) {
 	if q.Backend == nil {
-		return nil, Error{Code: "cant_find_on_query_without_backend"}
+		panic("Calling .First() on query without backend")
 	}
 
 	return q.Backend.QueryOne(q)
@@ -396,22 +486,22 @@ func (q *Query) First() (Model, DbError) {
 
 func (q *Query) Last() (Model, DbError) {
 	if q.Backend == nil {
-		return nil, Error{
-			Code: "cant_last_on_query_without_backend",
-			Message: "A query without a backend cant call .Last()",
-		}
+		panic("Calling .Last() on query without backend")
 	}
 	return q.Backend.Last(q)
 }
 
 func (q *Query) Count() (uint64, DbError) {
 	if q.Backend == nil {
-		return 0, Error{
-			Code: "cant_count_on_query_without_backend",
-			Message: "A query without a backend cant call .Count()",
-		}
+		panic("Calling .Count() on query without backend")
 	}
 	return q.Backend.Count(q)
 }
 
 
+func (q *Query) Delete() DbError {
+	if q.Backend == nil {
+		panic("Calling .Delete() on query without backend")
+	}
+	return q.Backend.DeleteMany(q)
+}

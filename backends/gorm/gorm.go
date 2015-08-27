@@ -112,6 +112,14 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 }
 
 func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
+	info := b.GetModelInfo(q.Model)
+	if info == nil {
+		return nil, db.Error{
+			Code: "unknown_model",
+			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.Model),
+		}
+	}
+
 	gormQ := b.Db
 	if b.Debug() {
 		gormQ = gormQ.Debug()
@@ -175,8 +183,11 @@ func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
 		gormQ = gormQ.Offset(q.OffsetNum)
 	}
 
-
 	return gormQ, nil
+}
+
+func (b *Backend) BuildRelationQuery(q *db.RelationQuery) (*db.Query, db.DbError) {
+	return db.BuildRelationQuery(b, nil, q)
 }
 
 // Perform a query.	
@@ -287,6 +298,24 @@ func (b Backend) Update(m db.Model) db.DbError {
 func (b Backend) Delete(m db.Model) db.DbError {
 	if err := b.Db.Delete(m).Error; err != nil {
 		return db.Error{Code: "gorm_error", Message: err.Error()}
+	}
+
+	return nil
+}
+
+func (b Backend) DeleteMany(q *db.Query) db.DbError {
+	gormQ, err := b.buildQuery(q)
+	if err != nil {
+		return err
+	}
+
+	// Existence is checked in buildQuery!
+	item := b.GetModelInfo(q.Model).Item
+	if err := gormQ.Delete(item).Error; err != nil {
+		return db.Error{
+			Code: "delete_many gorm_error",
+			Message: err.Error(),
+		}
 	}
 
 	return nil
