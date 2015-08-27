@@ -376,17 +376,25 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  */
 
 func (b Backend) GetM2MCollection(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
-	assoc := b.Db.Model(obj).Association(name)
+	info := b.GetModelInfo(obj.GetCollection())
+	fieldInfo := info.FieldInfo[name]
+
+	items, _ := b.NewModelSlice(fieldInfo.RelationItem.GetCollection())
+
+	assoc := b.Db.Debug().Model(obj).Association(name)
 	col := M2MCollection{
 		Association: assoc,
 	}
 
-	if err := assoc.Find(&col.Items).Error; err != nil {
+	if err := assoc.Find(items).Error; err != nil {
 		return nil, db.Error{
 			Code: "gorm_error",
 			Message: err.Error(),
 		}
 	}
+
+	modelSlice := db.InterfaceToModelSlice(items)
+	col.Items = modelSlice
 
 	return &col, nil
 }
