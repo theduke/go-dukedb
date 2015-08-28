@@ -52,6 +52,31 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, error) {
 	return field.Interface(), nil
 }
 
+func SetStructFieldValueFromString(obj interface{}, fieldName string,  val string) error {
+	objVal := reflect.ValueOf(obj)
+	if objVal.Type().Kind() != reflect.Ptr {
+		return errors.New("pointer_expected")
+	}
+
+	objVal = objVal.Elem()
+	//objType := objVal.Type()
+
+	field := objVal.FieldByName(fieldName)
+	if !field.IsValid() {
+		return errors.New(fmt.Sprintf("Field %v does not exist on %v", fieldName, objVal))
+	}
+
+	//fieldType, _ := objType.FieldByName(fieldName)
+	convertedVal, err := ConvertToType(val, field.Type().Kind())
+	if err != nil {
+		return err
+	}
+
+	field.Set(reflect.ValueOf(convertedVal))
+
+	return nil
+}
+
 func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, error) {
 	vals := make([]interface{}, 0)
 
@@ -186,14 +211,13 @@ func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
 
 func ParseFieldTag(tag string) *FieldInfo  {
 	info := FieldInfo{}
-
 	parts := strings.Split(tag, ";")
 	for _, part := range parts {
 		itemParts := strings.Split(part, ":")
 
 		specifier := part
 		var value string
-		if len(itemParts) == 2 {
+		if len(itemParts) > 1 {
 			specifier = itemParts[0]	
 			value = itemParts[1]
 		}
@@ -221,12 +245,11 @@ func ParseFieldTag(tag string) *FieldInfo  {
 		case "belongs-to":
 			info.BelongsTo = true
 			if value != "" {
-				subVal := strings.Split(value, ":")
-				if len(subVal) < 2 {
+				if len(itemParts) < 3 {
 					panic(fmt.Sprintf("Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'"))
 				}
-				info.BelongsToField = subVal[0]
-				info.BelongsToForeignField = subVal[1]
+				info.BelongsToField = itemParts[1]
+				info.BelongsToForeignField = itemParts[2]
 			}
 		}
 
@@ -264,7 +287,7 @@ type FieldInfo struct {
 	BelongsToForeignField string
 
 	RelationItem Model
-	RealtionIsMany bool
+	RelationIsMany bool
 }
 
 type ModelInfo struct {
@@ -372,7 +395,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) {
 				// Same as above code for plain structs.
 				if relItem, ok := reflect.New(sliceType).Interface().(Model); ok {
 					fieldInfo.RelationItem = relItem
-					fieldInfo.RealtionIsMany = true
+					fieldInfo.RelationIsMany = true
 				}
 			} else if sliceKind == reflect.Ptr {
 				// Slice contains pointers. 
@@ -381,7 +404,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) {
 				if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
 					// Points to a model.
 					fieldInfo.RelationItem = relItem
-					fieldInfo.RealtionIsMany = true
+					fieldInfo.RelationIsMany = true
 				}
 			}
 		}
@@ -431,10 +454,15 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) {
 			// Can be either HasOne or BelongsTo, since m2m needs to be explicitly specified.
 
 			// Check for HasOne first.
-			if !fieldInfo.RealtionIsMany {
+			if !fieldInfo.RelationIsMany {
 				// Try to fiend ID field.
 				relField := relatedName + "ID"
-				if _, ok := model.FieldInfo[relField]; ok {
+				_, ok := model.FieldInfo[relField]
+				if !ok {
+					relField = name + "ID"
+					_, ok = model.FieldInfo[relField]
+				}
+				if ok {
 					// Related field exists.
 					fieldInfo.HasOne = true
 					fieldInfo.HasOneField = relField
