@@ -37,16 +37,17 @@ func (c BaseM2MCollection) GetByID(id string) Model {
 }
 
 type BaseBackend struct {
-	debug bool
+	Debug bool
 	ModelInfo map[string]*ModelInfo
 }
 
-func(b *BaseBackend) Debug() bool {
-	return b.debug
+func(b *BaseBackend) GetDebug() bool {
+	return b.Debug
 }
 
 func(b *BaseBackend) SetDebug(x bool) {
-	b.debug = x
+	fmt.Printf("setting debuguu in base to: %v\n", x)
+	b.Debug = x
 }
 
 func (b *BaseBackend) RegisterModel(m Model) error {

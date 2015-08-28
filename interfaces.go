@@ -14,7 +14,7 @@ type DbError interface {
 type Backend interface {
 	GetName() string
 
-	Debug() bool
+	GetDebug() bool
 	SetDebug(bool)
 
 	// Duplicate the backend.
