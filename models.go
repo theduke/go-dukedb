@@ -4,15 +4,15 @@ import (
 	"strconv"
 )
 
-type BaseModel struct {
+type BaseModelIntID struct {
 	ID uint64
 }
 
-func (b BaseModel) GetID() string {
+func (b BaseModelIntID) GetID() string {
 	return strconv.FormatUint(b.ID, 64)
 }
 
-func (b BaseModel) SetID(rawId string) error {
+func (b BaseModelIntID) SetID(rawId string) error {
 	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err
