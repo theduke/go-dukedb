@@ -6,7 +6,7 @@ import (
 
 	"github.com/jinzhu/gorm"
 
-	db "github.com/theduke/dukedb"
+	db "github.com/theduke/go-dukedb"
 )
 
 

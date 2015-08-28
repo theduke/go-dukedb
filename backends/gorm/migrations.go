@@ -5,7 +5,7 @@ import (
 	"time"
 	"log"
 
-	db "github.com/theduke/dukedb"
+	db "github.com/theduke/go-dukedb"
 )
 
 /**

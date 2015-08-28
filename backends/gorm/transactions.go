@@ -1,7 +1,7 @@
 package gorm
 
 import (
-	db "github.com/theduke/dukedb"
+	db "github.com/theduke/go-dukedb"
 )
 
 func (b Backend) BeginTransaction() db.Transaction {
