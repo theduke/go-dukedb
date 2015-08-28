@@ -244,13 +244,35 @@ func (q *Query) Offset(o int) *Query {
 	return q
 }
 
-func (q *Query) Fields(rawFields string) *Query {
-	fields := strings.Split(rawFields, ",")
-	for index, _ := range fields {
-		fields[index] = strings.TrimSpace(fields[index])
+func (q *Query) Fields(fields ...string) *Query {
+	q.FieldSpec = fields
+	return q
+}
+
+/**
+ * Limit the query to specified fields.
+ * If fields where already specified, they will be reduced.
+ */
+func (q *Query) LimitFields(fields ...string) *Query {
+	if q.FieldSpec == nil {
+		return q.Fields(fields...)
 	}
 
-	q.FieldSpec = fields
+	allowMap := make(map[string]bool)
+	for _, field := range fields {
+		allowMap[field] = true
+	}
+
+	finalFields := make([]string, 0)
+
+	for _, field := range q.FieldSpec {
+		if _, ok := allowMap[field]; ok {
+			finalFields = append(finalFields, field)
+		}
+	}
+
+	q.FieldSpec = finalFields
+
 	return q
 }
 
