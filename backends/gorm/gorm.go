@@ -34,12 +34,19 @@ func (b Backend) GetName() string {
 	return "gorm"
 }
 
+func (b *Backend) SetDebug(d bool) {
+	b.Debug = d
+	if d {
+		b.Db = b.Db.Debug()
+	}
+}
+
 func (b Backend) Copy() db.Backend {
 	copied := Backend{
 		Db: b.Db,
 	}
 	copied.ModelInfo = b.ModelInfo
-	copied.SetDebug(b.Debug())
+	copied.SetDebug(b.GetDebug())
 	return &copied
 }
 
@@ -171,9 +178,6 @@ func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
 	}
 
 	gormQ := b.Db
-	if b.Debug() {
-		gormQ = gormQ.Debug()
-	}
 
 	// Handle filters.
 	for _, filter := range q.Filters {
@@ -381,7 +385,7 @@ func (b Backend) GetM2MCollection(obj db.Model, name string) (db.M2MCollection, 
 
 	items, _ := b.NewModelSlice(fieldInfo.RelationItem.GetCollection())
 
-	assoc := b.Db.Debug().Model(obj).Association(name)
+	assoc := b.Db.Model(obj).Association(name)
 	col := M2MCollection{
 		Association: assoc,
 	}
