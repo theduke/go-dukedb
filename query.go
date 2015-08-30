@@ -397,10 +397,6 @@ func (q *Query) Join(fieldName string) *Query {
 	return q
 }
 
-/**
- * RelationQuery.
- */
-
 func (q *Query) Related(name string) *RelationQuery {
 	return RelQ(q, name)
 }
@@ -408,6 +404,10 @@ func (q *Query) Related(name string) *RelationQuery {
 func (q *Query) RelatedCustom(name, joinKey, foreignKey string) *RelationQuery {
 	return RelQCustom(q, name, joinKey, foreignKey)
 }
+
+/**
+ * RelationQuery.
+ */
 
 type RelationQuery struct {
 	Query
@@ -478,7 +478,7 @@ func (q *RelationQuery) Last() (Model, DbError) {
 }
 
 
-func (q *RelationQuery) Count() (uint64, DbError) {
+func (q *RelationQuery) Count() (int, DbError) {
 	if q.Backend == nil {
 		panic("Calling .Count() on a query without backend")
 	}
@@ -529,7 +529,7 @@ func (q *Query) Last() (Model, DbError) {
 	return q.Backend.Last(q)
 }
 
-func (q *Query) Count() (uint64, DbError) {
+func (q *Query) Count() (int, DbError) {
 	if q.Backend == nil {
 		panic("Calling .Count() on query without backend")
 	}
