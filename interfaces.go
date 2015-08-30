@@ -49,7 +49,7 @@ type Backend interface {
 	QueryOne(*Query) (Model, DbError)
 
 	Last(*Query) (Model, DbError)
-	Count(*Query) (uint64, DbError)
+	Count(*Query) (int, DbError)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
@@ -79,7 +79,7 @@ type M2MCollection interface {
 	Clear() DbError
 	Replace([]Model) DbError
 
-	Count() uint64
+	Count() int
 	Contains(Model) bool
 	ContainsID(string) bool
 	GetByID(string) Model
