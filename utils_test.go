@@ -263,6 +263,42 @@ var _ = Describe("Utils", func() {
 			})
 		})
 	})
+
+	Describe("CompareValues", func() {
+		It("Should eq with two strings", func() {
+			a := interface{}("test")
+			b := interface{}("test")
+			Expect(CompareValues("eq", a, b)).To(BeTrue())
+		})
+
+		It("Should eq with two numbers", func() {
+			a := interface{}(1)
+			b := interface{}(uint32(1))
+			Expect(CompareValues("eq", a, b)).To(BeTrue())
+		})
+	})
+
+	Describe("CompareStringValues", func() {
+		It("Should eq", func() {
+			a := interface{}("test")
+			b := interface{}("test")
+			Expect(CompareStringValues("eq", a, b)).To(BeTrue())
+		})
+	})
+
+	Describe("CompareNumericValues", func() {
+		It("Should lt with ints", func() {
+			a := interface{}(1)
+			b := interface{}(2)
+			Expect(CompareNumericValues("lt", a, b)).To(BeTrue())
+		})
+
+		It("Should gt with int64 and uint8", func() {
+			a := interface{}(int64(1))
+			b := interface{}(uint8(5))
+			Expect(CompareNumericValues("lt", a, b)).To(BeTrue())
+		})
+	})
 	
 	Describe("ConvertToType", func() {
 		It("Should convert int", func() {

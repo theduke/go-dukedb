@@ -89,6 +89,254 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	return field.Interface(), nil
 }
 
+func CompareValues(condition string, a, b interface{}) (bool, DbError) {
+	typ := reflect.TypeOf(a).Kind()
+
+	switch typ {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+		return CompareNumericValues(condition, a, b)		
+	case reflect.String:
+		return CompareStringValues(condition, a, b)
+	default:
+		return false, Error{
+			Code: "unsupported_comparison_type",
+			Message: fmt.Sprintf("Type %v can not be compared", typ),
+		}
+	}
+}
+
+func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
+	aVal := a.(string)
+	bVal := b.(string)
+
+	// Check different possible filters.
+	switch condition {
+	case "eq":
+		return aVal == bVal, nil
+	case "neq":
+		return aVal != bVal, nil
+	case "like":
+		return strings.Contains(aVal, bVal), nil
+	default:
+		return false, Error{
+			Code: "unknown_filter", 
+			Message: fmt.Sprintf("Unknown filter type '%v'", condition),
+		}
+	}
+}
+
+func CompareNumericValues(condition string, a, b interface{}) (bool, DbError) {
+	typ := reflect.TypeOf(a).Kind()
+	switch typ {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return CompareIntValues(condition, a, b)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return CompareUintValues(condition, a, b)
+		case reflect.Float32, reflect.Float64:
+			return CompareFloatValues(condition, a, b)
+		default:
+			return false, Error{
+				Code: "unsupported_type_for_numeric_comparison",
+				Message: fmt.Sprintf(
+					"For a numeric comparision with %v, a numeric type is expected. Got: %v",
+					condition, typ),
+			}
+	}
+}
+
+func NumericToInt64(x interface{}) (int64, DbError) {
+	var val int64
+
+	switch reflect.TypeOf(x).Kind() {
+	case reflect.Int:
+			val = int64(x.(int))
+		case reflect.Int8:
+			val = int64(x.(int8))
+		case reflect.Int16:
+			val = int64(x.(int16))
+		case reflect.Int32:
+			val = int64(x.(int32))
+		case reflect.Int64:
+			val = x.(int64)
+		case reflect.Uint:
+			val = int64(x.(uint))
+		case reflect.Uint8:
+			val = int64(x.(uint8))
+		case reflect.Uint16:
+			val = int64(x.(uint16))
+		case reflect.Uint32:
+			val = int64(x.(uint32))
+		case reflect.Uint64:
+			val = int64(x.(uint64))
+		default:
+			return int64(0), Error{Code: "non_numeric_type"}
+	}
+
+	return val, nil
+}
+
+func NumericToUint64(x interface{}) (uint64, DbError) {
+	var val uint64
+
+	switch reflect.TypeOf(x).Kind() {
+	case reflect.Int:
+			val = uint64(x.(int))
+		case reflect.Int8:
+			val = uint64(x.(int8))
+		case reflect.Int16:
+			val = uint64(x.(int16))
+		case reflect.Int32:
+			val = uint64(x.(int32))
+		case reflect.Int64:
+			val = uint64(x.(int64))
+		case reflect.Uint:
+			val = uint64(x.(uint))
+		case reflect.Uint8:
+			val = uint64(x.(uint8))
+		case reflect.Uint16:
+			val = uint64(x.(uint16))
+		case reflect.Uint32:
+			val = uint64(x.(uint32))
+		case reflect.Uint64:
+			val = x.(uint64)
+		default:
+			return uint64(0), Error{Code: "non_numeric_type"}
+	}
+
+	return val, nil
+}
+
+func NumericToFloat64(x interface{}) (float64, DbError) {
+	var val float64
+
+	switch reflect.TypeOf(x).Kind() {
+	case reflect.Int:
+			val = float64(x.(int))
+		case reflect.Int8:
+			val = float64(x.(int8))
+		case reflect.Int16:
+			val = float64(x.(int16))
+		case reflect.Int32:
+			val = float64(x.(int32))
+		case reflect.Int64:
+			val = float64(x.(int64))
+		case reflect.Uint:
+			val = float64(x.(uint))
+		case reflect.Uint8:
+			val = float64(x.(uint8))
+		case reflect.Uint16:
+			val = float64(x.(uint16))
+		case reflect.Uint32:
+			val = float64(x.(uint32))
+		case reflect.Uint64:
+			val = float64(x.(uint64))
+		case reflect.Float32:
+			val = float64(x.(float32))
+		case reflect.Float64:
+			val = x.(float64)
+		default:
+			return float64(0), Error{Code: "non_numeric_type"}
+	}
+
+	return val, nil
+}
+
+func CompareIntValues(condition string, a, b interface{}) (bool, DbError) {
+	aVal, errA := NumericToInt64(a)
+	bVal, errB := NumericToInt64(b)
+
+	if errA != nil {
+		return false, errA
+	}
+	if errB != nil {
+		return false, errB
+	}
+
+	switch condition {
+	case "eq":
+		return aVal == bVal, nil
+	case "neq":
+		return aVal != bVal, nil
+	case "lt":
+		return aVal < bVal, nil
+	case "lte":
+		return aVal <= bVal, nil
+	case "gt":
+		return aVal > bVal, nil
+	case "gte":
+		return aVal >= bVal, nil
+	default:
+		return false, Error{
+			Code: "unknown_filter",
+			Message: "Unknown filter type: " + condition,
+		}
+	}
+}
+
+func CompareUintValues(condition string, a, b interface{}) (bool, DbError) {
+	aVal, errA := NumericToUint64(a)
+	bVal, errB := NumericToUint64(b)
+
+	if errA != nil {
+		return false, errA
+	}
+	if errB != nil {
+		return false, errB
+	}
+
+	switch condition {
+	case "eq":
+		return aVal == bVal, nil
+	case "neq":
+		return aVal != bVal, nil
+	case "lt":
+		return aVal < bVal, nil
+	case "lte":
+		return aVal <= bVal, nil
+	case "gt":
+		return aVal > bVal, nil
+	case "gte":
+		return aVal >= bVal, nil
+	default:
+		return false, Error{
+			Code: "unknown_filter",
+			Message: "Unknown filter type: " + condition,
+		}
+	}
+}
+
+func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
+	aVal, errA := NumericToFloat64(a)
+	bVal, errB := NumericToFloat64(b)
+
+	if errA != nil {
+		return false, errA
+	}
+	if errB != nil {
+		return false, errB
+	}
+
+	switch condition {
+	case "eq":
+		return aVal == bVal, nil
+	case "neq":
+		return aVal != bVal, nil
+	case "lt":
+		return aVal < bVal, nil
+	case "lte":
+		return aVal <= bVal, nil
+	case "gt":
+		return aVal > bVal, nil
+	case "gte":
+		return aVal >= bVal, nil
+	default:
+		return false, Error{
+			Code: "unknown_filter",
+			Message: "Unknown filter type: " + condition,
+		}
+	}
+}
+
 // Convert a string value to the specified type if possible.
 // Returns an error for unsupported types.
 func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
