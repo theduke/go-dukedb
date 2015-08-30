@@ -87,7 +87,12 @@ func (b BaseBackend) NewModel(name string) (interface{}, DbError) {
 		}
 	}
 
-	return NewStruct(info.Item), nil
+	item, err := NewStruct(info.Item)
+	if err != nil {
+		return nil, Error{Code: err.Error(), Message: "Could not build new struct"}
+	}
+
+	return item, nil
 }
 
 func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
@@ -99,7 +104,7 @@ func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
 		}
 	}
 
-	return NewStructSlice(info.Item), nil
+	return NewSlice(info.Item), nil
 }
 
 // Relationship stuff.
