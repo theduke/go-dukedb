@@ -220,15 +220,7 @@ var _ = Describe("Utils", func() {
 			It("Should fail on nil", func() {
 				_, err := GetStructFieldValue(nil, "test")
 				Expect(err).To(HaveOccurred())
-				Expect(err.GetCode()).To(Equal("pointer_to_struct_expected"))
-			})
-		})
-
-		Context("With struct instead of pointer argument", func() {
-			It("Should fail on non-pointer argument", func() {
-				_, err := GetStructFieldValue(testStruct, "test")
-				Expect(err).To(HaveOccurred())
-				Expect(err.GetCode()).To(Equal("pointer_expected"))
+				Expect(err.GetCode()).To(Equal("pointer_or_struct_expected"))
 			})
 		})
 
@@ -237,7 +229,15 @@ var _ = Describe("Utils", func() {
 				x := 22
 				_, err := GetStructFieldValue(&x, "test")
 				Expect(err).To(HaveOccurred())
-				Expect(err.GetCode()).To(Equal("pointer_to_struct_expected"))
+				Expect(err.GetCode()).To(Equal("struct_expected"))
+			})
+		})
+
+		Context("With non-struct arugment", func() {
+			It("Should fail on non-struct argument", func() {
+				_, err := GetStructFieldValue(22, "test")
+				Expect(err).To(HaveOccurred())
+				Expect(err.GetCode()).To(Equal("struct_expected"))
 			})
 		})
 
@@ -297,6 +297,44 @@ var _ = Describe("Utils", func() {
 			a := interface{}(int64(1))
 			b := interface{}(uint8(5))
 			Expect(CompareNumericValues("lt", a, b)).To(BeTrue())
+		})
+	})
+
+	Describe("SortStructSlice", func() {
+		type Sortable struct {
+			IntVal int
+			FloatVal float32
+			StrVal string
+		}
+
+		var sortables []interface{}
+
+		BeforeEach(func() {
+			sortables = []interface{}{
+				Sortable{5, 5.1, "5"},
+				Sortable{3, 3.1, "3"},
+				Sortable{1, 1.1, "1"},
+				Sortable{2, 2.1, "2"},
+				Sortable{4, 4.1, "4"},
+			}
+		})
+
+		It("Should sort asc by int field", func() {
+			SortStructSlice(sortables, "IntVal", true)
+			Expect((sortables[0]).(Sortable).IntVal).To(Equal(1))	
+			Expect(sortables[4].(Sortable).IntVal).To(Equal(5))	
+		})
+
+		It("Should sort desc by int field", func() {
+			SortStructSlice(sortables, "IntVal", false)
+			Expect((sortables[0]).(Sortable).IntVal).To(Equal(5))	
+			Expect(sortables[4].(Sortable).IntVal).To(Equal(1))	
+		})
+
+		It("Should sort asc by string field", func() {
+			SortStructSlice(sortables, "StrVal", true)
+			Expect((sortables[0]).(Sortable).StrVal).To(Equal("1"))	
+			Expect(sortables[4].(Sortable).StrVal).To(Equal("5"))	
 		})
 	})
 	

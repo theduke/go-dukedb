@@ -6,6 +6,7 @@ import(
 	"strings"
 	"fmt"
 	"strconv"
+	"sort"
 )
 
 // Build a database query based on two maps.
@@ -64,18 +65,19 @@ func CamelCaseToUnderscore(str string) string {
 // Given a struct or a pointer to a struct, retrieve the value of a field from
 // the struct with reflection.
 func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError) {
+	// Check if struct is valid.
 	if s == nil {
-		return nil, Error{Code: "pointer_to_struct_expected"}
+		return nil, Error{Code: "pointer_or_struct_expected"}
 	}
 
+	// Check if it is a pointer, and if so, dereference it.
 	v := reflect.ValueOf(s)
-	if v.Type().Kind() != reflect.Ptr {
-		return nil, Error{Code: "pointer_expected"}
+	if v.Type().Kind() == reflect.Ptr {
+		v = v.Elem()
 	}
 
-	v = v.Elem()
 	if v.Type().Kind() != reflect.Struct {
-		return nil, Error{Code: "pointer_to_struct_expected"}
+		return nil, Error{Code: "struct_expected"}
 	}
 
 	field := v.FieldByName(fieldName)
@@ -117,6 +119,15 @@ func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
 		return aVal != bVal, nil
 	case "like":
 		return strings.Contains(aVal, bVal), nil
+	case "lt":
+		return aVal < bVal, nil
+	case "lte":
+		return aVal <= bVal, nil
+	case "gt":
+		return aVal > bVal, nil
+	case "gte":
+		return aVal >= bVal, nil
+
 	default:
 		return false, Error{
 			Code: "unknown_filter", 
@@ -337,6 +348,55 @@ func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
 	}
 }
 
+/**
+ * Sorting structs by fields functionality.
+ */
+
+type structFieldSorter struct {
+	items []interface{}
+	field string
+	ascending bool
+}
+
+func (s structFieldSorter) Len() int {
+	return len(s.items)
+}
+
+func (s structFieldSorter) Swap(i, j int) {
+	s.items[i], s.items[j] = s.items[j], s.items[i]
+}
+
+func (s structFieldSorter) Less(i, j int) bool {
+	valA, err := GetStructFieldValue(s.items[i], s.field)
+	if err != nil {
+		panic("Sorting failure: " + err.Error())
+	}
+
+	valB, err := GetStructFieldValue(s.items[j], s.field)
+	if err != nil {
+		panic("Sorting failure: " + err.Error())
+	}
+
+	less, err := CompareValues("lt", valA, valB)
+	if err != nil {
+		panic("Sorting failure: " + err.Error())
+	}
+
+	if s.ascending {
+		return less
+	} else {
+		return !less
+	}
+}
+
+func StructFieldSorter(items []interface{}, field string, asc bool) structFieldSorter {
+	return structFieldSorter{
+		items: items,
+		field: field,
+		ascending: asc,
+	}
+}
+
 // Convert a string value to the specified type if possible.
 // Returns an error for unsupported types.
 func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
@@ -361,6 +421,10 @@ func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
 	default:
 		return nil, errors.New(fmt.Sprintf("cannot_convert_to_%v", typ))
 	}
+}
+
+func SortStructSlice(items []interface{}, field string, ascending bool) {
+	sort.Sort(StructFieldSorter(items, field, ascending))
 }
 
 // Given a pointer to a struct, set the given field to the given value.
