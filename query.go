@@ -191,12 +191,16 @@ func conditionToFilterType(cond string) string {
  * Query.
  */
 
-type Order struct {
+type OrderSpec struct {
 	Field string
 	Ascending bool
 }
 
-func (o Order) String() string {
+func Order(field string, asc bool) OrderSpec {
+	return OrderSpec{Field: field, Ascending: asc}
+}
+
+func (o OrderSpec) String() string {
 	s := o.Field + " "
 	if o.Ascending {
 		s += "asc"
@@ -221,7 +225,7 @@ type Query struct {
 
 	LimitNum int	
 	OffsetNum int
-	Orders []Order
+	Orders []OrderSpec
 
 	FieldSpec []string
 	Filters []Filter
@@ -277,22 +281,27 @@ func (q *Query) LimitFields(fields ...string) *Query {
 }
 
 func (q *Query) Order(name string, asc bool) *Query {
-	q.Orders = append(q.Orders, Order{Field: name, Ascending: asc})
+	q.Orders = append(q.Orders, OrderSpec{Field: name, Ascending: asc})
 	return q
 }
 
-func (q *Query) Query(f Filter) *Query {
-	q.Filters = append(q.Filters, f)
+func (q *Query) SetOrders(orders ...OrderSpec) *Query {
+	q.Orders = orders
 	return q
 }
 
-func (q *Query) filterQ(filter Filter) *Query {
-	q.Filters = append(q.Filters, filter)
+func (q *Query) FilterQ(f ...Filter) *Query {
+	q.Filters = append(q.Filters, f...)
+	return q
+}
+
+func (q *Query) SetFilters(f ...Filter) *Query {
+	q.Filters = f
 	return q
 }
 
 func (q *Query) Filter(field string, val interface{}) *Query {
-	return q.filterQ(Eq(field, val))
+	return q.FilterQ(Eq(field, val))
 }
 
 func (q *Query) FilterCond(field string, condition string, val interface{}) *Query {
@@ -304,11 +313,11 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 		Value: val,
 	}
 
-	return q.filterQ(&f)
+	return q.FilterQ(&f)
 }
 
-func (q *Query) AndQ(filter Filter) *Query {
-	return q.filterQ(filter)
+func (q *Query) AndQ(filters ...Filter) *Query {
+	return q.FilterQ(filters...)
 }
 
 func (q *Query) And(field string, val interface{}) *Query {
@@ -320,31 +329,33 @@ func (q *Query) AndCond(field, condition string, val interface{}) *Query {
 	return q.FilterCond(field, condition, val)
 }
 
-func (q *Query) OrQ(filter Filter) *Query {
-	filterLen := 0
-	if q.Filters != nil {
-		filterLen = len(q.Filters)
-	}
+func (q *Query) OrQ(filters ...Filter) *Query {
+	for _, filter := range filters {
+		filterLen := 0
+		if q.Filters != nil {
+			filterLen = len(q.Filters)
+		}
 
-	if filterLen == 0 {
-		// No filters set, so just filter regularily.
-		return q.filterQ(filter)
-	} else if filterLen > 1 {
-		// More than one filter.
-		// Can not do OR with multiple clauses present.
-		q.Error = errors.New("invalid_or_multiple_clauses")
-		return q
-	}
+		if filterLen == 0 {
+			// No filters set, so just filter regularily.
+			return q.FilterQ(filter)
+		} else if filterLen > 1 {
+			// More than one filter.
+			// Can not do OR with multiple clauses present.
+			q.Error = errors.New("invalid_or_with_multiple_clauses")
+			return q
+		}
 
-	// One filter is already present.
-	// If it is OR, append to the or. 
-	// Otherwise create a new top level Or.
-	if q.Filters[0].Type() == "or" {
-		or := q.Filters[0].(*OrCondition)
-		or.Filters = append(or.Filters, filter)
-	} else {
-		// Other filter is not an OR, so just OR the two together.
-		q.Filters = []Filter{Or(q.Filters[0], filter)}
+		// One filter is already present.
+		// If it is OR, append to the or. 
+		// Otherwise create a new top level Or.
+		if q.Filters[0].Type() == "or" {
+			or := q.Filters[0].(*OrCondition)
+			or.Filters = append(or.Filters, filter)
+		} else {
+			// Other filter is not an OR, so just OR the two together.
+			q.Filters = []Filter{Or(q.Filters[0], filter)}
+		}
 	}
 
 	return q
@@ -364,6 +375,11 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	}
 
 	return q.OrQ(&f)
+}
+
+func (q *Query) Not(field string, val interface{}) *Query {
+	q.Filters = append(q.Filters, Neq(field, val))
+	return q
 }
 
 /**
@@ -439,7 +455,7 @@ func (q *RelationQuery) Find() ([]Model, DbError) {
 
 func (q *RelationQuery) First() (Model, DbError) {
 	if q.Backend == nil {
-		panic("Callind .First() on a query without backend")
+		panic("Calling .First() on a query without backend")
 	}
 
 	newQ, err := q.Backend.BuildRelationQuery(q)
@@ -451,7 +467,7 @@ func (q *RelationQuery) First() (Model, DbError) {
 
 func (q *RelationQuery) Last() (Model, DbError) {
 	if q.Backend == nil {
-		panic("Callind .Last() on a query without backend")
+		panic("Calling .Last() on a query without backend")
 	}
 
 	newQ, err := q.Backend.BuildRelationQuery(q)
@@ -464,7 +480,7 @@ func (q *RelationQuery) Last() (Model, DbError) {
 
 func (q *RelationQuery) Count() (uint64, DbError) {
 	if q.Backend == nil {
-		panic("Callind .Count() on a query without backend")
+		panic("Calling .Count() on a query without backend")
 	}
 
 	newQ, err := q.Backend.BuildRelationQuery(q)
@@ -476,7 +492,7 @@ func (q *RelationQuery) Count() (uint64, DbError) {
 
 func (q *RelationQuery) Delete() DbError {
 	if q.Backend == nil {
-		panic("Callind .Delete() on a query without backend")
+		panic("Calling .Delete() on a query without backend")
 	}
 
 	newQ, err := q.Backend.BuildRelationQuery(q)
