@@ -57,7 +57,7 @@ type Backend interface {
 
 	// Return a M2MCollection instance for a model, which allows 
 	// to add/remove/clear items in the m2m relationship.
-	GetM2MCollection(obj Model, name string) (M2MCollection, DbError)
+	M2M(obj Model, name string) (M2MCollection, DbError)
 
 	// Convenience methods.
 	 
@@ -77,6 +77,7 @@ type M2MCollection interface {
 	Add(...Model) DbError
 	Delete(...Model) DbError
 	Clear() DbError
+	Replace([]Model) DbError
 
 	Count() uint64
 	Contains(Model) bool
