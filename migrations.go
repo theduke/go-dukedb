@@ -164,3 +164,68 @@ type Migration struct {
 	Down        func(MigrationBackend) error
 }
 
+
+/**
+ * Base MigrationAttempt
+ */
+
+ type BaseMigrationAttempt struct {
+	Version int
+	StartedAt time.Time
+	FinishedAt time.Time
+	Complete bool
+}
+
+func (m BaseMigrationAttempt) GetCollection() string {
+	return "migration_attempts"
+}
+
+func(a *BaseMigrationAttempt) GetVersion() int {
+	return a.Version
+}
+
+func(a *BaseMigrationAttempt) SetVersion(x int) {
+	a.Version = x
+}
+
+func(a *BaseMigrationAttempt) GetStartedAt() time.Time {
+	return a.StartedAt
+}
+
+func(a *BaseMigrationAttempt) SetStartedAt(x time.Time) {
+	a.StartedAt = x
+}
+
+func(a *BaseMigrationAttempt) GetFinishedAt() time.Time {
+	return a.FinishedAt
+}
+
+func(a *BaseMigrationAttempt) SetFinishedAt(x time.Time) {
+	a.FinishedAt = x
+}
+
+func(a *BaseMigrationAttempt) GetComplete() bool {
+	return a.Complete
+}
+
+func(a *BaseMigrationAttempt) SetComplete(x bool) {
+	a.Complete = x
+}
+
+type BaseMigrationAttemptIntID struct {
+	BaseMigrationAttempt
+	ID uint64
+}
+
+func(a *BaseMigrationAttemptIntID) GetID() string {
+	return strconv.FormatUint(a.ID, 10)
+}
+
+func(a *BaseMigrationAttemptIntID) SetID(x string) error {
+	id, err := strconv.ParseUint(x, 10, 64)
+	if err != nil {
+		return err
+	}
+	a.ID = id
+	return nil
+}
