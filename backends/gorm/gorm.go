@@ -137,7 +137,8 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 		// fieldCOnditions can easily be handled generically.
 		cond := filter.(*db.FieldCondition)
 
-		operator := db.FilterToCondition(filterName)
+		// TODO: return error from func.
+		operator, err := db.FilterToSqlCondition(filterName)
 
 		sql = cond.Field + " " + operator 
 		if filterName == "in" {
@@ -256,7 +257,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 		return nil, err
 	}
 
-	if err := gormQ.Find(slice).Error; err != nil {
+	if err := gormQ.Find(&slice).Error; err != nil {
 		return nil, db.Error{Code: "db_error", Message: err.Error()}
 	}
 
@@ -379,7 +380,7 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  * M2M
  */
 
-func (b Backend) GetM2MCollection(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
+func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
 	info := b.GetModelInfo(obj.GetCollection())
 	fieldInfo := info.FieldInfo[name]
 
@@ -452,5 +453,16 @@ func (c *M2MCollection) Clear() db.DbError {
 		}
 	}
 	c.Items = make([]db.Model, 0)
+	return nil
+}
+
+func (c *M2MCollection) Replace(items []db.Model) db.DbError {
+	if err := c.Association.Replace(items).Error; err != nil {
+		return db.Error{
+			Code: "gorm_error",
+			Message: err.Error(),
+		}
+	}
+	c.Items = items
 	return nil
 }
