@@ -198,10 +198,37 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 	return newQuery, nil
 }
 
-
 /**
  * Convenience functions.
  */
+
+func BackendQueryOne(b Backend, q *Query) (Model, DbError) {
+	res, err := b.Query(q)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res) == 0 {
+		return nil, nil
+	}
+
+	m := res[0]
+	return m, nil
+}
+
+func BackendLast(b Backend, q *Query) (Model, DbError) {
+	orders := len(q.Orders)
+	if orders > 0 {
+		for i := 0; i < orders; i++ {
+			q.Orders[i].Ascending = !q.Orders[i].Ascending
+		}
+	} else {
+		info := b.GetModelInfo(q.Model)
+		q = q.Order(info.GetPkName(), false)
+	}
+
+	return b.QueryOne(q.Limit(1))
+}
 
 func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 	info := b.GetModelInfo(modelType)
