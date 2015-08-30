@@ -17,6 +17,11 @@ type Backend struct {
 	MigrationHandler *db.MigrationHandler
 }
 
+// Ensure that Backend implements the db.Backend interfaces at compile time.
+var _ db.Backend = (*Backend)(nil)
+var _ db.MigrationBackend = (*Backend)(nil)
+var _ db.TransactionBackend = (*Backend)(nil)
+
 func New(gorm *gorm.DB) *Backend {
 	b := Backend{
 		Db: gorm,
@@ -138,7 +143,7 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 		cond := filter.(*db.FieldCondition)
 
 		// TODO: return error from func.
-		operator, err := db.FilterToSqlCondition(filterName)
+		operator, _ := db.FilterToSqlCondition(filterName)
 
 		sql = cond.Field + " " + operator 
 		if filterName == "in" {
@@ -169,7 +174,7 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 	return sql, args
 }
 
-func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
+func (b Backend) buildQuery(gormQ *gorm.DB, q *db.Query) (*gorm.DB, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
 		return nil, db.Error{
@@ -177,8 +182,6 @@ func (b Backend) buildQuery(q *db.Query) (*gorm.DB, db.DbError) {
 			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.Model),
 		}
 	}
-
-	gormQ := b.Db
 
 	// Handle filters.
 	for _, filter := range q.Filters {
@@ -252,7 +255,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 		return nil, err
 	}
 
-	gormQ, err := b.buildQuery(q)
+	gormQ, err := b.buildQuery(b.Db, q)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +264,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 		return nil, db.Error{Code: "db_error", Message: err.Error()}
 	}
 
-	models := db.InterfaceToModelSlice(slice)
+	models, _ := db.InterfaceToModelSlice(slice)
 
 	// Do joins.
 	if len(q.Joins) > 0 {
@@ -277,22 +280,10 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 }
 
 func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
-	res, err := b.Query(q)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(res) == 0 {
-		return nil, nil
-	}
-
-	m := res[0].(db.Model)
-	return m, nil
+	return db.BackendQueryOne(&b, q)
 }
 
-func (b Backend) Count(q *db.Query) (uint64, db.DbError) {
-	var count int
-
+func (b Backend) Count(q *db.Query) (int, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
 		return 0, db.Error{
@@ -301,22 +292,24 @@ func (b Backend) Count(q *db.Query) (uint64, db.DbError) {
 		}
 	}
 
-	b.Db.Model(info.Item).Count(&count)
-	return uint64(count), nil
+	gormQ, err := b.buildQuery(b.Db.Model(info.Item), q)
+	if err != nil {
+		return 0, err
+	}
+
+	var count int
+	if err := gormQ.Count(&count).Error; err != nil {
+		return 0, db.Error{
+			Code: "gorm_count_error",
+			Message: err.Error(),
+		}
+	}
+	
+	return count, nil
 }
 
 func (b Backend) Last(q *db.Query) (db.Model, db.DbError) {
-	orders := len(q.Orders)
-	if orders > 0 {
-		for i := 0; i < orders; i++ {
-			q.Orders[i].Ascending = !q.Orders[i].Ascending
-		}
-	} else {
-		info := b.GetModelInfo(q.Model)
-		q = q.Order(info.GetPkName(), false)
-	}
-
-	return b.QueryOne(q.Limit(1))
+	return db.BackendLast(&b, q)
 }
 
 // Find first model with primary key ID.
@@ -359,7 +352,7 @@ func (b Backend) Delete(m db.Model) db.DbError {
 }
 
 func (b Backend) DeleteMany(q *db.Query) db.DbError {
-	gormQ, err := b.buildQuery(q)
+	gormQ, err := b.buildQuery(b.Db, q)
 	if err != nil {
 		return err
 	}
@@ -382,7 +375,21 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
 
 func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
 	info := b.GetModelInfo(obj.GetCollection())
-	fieldInfo := info.FieldInfo[name]
+	fieldInfo, hasField := info.FieldInfo[name]
+
+	if !hasField {
+		return nil, db.Error{
+			Code: "unknown_field",
+			Message: fmt.Sprintf("The model %v has no field %v", obj.GetCollection(), name),
+		}
+	}
+
+	if !fieldInfo.M2M {
+		return nil, db.Error{
+			Code: "no_m2m_field",
+			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.GetCollection()),
+		}
+	}
 
 	items, _ := b.NewModelSlice(fieldInfo.RelationItem.GetCollection())
 
@@ -398,7 +405,7 @@ func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) 
 		}
 	}
 
-	modelSlice := db.InterfaceToModelSlice(items)
+	modelSlice, _ := db.InterfaceToModelSlice(items)
 	col.Items = modelSlice
 
 	return &col, nil
@@ -408,6 +415,9 @@ type M2MCollection struct {
 	db.BaseM2MCollection
 	Association *gorm.Association		
 }
+
+// Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
+var _ db.M2MCollection = (*M2MCollection)(nil)
 
 
 func (c *M2MCollection) Add(items ...db.Model) db.DbError {
