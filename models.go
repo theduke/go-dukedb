@@ -9,10 +9,10 @@ type BaseModelIntID struct {
 }
 
 func (b BaseModelIntID) GetID() string {
-	return strconv.FormatUint(b.ID, 64)
+	return strconv.FormatUint(b.ID, 10)
 }
 
-func (b BaseModelIntID) SetID(rawId string) error {
+func (b *BaseModelIntID) SetID(rawId string) error {
 	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err
