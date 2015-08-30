@@ -1,7 +1,6 @@
 package gorm
 
 import (
-	"strconv"
 	"time"
 	"log"
 
@@ -38,12 +37,12 @@ func (b Backend) MigrationsSetup() db.DbError {
 			}
 		}
 
-		migration := MigrationAttempt{
-			Version:    0,
-			StartedAt:  time.Now(),
-			FinishedAt: time.Now(),
-			Complete:  true,
-		}
+		migration := MigrationAttempt{}
+		migration.Version = 0
+		migration.StartedAt = time.Now()
+		migration.FinishedAt = time.Now()
+		migration.Complete = true
+		
 		if err := tx.Create(&migration).Error; err != nil {
 			return db.Error{
 				Code: "migration_setup_failed",
@@ -88,87 +87,10 @@ func (b Backend) DetermineMigrationVersion() (int, db.DbError) {
 	return lastAttempt.Version, nil
 }
 
+type MigrationAttempt struct {
+	db.BaseMigrationAttemptIntID
+}
+
 func (b Backend) NewMigrationAttempt() db.MigrationAttempt {
 	return &MigrationAttempt{}
 }
-
-type MigrationAttempt struct {
-	ID uint64
-	Version int
-	StartedAt time.Time
-	FinishedAt time.Time
-	Complete bool
-}
-
-func (m MigrationAttempt) GetCollection() string {
-	return "migration_attempts"
-}
-
-func(a *MigrationAttempt) GetID() string {
-	return strconv.FormatUint(a.ID, 10)
-}
-
-func(a *MigrationAttempt) SetID(x string) error {
-	id, err := strconv.ParseUint(x, 10, 64)
-	if err != nil {
-		return err
-	}
-	a.ID = id
-	return nil
-}
-
-func(a *MigrationAttempt) GetVersion() int {
-	return a.Version
-}
-
-func(a *MigrationAttempt) SetVersion(x int) {
-	a.Version = x
-}
-
-func(a *MigrationAttempt) GetStartedAt() time.Time {
-	return a.StartedAt
-}
-
-func(a *MigrationAttempt) SetStartedAt(x time.Time) {
-	a.StartedAt = x
-}
-
-func(a *MigrationAttempt) GetFinishedAt() time.Time {
-	return a.FinishedAt
-}
-
-func(a *MigrationAttempt) SetFinishedAt(x time.Time) {
-	a.FinishedAt = x
-}
-
-func(a *MigrationAttempt) GetComplete() bool {
-	return a.Complete
-}
-
-func(a *MigrationAttempt) SetComplete(x bool) {
-	a.Complete = x
-}
-
-/*
-	// Check if the migration attempts table exists.
-	// Otherwise, create it and run the additional migration.
-
-
-	// Determine if the database is locked.
-
-
-	// Determine current version of the database.
-	
-
-	if curVersion < targetVersion {
-		for nextVersion := curVersion + 1; nextVersion <= targetVersion; nextVersion++ {
-			migration := m.Get(nextVersion)
-			if err := migration.Run(db); err != nil {
-				// Migration failed! Abort.
-				return err
-			}
-		}
-	} else {
-		log.Println("DB is already at newest schema version: " + strconv.Itoa(targetVersion))
-	}
-*/
