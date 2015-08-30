@@ -10,8 +10,8 @@ type BaseM2MCollection struct {
 }
 
 
-func (c BaseM2MCollection) Count() uint64 {
-	return uint64(len(c.Items))
+func (c BaseM2MCollection) Count() int {
+	return len(c.Items)
 }
 
 func (c BaseM2MCollection) Contains(m Model) bool {
