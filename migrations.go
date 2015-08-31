@@ -176,7 +176,7 @@ type Migration struct {
 	Complete bool
 }
 
-func (m BaseMigrationAttempt) GetCollection() string {
+func (m BaseMigrationAttempt) Collection() string {
 	return "migration_attempts"
 }
 

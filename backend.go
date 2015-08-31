@@ -53,10 +53,10 @@ func(b *BaseBackend) SetDebug(x bool) {
 func (b *BaseBackend) RegisterModel(m Model) error {
 	info, err := NewModelInfo(m)
 	if err != nil {
-		panic(fmt.Sprintf("Could not register model '%v': %v\n", m.GetCollection(), err))
+		panic(fmt.Sprintf("Could not register model '%v': %v\n", m.Collection(), err))
 	}
 
-	b.ModelInfo[m.GetCollection()] = info
+	b.ModelInfo[m.Collection()] = info
 	return nil
 }
 
@@ -154,7 +154,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 		if !ok {
 			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.Model, q.RelationName))
 		}
-		targetModelName = relInfo.RelationItem.GetCollection()
+		targetModelName = relInfo.RelationItem.Collection()
 
 		relatedInfo := b.GetModelInfo(targetModelName)
 

@@ -125,7 +125,7 @@ type MigrationBackend interface {
 }
 
 type Model interface {
-	GetCollection() string
+	Collection() string
 	GetID() string
 	SetID(string) error
 }

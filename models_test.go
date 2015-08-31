@@ -19,7 +19,7 @@ func (i BaseModel) GetID() string {
 func (i BaseModel) SetID(x string) error {
 	return nil
 }
-func (i BaseModel) GetCollection() string { 
+func (i BaseModel) Collection() string { 
 	return "base_model" 
 }
 
@@ -37,7 +37,7 @@ type TestModel struct {
 	IntVal int
 }
 
-func (t TestModel) GetCollection() string {
+func (t TestModel) Collection() string {
 	return "test_models"
 }
 
@@ -67,7 +67,7 @@ type TestParent struct {
 	ChildSlicePtr []*TestModel `db:"m2m"`
 }
 
-func (t TestParent) GetCollection() string {
+func (t TestParent) Collection() string {
 	return "test_parents"
 }
 

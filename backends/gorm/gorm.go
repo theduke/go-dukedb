@@ -165,7 +165,7 @@ func filterToSql(filter db.Filter) (string, []interface{}) {
 		sql, args = filterManyToSql(or.Filters, "OR")
 	} else if filterName == "not" {
 		not := filter.(*db.NotCondition)
-		sql, args = filterToSql(not.Filter)
+		sql, args = filterManyToSql(not.Filters, "AND")
 		sql = "NOT (" + sql + ")"
 	} else {
 		panic(fmt.Sprintf("GORM: Unhandled filter type '%v'", filterType))
@@ -374,24 +374,24 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  */
 
 func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
-	info := b.GetModelInfo(obj.GetCollection())
+	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
 		return nil, db.Error{
 			Code: "unknown_field",
-			Message: fmt.Sprintf("The model %v has no field %v", obj.GetCollection(), name),
+			Message: fmt.Sprintf("The model %v has no field %v", obj.Collection(), name),
 		}
 	}
 
 	if !fieldInfo.M2M {
 		return nil, db.Error{
 			Code: "no_m2m_field",
-			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.GetCollection()),
+			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.Collection()),
 		}
 	}
 
-	items, _ := b.NewModelSlice(fieldInfo.RelationItem.GetCollection())
+	items, _ := b.NewModelSlice(fieldInfo.RelationItem.Collection())
 
 	assoc := b.Db.Model(obj).Association(name)
 	col := M2MCollection{

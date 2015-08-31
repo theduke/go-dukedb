@@ -319,7 +319,7 @@ func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model
 // Fails if the model type was not registered, or if the primary key already
 // exists.	 
 func (b Backend) Create(m db.Model) db.DbError {
-	modelName := m.GetCollection()
+	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
 			Code: "unknown_model",
@@ -342,7 +342,7 @@ func (b Backend) Create(m db.Model) db.DbError {
 }
 
 func (b Backend) Update(m db.Model) db.DbError {
-	modelName := m.GetCollection()
+	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
 			Code: "unknown_model",
@@ -356,7 +356,7 @@ func (b Backend) Update(m db.Model) db.DbError {
 }
 
 func (b Backend) Delete(m db.Model) db.DbError {
-	modelName := m.GetCollection()
+	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
 			Code: "unknown_model",
@@ -397,20 +397,20 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  */
 
 func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
-	info := b.GetModelInfo(obj.GetCollection())
+	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
 		return nil, db.Error{
 			Code: "unknown_field",
-			Message: fmt.Sprintf("The model %v has no field %v", obj.GetCollection(), name),
+			Message: fmt.Sprintf("The model %v has no field %v", obj.Collection(), name),
 		}
 	}
 
 	if !fieldInfo.M2M {
 		return nil, db.Error{
 			Code: "no_m2m_field",
-			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.GetCollection()),
+			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.Collection()),
 		}
 	}
 

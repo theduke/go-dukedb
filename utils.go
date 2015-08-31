@@ -677,7 +677,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	info := ModelInfo{
 		Item: model,
 		ItemName: reflect.ValueOf(model).Elem().Type().Name(),
-		ItemCollection: model.GetCollection(),
+		ItemCollection: model.Collection(),
 		FieldInfo: make(map[string]*FieldInfo),
 	}
 
@@ -901,7 +901,7 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 		modelName := reflect.ValueOf(model.Item).Elem().Type().Name()
 		relatedItem := fieldInfo.RelationItem
 		relatedName := reflect.ValueOf(relatedItem).Elem().Type().Name()
-		relatedCollection := relatedItem.GetCollection()
+		relatedCollection := relatedItem.Collection()
 
 		// Check that related model is contained in models info.
 		if _, ok := models[relatedCollection]; !ok {
@@ -913,7 +913,7 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 			}
 		}
 
-		relatedInfo := models[relatedItem.GetCollection()]
+		relatedInfo := models[relatedItem.Collection()]
 		relatedFields := relatedInfo.FieldInfo
 
 		if !(fieldInfo.BelongsTo || fieldInfo.HasOne || fieldInfo.M2M) {
