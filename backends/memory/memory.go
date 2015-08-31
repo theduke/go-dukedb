@@ -336,6 +336,7 @@ func (b Backend) Create(m db.Model) db.DbError {
 	}
 
 	b.data[modelName][id] = m
+	m.SetID(len(b.data[modelName]) + 1)
 
 	return nil
 }
