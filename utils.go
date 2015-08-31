@@ -1040,7 +1040,7 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 	// First, Handle joins so query and field specification parsing can use 
 	// join info.
 	if rawJoins, ok := data["joins"]; ok {
-		joins, ok := rawJoins.([]string)
+		rawJoinSlice, ok := rawJoins.([]interface{})
 		if !ok {
 			return nil, Error{
 				Code: "invalid_joins",
@@ -1048,15 +1048,30 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 			}
 		}
 
+		// Convert []interface{} joins to []string.
+
+		joins := make([]string, 0)
+		for _, rawJoin := range rawJoinSlice {
+			join, ok := rawJoin.(string)
+			if !ok {
+				return nil, Error{
+					Code: "invalid_joins",
+					Message: "Joins must be an array of strings",
+				}
+			}
+			joins = append(joins, join)
+		}
+
 		// To handle nested joins, parseQueryJoins has to be called repeatedly 
 		// until no more joins are returned.
 		for depth := 1; true; depth++ {
-			remainingJoins, err := parseQueryJoins(q, joins, depth)
+			var err DbError
+			joins, err = parseQueryJoins(q, joins, depth)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(remainingJoins) == 0 {
+			if len(joins) == 0 {
 				break
 			}
 		}
@@ -1078,15 +1093,23 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 
 	// Handle fields.
 	if rawFields, ok := data["fields"]; ok {
-		fields, ok := rawFields.([]string)
+		fields, ok := rawFields.([]interface{})
 		if !ok {
 			return nil, Error{
 				Code: "invalid_fields",
-				Message: "Fields specification must be an array of strings",
+				Message: "Fields specification must be an array",
 			}
 		}
 
-		for _, field := range fields {
+		for _, rawField := range fields {
+			field, ok := rawField.(string)
+			if !ok {
+				return nil, Error{
+					Code: "invalid_fields",
+					Message: "Fields specification must be an array of strings",
+				}
+			}
+
 			parts := strings.Split(field, ".")
 			if len(parts) > 1 {
 				// Possibly a field on a joined model. Check if a parent join can be found.
@@ -1190,8 +1213,6 @@ func parseQueryFilters(q *Query, filters map[string]interface{}) DbError {
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
 func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
-	fmt.Printf("Checking filter '%v' with data '%+v'\n", name, data)
-
 	// Handle 
 	switch name {
 	case "$eq":

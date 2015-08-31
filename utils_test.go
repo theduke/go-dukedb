@@ -2,7 +2,6 @@ package dukedb_test
 
 import (
 	"reflect"
-	"fmt"
 
 	. "github.com/theduke/go-dukedb"
 
@@ -767,7 +766,6 @@ var _ = Describe("Utils", func() {
 			}
 			`
 			q, err := ParseJsonQuery("col", []byte(json))
-			fmt.Printf("\nquery: %+v\n", q)
 
 			Expect(err).ToNot(HaveOccurred())
 
@@ -785,6 +783,78 @@ var _ = Describe("Utils", func() {
 
 			Expect(first).To(BeEquivalentTo(Eq("name", "testname")))
 			Expect(second).To(BeEquivalentTo(Lte("intField", float64(100))))
+		})
+
+		It("Shold parse limit correctly", func() {
+			json := `{
+				"limit": 20
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.LimitNum).To(Equal(20))
+		})
+
+		It("Shold parse offset correctly", func() {
+			json := `{
+				"offset": 20
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.OffsetNum).To(Equal(20))
+		})
+
+		It("Shold parse fields correctly", func() {
+			json := `{
+				"fields": ["field1", "field2"]
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.FieldSpec).To(Equal([]string{"field1", "field2"}))
+		})
+
+		It("Shold parse joins", func() {
+			json := `{
+				"joins": ["Children"]
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.Joins[0]).To(Equal(RelQ(q, "Children")))
+		})
+
+		It("Shold parse joined fields", func() {
+			json := `{
+				"joins": ["Children"],
+				"fields": ["Children.field1", "Children.field2"]
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.Joins[0].FieldSpec).To(Equal([]string{"field1", "field2"}))
+		})
+
+		It("Shold parse nested joins", func() {
+			json := `{
+				"joins": ["Children", "Children.Tags"]
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(len(q.Joins)).To(Equal(1))
+			Expect(q.Joins[0].RelationName).To(Equal("Children"))
+
+			Expect(len(q.Joins[0].Joins)).To(Equal(1))
+			Expect(q.Joins[0].Joins[0].RelationName).To(Equal("Tags"))
 		})
 	})
 })
