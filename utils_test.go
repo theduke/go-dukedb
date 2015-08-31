@@ -2,6 +2,7 @@ package dukedb_test
 
 import (
 	"reflect"
+	"fmt"
 
 	. "github.com/theduke/go-dukedb"
 
@@ -708,5 +709,82 @@ var _ = Describe("Utils", func() {
 
 	Context("Invalid relationship info", func() {
 		// Todo: test invalid relationship info.
+	})
+
+	Describe("Query parsers", func() {
+
+		It("Shold parse simple condition correctly", func() {
+			json := `{
+				"filters": {"name": "testname"}
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.Model).To(Equal("col"))
+			Expect(q.Filters[0]).To(BeEquivalentTo(Eq("name", "testname")))
+		})
+
+		It("Shold parse comparison operator condition correctly", func() {
+			json := `{
+				"filters": {"intField": {"$gt": 20}}
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(q.Model).To(Equal("col"))
+			Expect(q.Filters[0]).To(BeEquivalentTo(Gt("intField", float64(20))))
+		})
+
+		It("Shold parse multiple conditions correctly", func() {
+			json := `{
+				"filters": {"name": "testname", "intField": {"$gt": 20}}
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+
+			Expect(err).ToNot(HaveOccurred())
+
+			first := q.Filters[0].(*FieldCondition)
+			second := q.Filters[1].(*FieldCondition)
+
+			// The ordering by json.Unmarshal() is random, so swap the filters
+			// if the order is reversed.
+			if first.Field == "intField" {
+				first, second = second, first
+			}
+
+			Expect(first).To(BeEquivalentTo(Eq("name", "testname")))
+			Expect(second).To(BeEquivalentTo(Gt("intField", float64(20))))
+		})
+
+		It("Shold parse top level $or correctly", func() {
+			json := `{
+				"filters": {
+					"$or": [{"name": "testname"}, {"intField": {"$lte": 100}}]
+				}
+			}
+			`
+			q, err := ParseJsonQuery("col", []byte(json))
+			fmt.Printf("\nquery: %+v\n", q)
+
+			Expect(err).ToNot(HaveOccurred())
+
+			// The ordering by json.Unmarshal() is random, so checking has to be done 
+			// with order in mind.
+			or := q.Filters[0].(*OrCondition)
+			first := or.Filters[0].(*FieldCondition)
+			second := or.Filters[1].(*FieldCondition)
+
+			// The ordering by json.Unmarshal() is random, so swap the filters
+			// if the order is reversed.
+			if first.Field == "intField" {
+				first, second = second, first
+			}
+
+			Expect(first).To(BeEquivalentTo(Eq("name", "testname")))
+			Expect(second).To(BeEquivalentTo(Lte("intField", float64(100))))
+		})
 	})
 })

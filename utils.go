@@ -7,6 +7,7 @@ import(
 	"fmt"
 	"strconv"
 	"sort"
+	"encoding/json"
 )
 
 /**
@@ -191,6 +192,10 @@ func NumericToInt64(x interface{}) (int64, DbError) {
 			val = int64(x.(uint32))
 		case reflect.Uint64:
 			val = int64(x.(uint64))
+		case reflect.Float32:
+			val = int64(x.(float32))
+		case reflect.Float64:
+			val = int64(x.(float64))
 		default:
 			return int64(0), Error{Code: "non_numeric_type"}
 	}
@@ -222,6 +227,10 @@ func NumericToUint64(x interface{}) (uint64, DbError) {
 			val = uint64(x.(uint32))
 		case reflect.Uint64:
 			val = x.(uint64)
+		case reflect.Float32:
+			val = uint64(x.(float32))
+		case reflect.Float64:
+			val = uint64(x.(float64))
 		default:
 			return uint64(0), Error{Code: "non_numeric_type"}
 	}
@@ -1008,6 +1017,18 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
  * Query parser functions.
  */
 
+func ParseJsonQuery(collection string, js []byte) (*Query, DbError) {
+	var data map[string]interface{}
+	if err := json.Unmarshal(js, &data); err != nil {
+		return nil, Error{
+			Code: "invalid_json",
+			Message: "Query json could not be unmarshaled. Check for invalid json.",
+		}
+	}
+
+	return ParseQuery(collection, data)
+}
+
 // Build a database query based a map[string]interface{} data structure
 // resembling a Mongo query.
 // 
@@ -1147,22 +1168,30 @@ func parseQueryJoins(q *Query, joins []string, depth int) ([]string, DbError) {
 }
 
 func parseQueryFilters(q *Query, filters map[string]interface{}) DbError {
-	for key := range filters {
-		filter, err := parseQueryFilter(key, filters[key])
-		if err != nil {
-			return err
-		}
-		if filter != nil {
+	filter, err := parseQueryFilter("", filters)
+	if err != nil {
+		return err
+	}
+
+	// If filter is an and, add the and clauses separately to the query.
+	// Done for prettier query without top level AND.
+	if andFilter, ok := filter.(*AndCondition); ok {
+		for _, filter := range andFilter.Filters {
 			q.FilterQ(filter)
 		}
+	} else {
+		q.FilterQ(filter)
 	}
 
 	return nil
 }
+
 // Parses a mongo query filter to a Filter.
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
 func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
+	fmt.Printf("Checking filter '%v' with data '%+v'\n", name, data)
+
 	// Handle 
 	switch name {
 	case "$eq":
@@ -1194,20 +1223,23 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 
 	// Handle OR.
 	if name == "$or" {
-		orClauses, ok := data.([]map[string]interface{})
+		orClauses, ok := data.([]interface{})
 		if !ok {
 			return nil, Error{Code: "invalid_or_data"}
 		}
 
 		or := Or()
-		for _, clause := range orClauses {
-			for key := range clause {
-				filter, err := parseQueryFilter(key, clause[key])
-				if err != nil {
-					return nil, err
-				}
-				or.Add(filter)
+		for _, rawClause := range orClauses {
+			clause, ok := rawClause.(map[string]interface{})
+			if !ok {
+				return nil, Error{Code: "invalid_or_data"}
 			}
+
+			filter, err := parseQueryFilter("", clause)
+			if err != nil {
+				return nil, err
+			}
+			or.Add(filter)
 		}
 
 		return or, nil
@@ -1219,16 +1251,27 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 		// Build an AND filter.
 		and := And()
 		for key := range nestedData {
-			filter, err := parseQueryFilter(key, nestedData)
+			filter, err := parseQueryFilter(key, nestedData[key])
 			if err != nil {
 				return nil, err
 			}
-			filter.SetField(key)
-			// filter must be a field condition!
+
+			if key == "$or" || key == "$and" || key == "$not" {
+				// Do nothing
+			} else if name == "" {
+				filter.SetField(key)
+			} else {
+				filter.SetField(name)
+			}
+
 			and.Add(filter)
 		}
 
-		return and, nil
+		if len(and.Filters) == 1 {
+			return and.Filters[0], nil
+		} else {
+			return and, nil
+		}
 	}
 
 	// If execution reaches this point, the filter must be a simple equals filter
