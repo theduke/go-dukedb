@@ -8,15 +8,44 @@ import (
 
 type Filter interface {
 	Type() string
+	SetField(string) Filter
+}
+
+type MultiFilter interface {
+	Filter
+	Add(...Filter) MultiFilter
 }
 
 /**
  * And.
  */
 
-type AndCondition struct {
+type multiFilter struct {
 	Filters []Filter
 }
+
+func (m multiFilter) Type() string {
+	panic("type_method_not_overwritten")
+}
+
+func (m *multiFilter) Add(filters ...Filter) MultiFilter {
+	m.Filters = append(m.Filters, filters...)
+	return m
+}
+
+func (m *multiFilter) SetField(field string) Filter {
+	for _, filter := range m.Filters {
+		filter.SetField(field)
+	}
+	return m
+}
+
+type AndCondition struct {
+	multiFilter
+}
+
+// Ensure AndCondition implements MultiFilter.
+var _ MultiFilter = (*AndCondition)(nil)
 
 func (a *AndCondition) Type() string {
 	return "and"
@@ -33,17 +62,19 @@ func And(f ...Filter) *AndCondition {
  */
 
 type OrCondition struct {
- 	Filters []Filter
+ 	multiFilter
 }
+
+// Ensure OrCondition implements MultiFilter.
+var _ MultiFilter = (*OrCondition)(nil)
 
 func (o *OrCondition) Type() string {
 	return "or"
 }
 
 func Or(f ...Filter) *OrCondition {
-	or := OrCondition{
-		Filters: f,
-	}
+	or := OrCondition{}
+	or.Filters = f
 	return &or
 }
 
@@ -52,17 +83,20 @@ func Or(f ...Filter) *OrCondition {
  */
 
 type NotCondition struct {
-	Filter Filter
+	multiFilter
 }
+
+// Ensure NotCondition implements MultiFilter.
+var _ MultiFilter = (*NotCondition)(nil)
 
 func (n NotCondition) Type() string {
 	return "not"
 }
 
-func Not(f Filter) *NotCondition {
-	return &NotCondition{
-		Filter: f,
-	}
+func Not(f ...Filter) *NotCondition {
+	not := &NotCondition{}
+	not.Filters = f
+	return not
 }
 
 /**
@@ -79,6 +113,10 @@ func (f *FieldCondition) Type() string {
 	return f.Typ
 }
 
+func (f *FieldCondition) SetField(field string) Filter {
+	f.Field = field
+	return f
+}
 
 /**
  * Eq.
@@ -120,6 +158,20 @@ func Like(field string, val interface{}) *FieldCondition {
 }
 
 /**
+ * In.
+ */
+
+func In(field string, val interface{}) *FieldCondition {
+	in := FieldCondition{
+		Field: field,
+		Value: val,
+		Typ:"in",
+	}
+	return &in
+}
+
+
+/**
  * Less than Lt.
  */
 
@@ -147,6 +199,19 @@ func Lte(field string, val interface{}) *FieldCondition {
 
 /**
  * Greater than gt.
+ */
+
+func Gt(field string, val interface{}) *FieldCondition {
+	gt := FieldCondition{
+		Field: field,
+		Value: val,
+		Typ:"gt",
+	}
+	return &gt
+}
+
+/**
+ * Greater than equal gte.
  */
 
 func Gte(field string, val interface{}) *FieldCondition {
@@ -217,10 +282,6 @@ type Query struct {
 
 	Backend Backend
 
-	JoinTargetField string
-	JoinField string // The DB name of the field that s joined on. (on the model this query is for)
-	JoinedField string // The DB name of the field to join on. (in the parent)
-
 	Joins []*RelationQuery
 
 	LimitNum int	
@@ -250,6 +311,11 @@ func (q *Query) Offset(o int) *Query {
 
 func (q *Query) Fields(fields ...string) *Query {
 	q.FieldSpec = fields
+	return q
+}
+
+func (q *Query) AddFields(fields ...string) *Query {
+	q.FieldSpec = append(q.FieldSpec, fields...)
 	return q
 }
 
@@ -397,6 +463,35 @@ func (q *Query) Join(fieldName string) *Query {
 	return q
 }
 
+// Retrieve a join query for the specified field.
+// Returns a *RelationQuery, or nil if not found.
+// Supports nested Joins like Parent.Tags
+func (q *Query) GetJoin(field string) *RelationQuery {
+	if q.Joins == nil {
+		return nil
+	}
+
+	parts := strings.Split(field, ".")
+	if len(parts) > 1 {
+		field = parts[0]
+	}
+
+	for _, join := range q.Joins {
+		if join.RelationName == field {
+			if len(parts) > 1 {
+				// Nested join, call GetJoin again on found join query.
+				return join.GetJoin(strings.Join(parts[1:], "."))	
+			} else {
+				// Not nested, just return the join.
+				return join
+			}
+		}
+	}
+
+	// Join not found, return nil.
+	return nil
+}
+
 func (q *Query) Related(name string) *RelationQuery {
 	return RelQ(q, name)
 }
@@ -404,6 +499,7 @@ func (q *Query) Related(name string) *RelationQuery {
 func (q *Query) RelatedCustom(name, joinKey, foreignKey string) *RelationQuery {
 	return RelQCustom(q, name, joinKey, foreignKey)
 }
+
 
 /**
  * RelationQuery.
