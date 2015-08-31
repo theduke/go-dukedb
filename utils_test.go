@@ -2,8 +2,6 @@ package dukedb_test
 
 import (
 	"reflect"
-	"strconv"
-	"fmt"
 
 	. "github.com/theduke/go-dukedb"
 

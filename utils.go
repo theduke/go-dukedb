@@ -9,31 +9,9 @@ import(
 	"sort"
 )
 
-// Build a database query based on two maps.
-// The first map must contain the MongoDB query, the second is optional and can
-// contain the field specification.
-// It returns a Query equal to the Mongo query, with unsupported features omitted.
-// An slice with errors is returned, warning about all unsupported features.
-func ParseMongoQuery(
-	collectionName string, 
-	query map[string]interface{}, 
-	fields map[string]interface{}) (*Query, []DbError) {
-
-	q := Q(collectionName)
-	errs := make([]DbError, 0)
-
-	for key := range query {
-		if key == "" {
-
-		}
-	}
-
-	if len(errs) == 0 {
-		errs = nil
-	}
-
-	return q, errs
-}
+/**
+ * String utils.
+ */
 
 // Convert a CamelCase string to underscore version, eg camel_case.
 func CamelCaseToUnderscore(str string) string {
@@ -62,33 +40,67 @@ func CamelCaseToUnderscore(str string) string {
 	return u
 }
 
-// Given a struct or a pointer to a struct, retrieve the value of a field from
-// the struct with reflection.
-func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError) {
-	// Check if struct is valid.
-	if s == nil {
-		return nil, Error{Code: "pointer_or_struct_expected"}
-	}
+// Given the internal name of a filter like "eq" or "lte", return a SQL operator like = or <.
+// WARNING: panics if an unsupported filter is given.
+func FilterToSqlCondition(filter string) (string, DbError) {
+	typ := ""
 
-	// Check if it is a pointer, and if so, dereference it.
-	v := reflect.ValueOf(s)
-	if v.Type().Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	if v.Type().Kind() != reflect.Struct {
-		return nil, Error{Code: "struct_expected"}
-	}
-
-	field := v.FieldByName(fieldName)
-	if !field.IsValid() {
-		return nil, Error{
-			Code: "field_not_found", 
-			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
+	switch filter {
+	case "eq":
+		typ = "="
+	case "neq":
+		typ = "!="
+	case "lt":
+		typ = "<"
+	case "lte":
+		typ = "<="
+	case "gt":
+		typ = ">"
+	case "gte":
+		typ = ">="
+	case "like":
+		typ = "LIKE"
+	case "in":
+		typ = "IN"
+	default:
+		return "", Error{
+			Code: "unknown_filter",
+			Message: "Unknown filter '" + filter + "'",
 		}
-	}	
+	}
 
-	return field.Interface(), nil
+	return typ, nil
+}
+
+
+/**
+ * Generic interface variable handling/comparison functions.
+ */
+
+// Convert a string value to the specified type if possible.
+// Returns an error for unsupported types.
+func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
+	switch typ {
+	case reflect.Int:
+		x, err := strconv.Atoi(value) 
+		return interface{}(x), err
+	case reflect.Int64:
+		x, err := strconv.ParseInt(value, 10, 64)
+		return interface{}(x), err
+	case reflect.Uint:
+		x, err := strconv.ParseUint(value, 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		return uint(x), nil
+	case reflect.Uint64:
+		x, err := strconv.ParseUint(value, 10, 64)
+		return interface{}(x), err
+	case reflect.String:
+		return interface{}(value), nil
+	default:
+		return nil, errors.New(fmt.Sprintf("cannot_convert_to_%v", typ))
+	}
 }
 
 func CompareValues(condition string, a, b interface{}) (bool, DbError) {
@@ -349,7 +361,80 @@ func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
 }
 
 /**
- * Sorting structs by fields functionality.
+ * Helpers for creating and converting structs and slices.
+ */
+
+// Returns pointer to a new struct with the same type as the given struct.
+func NewStruct(typ interface{}) (interface{}, error) {
+	// Build new struct.
+	item := reflect.ValueOf(typ)
+	if item.Type().Kind() == reflect.Ptr {
+		item = item.Elem()
+	}
+	if item.Type().Kind() != reflect.Struct {
+		return nil, errors.New("struct_expected")
+	}
+
+	return reflect.New(reflect.TypeOf(item.Interface())).Interface(), nil
+}
+
+// Build a new slice that can contain elements of the given type.
+func NewSlice(typ interface{}) interface{} {
+	// Build new array.
+	// See http://stackoverflow.com/questions/25384640/why-golang-reflect-makeslice-returns-un-addressable-value
+	// Create a slice to begin with
+	myType := reflect.TypeOf(typ)
+	slice := reflect.MakeSlice(reflect.SliceOf(myType), 0, 0)
+
+	// Create a pointer to a slice value and set it to the slice
+	x := reflect.New(slice.Type())
+	x.Elem().Set(slice)
+
+	return x.Elem().Interface()
+}
+
+// Convert a slice of type interface{} to a []Model slice.
+func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
+	reflSlice := reflect.ValueOf(slice)
+
+	if reflSlice.Type().Kind() == reflect.Ptr {
+		reflSlice = reflSlice.Elem()
+	}
+	if reflSlice.Type().Kind() != reflect.Slice {
+		return nil, errors.New("slice_expected")
+	}
+
+	result := make([]Model, 0)
+
+	for i := 0; i < reflSlice.Len(); i ++ {
+		item := reflSlice.Index(i).Interface()
+		modelItem, ok := item.(Model)
+
+		// Check that slice items actually implement model interface.
+		// Only needed once.
+		if i == 0 && !ok {
+			return nil, errors.New("slice_values_do_not_implement_model_if")
+		}
+
+		result = append(result, modelItem)
+	}
+
+	return result, nil
+}
+
+// Convert a slice of type []Model to []interface{}.
+func ModelToInterfaceSlice(models []Model) []interface{} {
+	slice := make([]interface{}, 0)
+	for _, m := range models {
+		slice = append(slice, m.(interface{}))
+	}
+
+	return slice
+}
+
+
+/**
+ * Sorter for sorting structs by field.
  */
 
 type structFieldSorter struct {
@@ -397,34 +482,43 @@ func StructFieldSorter(items []interface{}, field string, asc bool) structFieldS
 	}
 }
 
-// Convert a string value to the specified type if possible.
-// Returns an error for unsupported types.
-func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
-	switch typ {
-	case reflect.Int:
-		x, err := strconv.Atoi(value) 
-		return interface{}(x), err
-	case reflect.Int64:
-		x, err := strconv.ParseInt(value, 10, 64)
-		return interface{}(x), err
-	case reflect.Uint:
-		x, err := strconv.ParseUint(value, 10, 32)
-		if err != nil {
-			return nil, err
-		}
-		return uint(x), nil
-	case reflect.Uint64:
-		x, err := strconv.ParseUint(value, 10, 64)
-		return interface{}(x), err
-	case reflect.String:
-		return interface{}(value), nil
-	default:
-		return nil, errors.New(fmt.Sprintf("cannot_convert_to_%v", typ))
-	}
-}
-
 func SortStructSlice(items []interface{}, field string, ascending bool) {
 	sort.Sort(StructFieldSorter(items, field, ascending))
+}
+
+
+/**
+ * Setting and getting fields from a struct with reflect.
+ */
+
+
+// Given a struct or a pointer to a struct, retrieve the value of a field from
+// the struct with reflection.
+func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError) {
+	// Check if struct is valid.
+	if s == nil {
+		return nil, Error{Code: "pointer_or_struct_expected"}
+	}
+
+	// Check if it is a pointer, and if so, dereference it.
+	v := reflect.ValueOf(s)
+	if v.Type().Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Type().Kind() != reflect.Struct {
+		return nil, Error{Code: "struct_expected"}
+	}
+
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() {
+		return nil, Error{
+			Code: "field_not_found", 
+			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
+		}
+	}	
+
+	return field.Interface(), nil
 }
 
 // Given a pointer to a struct, set the given field to the given value.
@@ -476,106 +570,6 @@ func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, 
 	return vals, nil
 }
 
-// Given the internal name of a filter like "eq" or "lte", return a SQL operator like = or <.
-// WARNING: panics if an unsupported filter is given.
-func FilterToSqlCondition(filter string) (string, DbError) {
-	typ := ""
-
-	switch filter {
-	case "eq":
-		typ = "="
-	case "neq":
-		typ = "!="
-	case "lt":
-		typ = "<"
-	case "lte":
-		typ = "<="
-	case "gt":
-		typ = ">"
-	case "gte":
-		typ = ">="
-	case "like":
-		typ = "LIKE"
-	case "in":
-		typ = "IN"
-	default:
-		return "", Error{
-			Code: "unknown_filter",
-			Message: "Unknown filter '" + filter + "'",
-		}
-	}
-
-	return typ, nil
-}
-
-// Convert a slice of type interface{} to a []Model slice.
-func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
-	reflSlice := reflect.ValueOf(slice)
-
-	if reflSlice.Type().Kind() == reflect.Ptr {
-		reflSlice = reflSlice.Elem()
-	}
-	if reflSlice.Type().Kind() != reflect.Slice {
-		return nil, errors.New("slice_expected")
-	}
-
-	result := make([]Model, 0)
-
-	for i := 0; i < reflSlice.Len(); i ++ {
-		item := reflSlice.Index(i).Interface()
-		modelItem, ok := item.(Model)
-
-		// Check that slice items actually implement model interface.
-		// Only needed once.
-		if i == 0 && !ok {
-			return nil, errors.New("slice_values_do_not_implement_model_if")
-		}
-
-		result = append(result, modelItem)
-	}
-
-	return result, nil
-}
-
-// Convert a slice of type []Model to []interface{}.
-func ModelToInterfaceSlice(models []Model) []interface{} {
-	slice := make([]interface{}, 0)
-	for _, m := range models {
-		slice = append(slice, m.(interface{}))
-	}
-
-	return slice
-}
-
-// Returns pointer to a new struct with the same type as the given struct.
-func NewStruct(typ interface{}) (interface{}, error) {
-	// Build new struct.
-	item := reflect.ValueOf(typ)
-	if item.Type().Kind() == reflect.Ptr {
-		item = item.Elem()
-	}
-	if item.Type().Kind() != reflect.Struct {
-		return nil, errors.New("struct_expected")
-	}
-
-	return reflect.New(reflect.TypeOf(item.Interface())).Interface(), nil
-}
-
-// Build a new slice that can contain elements of the given type.
-func NewSlice(typ interface{}) interface{} {
-	// Build new array.
-	// See http://stackoverflow.com/questions/25384640/why-golang-reflect-makeslice-returns-un-addressable-value
-	// Create a slice to begin with
-	myType := reflect.TypeOf(typ)
-	slice := reflect.MakeSlice(reflect.SliceOf(myType), 0, 0)
-
-	// Create a pointer to a slice value and set it to the slice
-	x := reflect.New(slice.Type())
-	x.Elem().Set(slice)
-
-	return x.Elem().Interface()
-}
-
 // Given a struct, set the specified field that contains either a single Model
 // or a model slice to the given models.
 // If the target field type is struct or pointer to struct, it will be set to 
@@ -625,68 +619,9 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 	return nil
 }
 
-// Parse the information contained in a 'db:"xxx"' field tag.
-func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
-	info := FieldInfo{}
-	parts := strings.Split(tag, ";")
-	for _, part := range parts {
-		itemParts := strings.Split(part, ":")
-
-		specifier := part
-		var value string
-		if len(itemParts) > 1 {
-			specifier = itemParts[0]	
-			value = itemParts[1]
-		}
-
-		switch specifier {
-		case "primary_key":
-			info.PrimaryKey = true
-		case "-":
-			info.Ignore = true
-		case "m2m":
-			info.M2M = true
-			if value != "" {
-				info.M2MCollection = value
-			}
-		case "has-one":
-			info.HasOne = true
-			if value != "" {
-				if len(itemParts) < 3 {
-					return nil, Error{
-						Code: "invalid_has_one",
-						Message: "Explicit has-one needs to be in format 'has-one:localField:foreignKey'",
-					}
-				}
-				info.HasOneField = itemParts[1]
-				info.HasOneForeignField = itemParts[2]
-			}
-		case "belongs-to":
-			info.BelongsTo = true
-			if value != "" {
-				if len(itemParts) < 3 {
-					return nil, Error{
-						Code: "invalid_belongs_to",
-						Message: "Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'",
-					}
-				}
-				info.BelongsToField = itemParts[1]
-				info.BelongsToForeignField = itemParts[2]
-			}
-		case "name":
-			if value == "" {
-				return nil, Error{
-					Code: "invalid_name",
-					Message: "name specifier must be in format name:the_name",
-				}
-			}
-
-			info.Name = value
-		}
-	}
-
-	return &info, nil
-}
+/**
+ * ModelInfo struct and methods
+ */
 
 // Contains information about a single field of a Model.
 type FieldInfo struct {
@@ -786,6 +721,69 @@ func (m ModelInfo) MapFieldName(name string) string {
 	return ""
 }
 
+// Parse the information contained in a 'db:"xxx"' field tag.
+func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
+	info := FieldInfo{}
+	parts := strings.Split(tag, ";")
+	for _, part := range parts {
+		itemParts := strings.Split(part, ":")
+
+		specifier := part
+		var value string
+		if len(itemParts) > 1 {
+			specifier = itemParts[0]	
+			value = itemParts[1]
+		}
+
+		switch specifier {
+		case "primary_key":
+			info.PrimaryKey = true
+		case "-":
+			info.Ignore = true
+		case "m2m":
+			info.M2M = true
+			if value != "" {
+				info.M2MCollection = value
+			}
+		case "has-one":
+			info.HasOne = true
+			if value != "" {
+				if len(itemParts) < 3 {
+					return nil, Error{
+						Code: "invalid_has_one",
+						Message: "Explicit has-one needs to be in format 'has-one:localField:foreignKey'",
+					}
+				}
+				info.HasOneField = itemParts[1]
+				info.HasOneForeignField = itemParts[2]
+			}
+		case "belongs-to":
+			info.BelongsTo = true
+			if value != "" {
+				if len(itemParts) < 3 {
+					return nil, Error{
+						Code: "invalid_belongs_to",
+						Message: "Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'",
+					}
+				}
+				info.BelongsToField = itemParts[1]
+				info.BelongsToForeignField = itemParts[2]
+			}
+		case "name":
+			if value == "" {
+				return nil, Error{
+					Code: "invalid_name",
+					Message: "name specifier must be in format name:the_name",
+				}
+			}
+
+			info.Name = value
+		}
+	}
+
+	return &info, nil
+}
+
 // Build the field information for the model.
 func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 	modelType := modelVal.Type()
@@ -859,6 +857,10 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 
 	return nil
 }
+
+/**
+ * Functions for analyzing the relationships between model structs.
+ */
 
 // Build the relationship information for the model after all fields have been analyzed.
 func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
@@ -1002,3 +1004,234 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 	return nil
 }
 
+/**
+ * Query parser functions.
+ */
+
+// Build a database query based a map[string]interface{} data structure
+// resembling a Mongo query.
+// 
+// It returns a Query equal to the Mongo query, with unsupported features omitted.
+// An error is returned if the building of the query fails.
+func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError) {
+	q := Q(collection)
+
+	// First, Handle joins so query and field specification parsing can use 
+	// join info.
+	if rawJoins, ok := data["joins"]; ok {
+		joins, ok := rawJoins.([]string)
+		if !ok {
+			return nil, Error{
+				Code: "invalid_joins",
+				Message: "Joins must be an array of strings",
+			}
+		}
+
+		// To handle nested joins, parseQueryJoins has to be called repeatedly 
+		// until no more joins are returned.
+		for depth := 1; true; depth++ {
+			remainingJoins, err := parseQueryJoins(q, joins, depth)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(remainingJoins) == 0 {
+				break
+			}
+		}
+	}
+
+	if rawQuery, ok := data["filters"]; ok {
+		query, ok := rawQuery.(map[string]interface{})
+		if !ok {
+			return nil, Error{
+				Code: "invalid_filters",
+				Message: "The filters key must contain a dict",
+			}
+		}
+		
+		if err := parseQueryFilters(q, query); err != nil {
+			return nil, err
+		}
+	}
+
+	// Handle fields.
+	if rawFields, ok := data["fields"]; ok {
+		fields, ok := rawFields.([]string)
+		if !ok {
+			return nil, Error{
+				Code: "invalid_fields",
+				Message: "Fields specification must be an array of strings",
+			}
+		}
+
+		for _, field := range fields {
+			parts := strings.Split(field, ".")
+			if len(parts) > 1 {
+				// Possibly a field on a joined model. Check if a parent join can be found.
+				joinQ := q.GetJoin(strings.Join(parts[:len(parts) - 1], "."))
+				if joinQ != nil {
+					// Join query found, add field to the join query.
+					joinQ.AddFields(parts[len(parts) - 1])
+				} else {
+					// No join query found, maybe the backend supports nested fields.
+					joinQ.AddFields(field)
+				}
+			} else {
+				// Not nested, just add the field.
+				q.AddFields(field)
+			}
+		}
+	}
+
+	// Handle limit.
+	if rawLimit, ok := data["limit"]; ok {
+		if limit, err := NumericToInt64(rawLimit); err != nil {
+			return nil, Error{
+				Code: "limit_non_numeric",
+				Message: "Limit must be a number",
+			}
+		} else {
+			q.Limit(int(limit))
+		}
+	}
+
+	// Handle offset.
+	if rawOffset, ok := data["offset"]; ok {
+		if offset, err := NumericToInt64(rawOffset); err != nil {
+			return nil, Error{
+				Code: "offset_non_numeric",
+				Message: "Offset must be a number",
+			}
+		} else {
+			q.Offset(int(offset))
+		}
+	}
+
+
+	return q, nil
+}
+
+func parseQueryJoins(q *Query, joins []string, depth int) ([]string, DbError) {
+	remaining := make([]string, 0)
+
+	for _, name := range joins {
+		parts := strings.Split(name, ".")
+		joinDepth := len(parts)
+		if joinDepth == depth {
+			// The depth of the join equals to the one that should be processed, so do!
+			if len(parts) > 1 {
+				// Nested join! So try to retrieve the parent join query.
+				joinQ := q.GetJoin(strings.Join(parts[:joinDepth - 1], "."))
+				if joinQ == nil {
+					// Parent join not found, obviosly an error.
+					return nil, Error{
+						Code: "invalid_nested_join",
+						Message: fmt.Sprintf("Tried to join %v, but the parent join was not found", name),
+					}
+				}
+				// Join the current join on the parent join.
+				joinQ.Join(parts[len(parts) - 1])
+			} else {
+				// Not nested, just join on the main query.
+				q.Join(name)
+			}
+		} else {
+			// Join has other depth than the one that is processed, so append to 
+			// remaining.
+			remaining = append(remaining, name)
+		}
+	}
+
+	return remaining, nil
+}
+
+func parseQueryFilters(q *Query, filters map[string]interface{}) DbError {
+	for key := range filters {
+		filter, err := parseQueryFilter(key, filters[key])
+		if err != nil {
+			return err
+		}
+		if filter != nil {
+			q.FilterQ(filter)
+		}
+	}
+
+	return nil
+}
+// Parses a mongo query filter to a Filter.
+// All mongo operators expect $nor are supported.
+// Refer to http://docs.mongodb.org/manual/reference/operator/query.
+func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
+	// Handle 
+	switch name {
+	case "$eq":
+		return Eq("placeholder", data), nil
+	case "$ne":
+		return Neq("placeholder", data), nil
+	case "$in":
+		return In("placeholder", data), nil
+	case "$like":
+		return Like("placeholder", data), nil
+	case "$gt":
+		return Gt("placeholder", data), nil
+	case "$gte":
+		return Gte("placeholder", data), nil
+	case "$lt":
+		return Lt("placeholder", data), nil
+	case "$lte":
+		return Lte("placeholder", data), nil
+	case "$nin":
+		return Not(In("placeholder", data)), nil
+	}
+
+	if name == "$nor" {
+		return nil, Error{
+			Code: "unsupported_nor_query",
+			Message: "$nor queryies are not supported",
+		}
+	}
+
+	// Handle OR.
+	if name == "$or" {
+		orClauses, ok := data.([]map[string]interface{})
+		if !ok {
+			return nil, Error{Code: "invalid_or_data"}
+		}
+
+		or := Or()
+		for _, clause := range orClauses {
+			for key := range clause {
+				filter, err := parseQueryFilter(key, clause[key])
+				if err != nil {
+					return nil, err
+				}
+				or.Add(filter)
+			}
+		}
+
+		return or, nil
+	}
+
+	if nestedData, ok := data.(map[string]interface{}); ok {
+		// Nested dict with multipe AND clauses.
+		
+		// Build an AND filter.
+		and := And()
+		for key := range nestedData {
+			filter, err := parseQueryFilter(key, nestedData)
+			if err != nil {
+				return nil, err
+			}
+			filter.SetField(key)
+			// filter must be a field condition!
+			and.Add(filter)
+		}
+
+		return and, nil
+	}
+
+	// If execution reaches this point, the filter must be a simple equals filter
+	// with a value.
+	return Eq(name, data), nil
+}

@@ -1,6 +1,9 @@
 package dukedb_test
 
 import (
+	"fmt"
+	"strconv"
+	
 	. "github.com/theduke/go-dukedb"
 
 	. "github.com/onsi/ginkgo"
