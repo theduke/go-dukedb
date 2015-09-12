@@ -78,9 +78,25 @@ func FilterToSqlCondition(filter string) (string, DbError) {
  * Generic interface variable handling/comparison functions.
  */
 
+func IsZero(val interface{}) bool {
+	switch reflect.TypeOf(val).Kind() {
+	case reflect.String:
+		strval := val.(string)
+		return strval == "" || strval == "0"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+		num, err := NumericToInt64(val)	 
+		if err != nil {
+			return false
+		}
+		return num == 0
+	}
+
+	return false
+}
+
 // Convert a string value to the specified type if possible.
 // Returns an error for unsupported types.
-func ConvertToType(value string, typ reflect.Kind) (interface{}, error) {
+func ConvertStringToType(value string, typ reflect.Kind) (interface{}, error) {
 	switch typ {
 	case reflect.Int:
 		x, err := strconv.Atoi(value) 
@@ -555,7 +571,7 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string,  val strin
 	}
 
 	//fieldType, _ := objType.FieldByName(fieldName)
-	convertedVal, err := ConvertToType(val, field.Type().Kind())
+	convertedVal, err := ConvertStringToType(val, field.Type().Kind())
 	if err != nil {
 		return Error{Code: err.Error()}
 	}
@@ -613,10 +629,15 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 		slice := reflect.MakeSlice(reflect.SliceOf(sliceType), 0, 0)
 
 		for _, model := range models {
-			if sliceType.Kind() == reflect.Struct {
-				slice = reflect.Append(slice, reflect.ValueOf(model))	
+			val := reflect.ValueOf(model)
+			if val.Type().Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
+
+			if sliceType.Kind() == reflect.Ptr {
+				slice = reflect.Append(slice, val.Addr())	
 			} else {
-				slice = reflect.Append(slice, reflect.ValueOf(model))	
+				slice = reflect.Append(slice, val)
 			}
 		}
 
@@ -628,22 +649,258 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 	return nil
 }
 
+func ModelToMap(info *ModelInfo, model Model, withAutoValues bool) (map[string]interface{}, DbError) {
+	data := make(map[string]interface{})
+
+	for fieldName := range info.FieldInfo {
+		field := info.FieldInfo[fieldName]
+		if field.Ignore || field.IsRelation() {
+			continue
+		}
+
+		// Todo: avoid repeated work by GetStructFieldValue()
+		val, err := GetStructFieldValue(model, fieldName)
+		if err != nil {
+			return nil, err
+		}
+
+		// Ignore zero values if specified.
+		if field.IgnoreIfZero && IsZero(val) {
+			continue
+		}
+
+		data[field.BackendName] = val
+	}
+
+	return data, nil
+}
+
+func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, DbError) {
+	model, err := NewStruct(info.Item)
+	if err != nil {
+		return nil, Error{
+			Code: "model_build_error",
+			Message: err.Error(),
+		}
+	}
+
+	err = UpdateModelFromData(info, model, data)
+	if err != nil {
+		return nil, Error{
+			Code: "model_update_error",
+			Message: err.Error(),
+		}
+	}
+
+	return model, nil
+}
+
+func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]interface{}) DbError {
+	ptrVal := reflect.ValueOf(obj)
+	if ptrVal.Type().Kind() != reflect.Ptr {
+		return Error{
+			Code: "pointer_expected",
+		}
+	}
+	val := ptrVal.Elem()
+	if val.Type().Kind() != reflect.Struct {
+		return Error{
+			Code: "pointer_to_struct_expected",
+		}
+	}
+
+	for key := range data {
+		fieldInfo := info.FieldByBackendName(key)
+		if fieldInfo == nil {
+			fieldInfo = info.FieldInfo[key]
+		}
+
+		if fieldInfo == nil {
+			continue
+		}
+		if fieldInfo.Ignore {
+			continue
+		}
+
+		SetModelValue(fieldInfo, val.FieldByName(fieldInfo.Name), data[key])
+	}
+
+	return nil
+}
+
+func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
+	val := reflect.ValueOf(rawValue)
+
+	// Skip zero values.
+	if !val.IsValid() {
+		return
+	}
+
+	valKind := val.Type().Kind()
+	fieldKind := info.Type
+
+	// For the same type, skip complicated comparison/casting.
+	if valKind == fieldKind {
+		field.Set(val)
+		return
+	}
+
+	switch fieldKind {
+	case reflect.Bool:
+		switch valKind {
+		case reflect.String:
+			x := rawValue.(string)
+			flag := x == "1" || x == "yes"
+			field.Set(reflect.ValueOf(flag))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, err := NumericToInt64(rawValue)
+			if err == nil {
+				field.Set(reflect.ValueOf(x > 0))
+			}
+		}
+
+	case reflect.String:
+		bytes, ok := rawValue.([]byte)
+		if ok {
+			field.Set(reflect.ValueOf(string(bytes)))
+		} else {
+			x := fmt.Sprintf("%v", rawValue)
+			field.Set(reflect.ValueOf(x))
+		}
+
+	case reflect.Int:
+		switch valKind {
+		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToInt64(rawValue)
+			field.Set(reflect.ValueOf(int(x)))
+		}
+
+	case reflect.Int8:
+		switch valKind {
+		case reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToInt64(rawValue)
+			field.Set(reflect.ValueOf(int8(x)))
+		}
+
+	case reflect.Int16:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToInt64(rawValue)
+			field.Set(reflect.ValueOf(int16(x)))
+		}
+
+	case reflect.Int32:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToInt64(rawValue)
+			field.Set(reflect.ValueOf(int32(x)))
+		}
+	case reflect.Int64:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToInt64(rawValue)
+			field.Set(reflect.ValueOf(x))
+		}
+
+	case reflect.Uint:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToUint64(rawValue)
+			field.Set(reflect.ValueOf(uint(x)))
+		}
+
+	case reflect.Uint8:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToUint64(rawValue)
+			field.Set(reflect.ValueOf(uint8(x)))
+		}
+
+	case reflect.Uint16:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToUint64(rawValue)
+			field.Set(reflect.ValueOf(uint16(x)))
+		}
+
+	case reflect.Uint32:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint64, reflect.Float32, reflect.Float64:
+			x, _ := NumericToUint64(rawValue)
+			field.Set(reflect.ValueOf(uint32(x)))
+		}
+
+	case reflect.Uint64:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Float32, reflect.Float64:
+			x, _ := NumericToUint64(rawValue)
+			field.Set(reflect.ValueOf(x))
+		}
+
+	case reflect.Float32:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float64:
+			x, _ := NumericToFloat64(rawValue)
+			field.Set(reflect.ValueOf(float32(x)))
+		}
+
+	case reflect.Float64:
+		switch valKind {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32:
+			x, _ := NumericToFloat64(rawValue)
+			field.Set(reflect.ValueOf(x))
+		}
+	}
+}
+
+func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, DbError) {
+	slice := NewSlice(info.Item)
+
+	sliceVal := reflect.ValueOf(slice)
+
+	for _, data := range items {
+		model, err := BuildModelFromMap(info, data)
+		if err != nil {
+			return nil, err
+		}
+		sliceVal = reflect.Append(sliceVal, reflect.ValueOf(model))
+	}
+
+	return sliceVal.Interface(), nil
+}
+
 /**
  * ModelInfo struct and methods
  */
 
 // Contains information about a single field of a Model.
 type FieldInfo struct {
-	PrimaryKey bool
-	Ignore bool
 	Name string
 	Type reflect.Kind
+	StructType string
 
+	PrimaryKey bool
+	AutoIncrement bool
+	Ignore bool
+	IgnoreIfZero bool
+	NotNull bool
+	Default string
+
+	Unique bool
+	UniqueWith []string
+	Index string
+
+	Min float64
+	Max float64
+
+	BackendName string
+	BackendConstraint string
 
 	/**
 	 * Relationship related fields
 	 */
-	 
+
+	// True if this field is a foreign key for a has one/belongs to relationship.
 	M2M bool
 	M2MCollection string
 
@@ -659,6 +916,10 @@ type FieldInfo struct {
 	RelationIsMany bool
 }
 
+func (f FieldInfo) IsRelation() bool {
+	return f.RelationItem != nil
+}
+
 // Contains information about a Model, including field info.
 type ModelInfo struct {
 	// Name of the struct field.
@@ -666,7 +927,9 @@ type ModelInfo struct {
 
 	Item Model
 	ItemName string
-	ItemCollection string
+	Collection string
+
+	BackendName string
 
 	FieldInfo map[string]*FieldInfo
 }
@@ -677,9 +940,11 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	info := ModelInfo{
 		Item: model,
 		ItemName: reflect.ValueOf(model).Elem().Type().Name(),
-		ItemCollection: model.Collection(),
+		Collection: model.Collection(),
 		FieldInfo: make(map[string]*FieldInfo),
 	}
+
+	info.BackendName = CamelCaseToUnderscore(info.ItemName) + "s"
 
 	err := info.buildFieldInfo(reflect.ValueOf(model).Elem())
 	if err != nil {
@@ -691,17 +956,34 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	}
 
 	// Ensure primary key exists.
-	for name := range info.FieldInfo {
-		if info.FieldInfo[name].PrimaryKey {
-			info.PkField = name
-		}
-	}
 	if info.PkField == "" {
 		// No explicit primary key found, check for ID field.
-		if _, ok := info.FieldInfo["ID"]; ok {
+		if field, ok := info.FieldInfo["ID"]; ok {
 			info.PkField = "ID"
+			field.PrimaryKey = true
 		}
 	}
+
+	for name := range info.FieldInfo {
+		fieldInfo := info.FieldInfo[name]
+		if fieldInfo.PrimaryKey {
+			fieldInfo.NotNull = true
+			fieldInfo.IgnoreIfZero = true
+			fieldInfo.Unique = true
+
+			// On numeric fields, activate autoincrement.
+			// TODO: allow a way to disable autoincrement with a tag.
+			switch fieldInfo.Type {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				fieldInfo.AutoIncrement = true				
+			}
+
+			if info.PkField == "" {
+				info.PkField = name
+			}
+		}
+	}
+
 	if info.PkField == "" {
 		return nil, Error{
 			Code: "primary_key_not_found",
@@ -709,11 +991,12 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 		}
 	}
 
-	
-
 	return &info, nil
 }
 
+func (m ModelInfo) GetPkField() *FieldInfo {
+	return m.FieldInfo[m.PkField]
+}
 
 func (m ModelInfo) GetPkName() string {
 	return m.FieldInfo[m.PkField].Name
@@ -722,7 +1005,7 @@ func (m ModelInfo) GetPkName() string {
 // Given a database field name, return the struct field name.
 func (m ModelInfo) MapFieldName(name string) string {
 	for key := range m.FieldInfo {
-		if m.FieldInfo[key].Name == name {
+		if m.FieldInfo[key].BackendName == name {
 			return key
 		}
 	}
@@ -730,9 +1013,21 @@ func (m ModelInfo) MapFieldName(name string) string {
 	return ""
 }
 
+// Return the field info for a given name.
+func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
+	for key := range m.FieldInfo {
+		if m.FieldInfo[key].BackendName == name {
+			return m.FieldInfo[key]
+		}
+	}
+
+	return nil
+}
+
 // Parse the information contained in a 'db:"xxx"' field tag.
 func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 	info := FieldInfo{}
+
 	parts := strings.Split(tag, ";")
 	for _, part := range parts {
 		itemParts := strings.Split(part, ":")
@@ -749,6 +1044,8 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			info.PrimaryKey = true
 		case "-":
 			info.Ignore = true
+		case "ignore-zero":
+			info.IgnoreIfZero = true
 		case "m2m":
 			info.M2M = true
 			if value != "" {
@@ -786,7 +1083,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 				}
 			}
 
-			info.Name = value
+			info.BackendName = value
 		}
 	}
 
@@ -815,13 +1112,17 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 			return err
 		}
 
-		if fieldInfo.Name == "" {
-			fieldInfo.Name = CamelCaseToUnderscore(fieldType.Name)
+		fieldInfo.Name = fieldType.Name
+
+		if fieldInfo.BackendName == "" {
+			fieldInfo.BackendName = CamelCaseToUnderscore(fieldType.Name)
 		}
 
 		// Find relationship type for structs and slices.
 
 		if fieldKind == reflect.Struct {
+			fieldInfo.StructType = fieldType.Type.PkgPath() + "." + fieldType.Type.Name()
+
 			// Field is a direct struct.
 			// RelationItem type is the struct.
 			if relItem, ok := reflect.New(fieldType.Type).Interface().(Model); ok {
@@ -829,8 +1130,13 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 			}
 		} else if fieldKind == reflect.Ptr {
 			// Field is a pointer.
-			// Check if it points to a Model.
 			ptrType := fieldType.Type.Elem()
+
+			if ptrType.Kind() == reflect.Struct {
+				fieldInfo.StructType = ptrType.PkgPath() + "." + ptrType.Name()
+			} 
+
+			// Check if it points to a Model.
 			if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
 				// Points to a model.
 				fieldInfo.RelationItem = relItem
@@ -843,6 +1149,8 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 
 			if sliceKind == reflect.Struct {
 				// Slice contains structs.
+				fieldInfo.StructType = sliceKind.String()
+				
 				// Same as above code for plain structs.
 				if relItem, ok := reflect.New(sliceType).Interface().(Model); ok {
 					fieldInfo.RelationItem = relItem
@@ -874,7 +1182,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 // Build the relationship information for the model after all fields have been analyzed.
 func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 	for key := range models {
-		if err := buildRealtionShipInfo(models, models[key]); err != nil {
+		if err := buildRelationshipInfo(models, models[key]); err != nil {
 			return err
 		}
 	}
@@ -885,7 +1193,7 @@ func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 // Recursive helper for building the relationship information. 
 // Will properly analyze all embedded structs as well.
 // WARNING: will panic on errors. 
-func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
+func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
 	for name := range model.FieldInfo {
 		fieldInfo := model.FieldInfo[name]
 
@@ -963,7 +1271,10 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 					Message: fmt.Sprintf("Specified has-one field %v not found on model %v",
 						fieldInfo.HasOneField, modelName),
 				}
-			}
+			} 
+
+			// Ignore zero values to avoid inserts with 0.
+			model.FieldInfo[fieldInfo.HasOneField].IgnoreIfZero = true
 
 			if _, ok := relatedFields[fieldInfo.HasOneForeignField]; !ok {
 				return Error{
@@ -998,6 +1309,12 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 					Message: fmt.Sprintf("Model %v has no field %v", modelName, fieldInfo.BelongsToField),
 				}
 			}
+
+			model.FieldInfo[fieldInfo.BelongsToField].IgnoreIfZero = true
+		} else if fieldInfo.M2M {
+			if fieldInfo.M2MCollection == "" {
+				fieldInfo.M2MCollection = model.BackendName + "_" + relatedInfo.BackendName
+			}	
 		}
 
 		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {
@@ -1007,7 +1324,6 @@ func buildRealtionShipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 					modelName, relatedName, name),
 			}
 		}
-
 	}
 
 	return nil

@@ -69,6 +69,7 @@ type Backend interface {
 
 	Create(Model) DbError
 	Update(Model) DbError
+	UpdateByMap(Model, map[string]interface{}) DbError
 	Delete(Model) DbError
 	DeleteMany(*Query) DbError
 }
@@ -94,7 +95,7 @@ type Transaction interface {
 
 type TransactionBackend interface {
 	Backend
-	BeginTransaction() Transaction
+	Begin() Transaction
 }
 
 type MigrationAttempt interface {

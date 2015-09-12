@@ -2,6 +2,7 @@ package dukedb
 
 import (
 	"fmt"
+	"reflect"
 )
 
 type BaseM2MCollection struct {
@@ -202,6 +203,148 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
  * Convenience functions.
  */
 
+func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
+	modelVal := reflect.ValueOf(m)
+	if modelVal.Type().Kind() == reflect.Ptr {
+		modelVal = modelVal.Elem()
+	}
+
+	for name := range info.FieldInfo {
+		fieldInfo := info.FieldInfo[name]
+
+		// Handle has-one.
+		if fieldInfo.HasOne {
+			relationVal := modelVal.FieldByName(name)
+			relationKind := relationVal.Type().Kind()
+
+			if !relationVal.IsValid() || (relationKind == reflect.Ptr && relationVal.IsNil()) {
+				continue
+			}
+
+			if relationKind == reflect.Ptr {
+				relationVal = relationVal.Elem()
+			}
+
+			relation := relationVal.Addr().Interface().(Model)
+
+			// Auto-persist related model if neccessary.
+			if IsZero(relation.GetID()) {
+				err := b.Create(relation)
+				if err != nil {
+					return err
+				}
+			}
+
+			// Update the hasOne field.
+			key, _ := GetStructFieldValue(relation, fieldInfo.HasOneForeignField)
+			modelVal.FieldByName(fieldInfo.HasOneField).Set(reflect.ValueOf(key))
+		}
+
+		// Handle belongs-to.
+		if fieldInfo.BelongsTo {
+			belongsToKey, _ := GetStructFieldValue(m, fieldInfo.BelongsToField)
+
+			// belongsto relationships can only be handled if the model itself has an id
+			// already. So skip if otherwise.
+			if IsZero(belongsToKey) {
+				continue
+			}
+
+			foreignFieldName := b.GetModelInfo(fieldInfo.RelationItem.Collection()).FieldInfo[fieldInfo.BelongsToForeignField].BackendName
+
+			items := make([]reflect.Value, 0)			
+
+			if !fieldInfo.RelationIsMany {
+				items = append(items, modelVal.FieldByName(name))
+			} else {
+				// Code is same as above, but handling each relation item in the slice.
+				sliceVal := modelVal.FieldByName(name)
+				if !sliceVal.IsValid() {
+					continue
+				}
+
+				for i := 0; i < sliceVal.Len(); i++ {
+					items = append(items, sliceVal.Index(i))
+				}
+			}
+
+			for _, relationVal := range items {
+				relationKind := relationVal.Type().Kind()
+				if !relationVal.IsValid() || (relationKind == reflect.Ptr && relationVal.IsNil()) {
+					continue
+				}
+
+				if relationKind == reflect.Ptr {
+					relationVal = relationVal.Elem()
+				}
+
+				relation := relationVal.Addr().Interface().(Model)
+
+				foreignField := relationVal.FieldByName(fieldInfo.BelongsToForeignField)
+				if reflect.DeepEqual(foreignField.Interface(), belongsToKey) && !IsZero(relation.GetID()) {
+					// Relation is persisted and has the right id, so nothing to do.
+					continue
+				}
+
+				// Update key on relation.
+				foreignField.Set(reflect.ValueOf(belongsToKey))
+
+				// Auto-persist related model if neccessary.
+				if IsZero(relation.GetID()) {
+					err := b.Create(relation)
+					if err != nil {
+						return err
+					}
+				} else {
+					// Relation already exists! Just update the foreign field.
+					err := b.UpdateByMap(relation, map[string]interface{}{
+						foreignFieldName: belongsToKey ,
+					})
+					if err != nil {
+						return err
+					}
+				}
+			}
+		} else if fieldInfo.M2M {
+			// m2m relationships can only be handled if the model itself has an id
+			// already. So skip if otherwise.
+			if IsZero(m.GetID()) {
+				continue
+			}
+
+			items, _ := GetStructFieldValue(m, fieldInfo.Name)
+			if items == nil {
+				continue
+			}
+
+			models, _ := InterfaceToModelSlice(items)
+			if len(models) == 0 {
+				continue
+			}
+
+			// First, persist all unpersisted m2m models.
+			for _, model := range models {
+				if IsZero(model.GetID()) {
+					if err := b.Create(model); err != nil {
+						return err
+					}
+				}
+			}
+
+			m2m, err := b.M2M(m, fieldInfo.Name)
+			if err != nil {
+				return err
+			}
+			err = m2m.Add(models...)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func BackendQueryOne(b Backend, q *Query) (Model, DbError) {
 	res, err := b.Query(q)
 	if err != nil {
@@ -239,12 +382,12 @@ func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 		}
 	}
 
-	val, err := ConvertToType(id, info.FieldInfo[info.PkField].Type)
+	val, err := ConvertStringToType(id, info.FieldInfo[info.PkField].Type)
 	if err != nil {
 		return nil, Error{Code: err.Error()}
 	}
 
-	return b.Q(modelType).Filter(info.FieldInfo[info.PkField].Name, val).First()
+	return b.Q(modelType).Filter(info.FieldInfo[info.PkField].BackendName, val).First()
 }
 
 /**
@@ -253,6 +396,11 @@ func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 
 func BackendDoJoins(b Backend, model string, objs []Model, joins []*RelationQuery) DbError {
 	for _, joinQ := range joins {
+		// With a specific join type, joins should be handled by the backend itself.
+		if joinQ.JoinType != "" {
+			continue
+		}
+
 		err := doJoin(b, model, objs, joinQ)
 		if err != nil {
 			return err

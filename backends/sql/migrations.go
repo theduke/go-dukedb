@@ -1,4 +1,4 @@
-package gorm
+package sql
 
 import (
 	"time"
@@ -15,15 +15,19 @@ func (b Backend) GetMigrationHandler() *db.MigrationHandler {
 }
 
 func (b Backend) MigrationsSetup() db.DbError {
-	count := -1
-	b.Db.Model(MigrationAttempt{}).Count(&count)
-	initalRun := count == -1
+	count, err := b.Count(b.Q("migration_attempts"))
+	// Todo. determine right error string.
+	if err != nil {
+		count = -1
+	}
 
-	if initalRun {
+	initialRun := count == -1
+
+	if initialRun {
 		log.Println("MIGRATE: Building migration tables.")
-		tx := b.Db.Begin()
+		tx := b.Begin()
 
-		if err := tx.CreateTable(MigrationAttempt{}).Error; err != nil {
+		if err := tx.CreateCollection("migration_attempts"); err != nil {
 			return db.Error{
 				Code: "migration_setup_failed",
 				Message: "Could not create migrations table: " + err.Error(),
@@ -43,7 +47,7 @@ func (b Backend) MigrationsSetup() db.DbError {
 		migration.FinishedAt = time.Now()
 		migration.Complete = true
 		
-		if err := tx.Create(&migration).Error; err != nil {
+		if err := tx.Create(&migration); err != nil {
 			return db.Error{
 				Code: "migration_setup_failed",
 				Message: "Could not create migrations table: " + err.Error(),
@@ -58,14 +62,15 @@ func (b Backend) MigrationsSetup() db.DbError {
 	return nil
 }
 
-
 func (b Backend) IsMigrationLocked() (bool, db.DbError) {
-	var lastAttempt MigrationAttempt
-	if err := b.Db.Last(&lastAttempt).Error; err != nil {
+	var lastAttempt *MigrationAttempt
+	if model, err := b.Q("migration_attempts").Last(); err != nil {
 		return true, db.Error{
 			Code: "db_error",
 			Message: err.Error(),
 		}
+	} else {
+		lastAttempt = model.(*MigrationAttempt)
 	}
 
 	if lastAttempt.ID != 0 && lastAttempt.FinishedAt.IsZero() {
@@ -76,12 +81,14 @@ func (b Backend) IsMigrationLocked() (bool, db.DbError) {
 }
 
 func (b Backend) DetermineMigrationVersion() (int, db.DbError) {
-	var lastAttempt MigrationAttempt
-	if err := b.Db.Where("complete = ?", true).Last(&lastAttempt).Error; err != nil {
+	var lastAttempt *MigrationAttempt
+	if model, err := b.Q("migration_attempts").Filter("complete", true).Last(); err != nil {
 		return -1, db.Error{
 			Code: "db_error",
 			Message: err.Error(),
 		}
+	} else {
+		lastAttempt = model.(*MigrationAttempt)
 	}
 	
 	return lastAttempt.Version, nil

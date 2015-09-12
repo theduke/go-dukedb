@@ -100,7 +100,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 	var tx Transaction
 	txCapableBackend, hasTransactions := handler.Backend.(TransactionBackend)
 	if hasTransactions {
-		tx = txCapableBackend.BeginTransaction()
+		tx = txCapableBackend.Begin()
 		backend = tx.(MigrationBackend)
 	}
 
@@ -110,6 +110,9 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 	attempt.SetComplete(false)
 
 	if err := backend.Create(attempt); err != nil {
+		if hasTransactions {
+			tx.Rollback()
+		}
 		return err
 	}
 

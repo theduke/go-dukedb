@@ -496,8 +496,8 @@ func (q *Query) Related(name string) *RelationQuery {
 	return RelQ(q, name)
 }
 
-func (q *Query) RelatedCustom(name, joinKey, foreignKey string) *RelationQuery {
-	return RelQCustom(q, name, joinKey, foreignKey)
+func (q *Query) RelatedCustom(name, collection, joinKey, foreignKey, typ string) *RelationQuery {
+	return RelQCustom(q, name, collection, joinKey, foreignKey, typ)
 }
 
 
@@ -505,11 +505,20 @@ func (q *Query) RelatedCustom(name, joinKey, foreignKey string) *RelationQuery {
  * RelationQuery.
  */
 
+const(
+	InnerJoin = "inner"
+	LeftJoin = "left"
+	RightJoin = "right"
+	CrossJoin = "cross"
+)
+
 type RelationQuery struct {
 	Query
 
 	BaseQuery *Query
 	RelationName string
+
+	JoinType string
 
 	JoinFieldName string
 	ForeignFieldName string
@@ -525,13 +534,15 @@ func RelQ(q *Query, name string) *RelationQuery {
 	return &relQ
 }
 
-func RelQCustom(q *Query, name, joinKey, foreignKey string) *RelationQuery {
+func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *RelationQuery {
 	relQ := RelationQuery{
 		BaseQuery: q,
 		JoinFieldName: joinKey,
 		ForeignFieldName: foreignKey,
+		JoinType: typ,
 	}
-	relQ.Model = name
+	relQ.RelationName = name
+	relQ.Model = collection
 	relQ.Backend = q.Backend
 
 	return &relQ
@@ -631,7 +642,6 @@ func (q *Query) Count() (int, DbError) {
 	}
 	return q.Backend.Count(q)
 }
-
 
 func (q *Query) Delete() DbError {
 	if q.Backend == nil {

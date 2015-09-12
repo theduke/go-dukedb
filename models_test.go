@@ -27,11 +27,11 @@ type TestModel struct {
 	ID uint64
 
 	// For inferred belongs-to
-	TestParentID uint64
+	TestParentID uint64 `db:"ignore-zero"`
 
 	// For explicit has-one/belongs-to
 	MyParent *TestParent `db:"has-one:MyParentID:ID"`
-	MyParentID uint64 
+	MyParentID uint64 `db:"ignore-zero"`
 
 	StrVal string
 	IntVal int
@@ -42,7 +42,10 @@ func (t TestModel) Collection() string {
 }
 
 func (t TestModel) GetID() string {
-	return strconv.FormatUint(t.ID, 64)
+	if t.ID == 0 {
+		return ""
+	}
+	return strconv.FormatUint(t.ID, 10)
 }
 
 func (t TestModel) SetID(x string) error {
@@ -73,9 +76,8 @@ func (t TestParent) Collection() string {
 
 func NewTestModel(index int) TestModel{
 	return TestModel{
-		ID: uint64(index),
 		StrVal: fmt.Sprintf("str%v", index),
-		IntVal: 1,
+		IntVal: index,
 	}
 }
 

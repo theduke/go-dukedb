@@ -181,34 +181,34 @@ var _ = Describe("Utils", func() {
 		})
 	})
 	
-	Describe("ConvertToType", func() {
+	Describe("ConvertStringToType", func() {
 		It("Should convert int", func() {
-			Expect(ConvertToType("-22", reflect.Int)).To(Equal(-22))
+			Expect(ConvertStringToType("-22", reflect.Int)).To(Equal(-22))
 		})	
 
 		It("Should convert int64", func() {
-			Expect(ConvertToType("-22", reflect.Int64)).To(Equal(int64(-22)))
+			Expect(ConvertStringToType("-22", reflect.Int64)).To(Equal(int64(-22)))
 		})
 
 		It("Should convert uint", func() {
-			Expect(ConvertToType("22", reflect.Uint)).To(Equal(uint(22)))
+			Expect(ConvertStringToType("22", reflect.Uint)).To(Equal(uint(22)))
 		})
 
 		It("Should convert uint64", func() {
-			Expect(ConvertToType("22", reflect.Uint64)).To(Equal(uint64(22)))
+			Expect(ConvertStringToType("22", reflect.Uint64)).To(Equal(uint64(22)))
 		})
 
 		It("Should convert string", func() {
-			Expect(ConvertToType("test", reflect.String)).To(Equal("test"))
+			Expect(ConvertStringToType("test", reflect.String)).To(Equal("test"))
 		})
 
 		It("Should error on invalid int", func() {
-			_, err := ConvertToType("test", reflect.Int)
+			_, err := ConvertStringToType("test", reflect.Int)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should error on unsupported type", func() {
-			_, err := ConvertToType("22", reflect.Ptr)
+			_, err := ConvertStringToType("22", reflect.Ptr)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("cannot_convert_to_ptr"))
 		})
@@ -497,7 +497,7 @@ var _ = Describe("Utils", func() {
 
 		It("Should parse name", func() {
 			info, _ := ParseFieldTag("name:the_name")
-			Expect(info.Name).To(Equal("the_name"))
+			Expect(info.BackendName).To(Equal("the_name"))
 		})
 
 		It("Should fail on invalid name", func() {
@@ -611,8 +611,9 @@ var _ = Describe("Utils", func() {
 					Name string `db:"primary_key;name:custom_name"`
 				}
 
-				info, _ := NewModelInfo(&PKModel{})
-				Expect(info.GetPkName()).To(Equal("custom_name"))
+				info, err := NewModelInfo(&PKModel{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(info.FieldInfo[info.PkField].BackendName).To(Equal("custom_name"))
 			})
 
 			It("Should map field names correctly (.MapFieldName())", func() {
@@ -621,7 +622,8 @@ var _ = Describe("Utils", func() {
 						Name string `db:"primary_key;name:custom_name"`
 					}
 
-					info, _ := NewModelInfo(&PKModel{})
+					info, err := NewModelInfo(&PKModel{})
+					Expect(err).ToNot(HaveOccurred())
 					Expect(info.MapFieldName("custom_name")).To(Equal("Name"))
 				})
 		})
