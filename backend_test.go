@@ -1,6 +1,7 @@
 package dukedb_test
 
 import (
+	"fmt"
 
 	_ "github.com/lib/pq"
 	_ "github.com/go-sql-driver/mysql"
@@ -17,10 +18,11 @@ var _ = Describe("Backend", func() {
 
 	Describe("Backend implementations", func() {
 		var backend Backend
+		var transactionBackend TransactionBackend
 		var connectionError DbError
 
 		BeforeEach(func() {
-			
+			transactionBackend, _ = backend.(TransactionBackend)
 		})
 
 		testBackend := func() {
@@ -241,35 +243,60 @@ var _ = Describe("Backend", func() {
 				Expect(m2m.All()[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
 			})
 
-			if transactionBackend, ok := backend.(TransactionBackend); ok {
-				It("Should successfully commit a transaction", func() {
-					tx := transactionBackend.Begin()
-					Expect(tx).ToNot(BeNil())
+			It("Should join m2m", func() {
+				model := NewTestParent(2, true)
+				model.ChildPtr = nil
+				model.ChildSlice = nil
+				model.ChildSlicePtr = model.ChildSlicePtr[0:1]
 
-					model := NewTestModel(100)
-					Expect(tx.Create(&model)).ToNot(HaveOccurred())
+				err := backend.Create(&model)
+				Expect(err).ToNot(HaveOccurred())
 
-					Expect(tx.Commit()).ToNot(HaveOccurred())
+				result, err := backend.Q("test_parents").Filter("id", model.ID).Join("ChildSlicePtr").First()
+				Expect(err).ToNot(HaveOccurred())
 
-					m, err := backend.FindOne("test_models", model.GetID())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).ToNot(BeNil())
-				})
+				m := result.(*TestParent)
 
-				It("Should successfully roll back a transaction", func() {
-					tx := transactionBackend.Begin()
-					Expect(tx).ToNot(BeNil())
+				Expect(len(m.ChildSlicePtr)).To(Equal(1))
+				Expect(m.ChildSlicePtr[0].ID).To(Equal(model.ChildSlicePtr[0].ID))
+			})
 
-					model := NewTestModel(100)
-					Expect(tx.Create(&model)).ToNot(HaveOccurred())
+			It("Should successfully commit a transaction", func() {
+				if transactionBackend == nil {
+					Skip("Not a transaction backend")
+				}
 
-					Expect(tx.Rollback()).ToNot(HaveOccurred())
+				tx := transactionBackend.Begin()
+				fmt.Printf("\ntx backend: %+v\n", tx.(*sql.Backend).ModelInfo)
+				Expect(tx).ToNot(BeNil())
 
-					m, err := backend.FindOne("test_models", model.GetID())
-					Expect(err).ToNot(HaveOccurred())
-					Expect(m).To(BeNil())
-				})
-			}
+				model := NewTestModel(100)
+				Expect(tx.Create(&model)).ToNot(HaveOccurred())
+
+				Expect(tx.Commit()).ToNot(HaveOccurred())
+
+				m, err := backend.FindOne("test_models", model.GetID())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).ToNot(BeNil())
+			})
+
+			It("Should successfully roll back a transaction", func() {
+				if transactionBackend == nil {
+					Skip("Not a transaction backend")
+				}
+
+				tx := transactionBackend.Begin()
+				Expect(tx).ToNot(BeNil())
+
+				model := NewTestModel(100)
+				Expect(tx.Create(&model)).ToNot(HaveOccurred())
+
+				Expect(tx.Rollback()).ToNot(HaveOccurred())
+
+				m, err := backend.FindOne("test_models", model.GetID())
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m).To(BeNil())
+			})
 		}
 
 		Context("SQL backend", func() {

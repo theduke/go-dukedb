@@ -383,7 +383,7 @@ func (b Backend) selectByQuery(q *db.Query) (*SelectSpec, db.DbError) {
 	if info == nil {
 		return nil, db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.Model),
+			Message: fmt.Sprintf("Model '%v' not registered with sql backend", q.Model),
 		}
 	}
 
@@ -516,7 +516,7 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	if info == nil {
 		return nil, db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.Model),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.Model),
 		}
 	}
 
@@ -561,7 +561,7 @@ func (b Backend) Count(q *db.Query) (int, db.DbError) {
 	if info == nil {
 		return -1, db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.Model),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.Model),
 		}
 	}
 
@@ -606,7 +606,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	if info == nil {
 		return db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", m.Collection()),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
 
@@ -681,7 +681,7 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	if info == nil {
 		return db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", m.Collection()),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
 
@@ -715,7 +715,7 @@ func (b Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbEr
 	if info == nil {
 		return db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", m.Collection()),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
 
@@ -751,7 +751,7 @@ func (b Backend) Delete(m db.Model) db.DbError {
 	if info == nil {
 		return db.Error{
 			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", m.Collection()),
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
 
@@ -841,7 +841,11 @@ func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 		joinTableRelationColumn: relationInfo.BackendName + "_" + relationInfo.GetPkField().BackendName,
 	}
 
-	col.Query = col.BuildQuery()
+	query, err := col.BuildQuery()
+	if err != nil {
+		return nil, err
+	}
+	col.Query = query
 	
 	items, err := b.Query(col.Query)
 	if err != nil {
@@ -879,14 +883,9 @@ type M2MCollection struct {
 // Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
 var _ db.M2MCollection = (*M2MCollection)(nil)
 
-func (c M2MCollection) BuildQuery() *db.Query {
+func (c M2MCollection) BuildQuery() (*db.Query, db.DbError) {
 	pk, _ := db.GetStructFieldValue(c.Model, c.modelField)
-	q := c.Backend.Q(c.RelationInfo.Collection).Filter(c.table + "." + c.joinTableModelColumn, pk)
-
-	joinQ := db.RelQCustom(q, c.Name, c.table, c.joinTableRelationColumn, c.relationColumnName, db.InnerJoin)
-	q.JoinQ(joinQ)
-
-	return q
+	return c.Backend.Q(c.ModelInfo.Collection).Filter(c.modelField, pk).Related(c.Name).Build()
 }
 
 func (c *M2MCollection) Add(items ...db.Model) db.DbError {

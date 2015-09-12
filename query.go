@@ -548,6 +548,13 @@ func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *Re
 	return &relQ
 }
 
+func (q *RelationQuery) Build() (*Query, DbError) {
+	if q.Backend == nil {
+		panic("Callind .Find() on a query without backend")
+	}
+	return q.Backend.BuildRelationQuery(q)
+}
+
 func (q *RelationQuery) Find() ([]Model, DbError) {
 	if q.Backend == nil {
 		panic("Callind .Find() on a query without backend")

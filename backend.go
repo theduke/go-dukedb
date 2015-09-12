@@ -138,9 +138,13 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 
 	var targetModelName, joinField, foreignFieldName string
 
+	var newQuery *Query
+
 	if q.Model != "" && q.JoinFieldName != "" {
 		// Custom relation query.
 		targetModelName = q.Model
+		newQuery = b.Q(targetModelName)
+
 		joinField = baseInfo.MapFieldName(q.JoinFieldName)
 		foreignFieldName = q.ForeignFieldName
 
@@ -155,9 +159,10 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 		if !ok {
 			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.Model, q.RelationName))
 		}
-		targetModelName = relInfo.RelationItem.Collection()
 
+		targetModelName = relInfo.RelationItem.Collection()
 		relatedInfo := b.GetModelInfo(targetModelName)
+		newQuery = b.Q(targetModelName)
 
 		if relInfo.HasOne {
 			joinField = relInfo.HasOneField
@@ -179,6 +184,14 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 			// RelatedQuery fields here.
 			q.JoinFieldName = joinField
 			q.ForeignFieldName = relInfo.BelongsToForeignField
+		} else if relInfo.M2M {
+			joinField = baseInfo.PkField
+			foreignFieldName = relInfo.M2MCollection + "." + baseInfo.BackendName + "_" + baseInfo.GetPkField().BackendName
+
+			joinTableRelationColumn := relatedInfo.BackendName + "_" + relatedInfo.GetPkField().BackendName
+			relationColumn := relatedInfo.GetPkField().BackendName
+			joinQ := RelQCustom(newQuery, q.RelationName, relInfo.M2MCollection, joinTableRelationColumn, relationColumn, InnerJoin)
+			newQuery.JoinQ(joinQ)
 		}
 	}
 
@@ -187,8 +200,6 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 		val, _ := GetStructFieldValue(m, joinField)
 		vals = append(vals, val)
 	}
-	
-	newQuery := b.Q(targetModelName)
 
 	if len(vals) > 1 {
 		newQuery = newQuery.FilterCond(foreignFieldName, "in", vals)
