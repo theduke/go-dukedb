@@ -93,6 +93,37 @@ func DropTableStatement(d Dialect, table string, ifExists bool) string {
 	return stmt
 }
 
+func ColumnStatement(d Dialect, info *ColumnInfo) string {
+	stmt := d.Quote(info.Name) + " " + info.Type
+	if info.NotNull {
+		stmt += " NOT NULL"
+	}
+	if info.PrimaryKey {
+		stmt += " PRIMARY KEY"
+	}
+	if info.Constraints != "" {
+		stmt += " CHECK(" + info.Constraints + ")"
+	}
+	if info.Default != "" {
+		stmt += " DEFAULT " + info.Default
+	}
+	if info.Unique {
+		stmt += " UNIQUE"
+	}
+	if info.ForeignKey != "" {
+		stmt += " REFERENCES " + d.Quote(info.ForeignKeyTable)
+		stmt += " (" + d.Quote(info.ForeignKey) + ")"
+		if info.ForeignKeyOnUpdate != "" {
+			stmt += " ON UPDATE " + info.ForeignKeyOnUpdate
+		}
+		if info.ForeignKeyOnDelete != "" {
+			stmt += " ON DELETE " + info.ForeignKeyOnDelete
+		}
+	}
+
+	return stmt
+}
+
 func CreateIndexStatement(d Dialect, name, table string, columnNames []string) string {
 	stmt := "CREATE INDEX " + d.Quote(name) + " ON " + d.Quote(table)
 

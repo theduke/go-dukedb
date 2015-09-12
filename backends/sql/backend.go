@@ -37,6 +37,8 @@ func New(driver, driverOptions string) (*Backend, db.DbError) {
 	switch driver {
 	case "postgres":
 			b.dialect = &PostgresDialect{}
+	case "mysql":
+		b.dialect = &MysqlDialect{}
 	default:
 		panic("Unsupported sql driver: " + driver)
 	}
@@ -163,6 +165,29 @@ func (b Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) 
 		return b.Db.Query(query, args...)
 	}
 }
+
+func (b Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) db.DbError {
+	rows, err := b.SqlQuery(query, args...)
+	if err != nil {
+		return db.Error{
+			Code: "sql_error",
+			Message: err.Error(),
+			Data: err,
+		}	
+	}
+
+	defer rows.Close()
+	rows.Next()
+	rows.Scan(vars...)
+	if err := rows.Err(); err != nil {
+		return db.Error{
+			Code: "sql_rows_error",
+			Message: err.Error(),
+		}
+	}	
+
+	return nil
+} 
 
 func (b Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
@@ -534,7 +559,7 @@ func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
 func (b Backend) Count(q *db.Query) (int, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
-		return 0, db.Error{
+		return -1, db.Error{
 			Code: "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.Model),
 		}
@@ -544,18 +569,16 @@ func (b Backend) Count(q *db.Query) (int, db.DbError) {
 
 	spec, err := b.selectByQuery(q)
 	if err != nil {
-		return 0, err
+		return -1, err
 	}
 	stmt, args := b.dialect.SelectStatement(spec)
 
-	data, err := b.QuerySql(stmt, args)
-	if err != nil {
-		return 0, err
+	var count int
+	if err := b.sqlScanRow(stmt, args, &count); err != nil {
+		return -1, err
 	}
-
-	count := data[0]["count"].(int64)
 		
-	return int(count), nil
+	return count, nil
 }
 
 func (b Backend) Last(q *db.Query) (db.Model, db.DbError) {
@@ -601,8 +624,6 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	tableInfo := b.TableInfo[info.BackendName]
 	sql, args := b.dialect.InsertMapStatement(tableInfo, data)
 
-
-	//fmt.Printf("\n\nmodel: %+v\n", m)
 
 	if b.dialect.HasLastInsertID() {
 		result, err2 := b.SqlExec(sql, args...)

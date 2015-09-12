@@ -1,7 +1,10 @@
 package dukedb_test
 
 import (
+
 	_ "github.com/lib/pq"
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 
 	. "github.com/theduke/go-dukedb"
 	sql "github.com/theduke/go-dukedb/backends/sql"
@@ -77,7 +80,7 @@ var _ = Describe("Backend", func() {
 
 				testModel.IntVal = 33
 				testModel.StrVal = "str33"
-				err = backend.Update(testModel)
+				err = backend.Update(&testModel)
 				Expect(err).ToNot(HaveOccurred())
 
 				m, err := backend.FindOne("test_models", testModel.GetID())
@@ -91,7 +94,7 @@ var _ = Describe("Backend", func() {
 				err := backend.Create(&testModel)
 				Expect(err).ToNot(HaveOccurred())
 
-				err = backend.Delete(testModel)
+				err = backend.Delete(&testModel)
 				Expect(err).ToNot(HaveOccurred())
 
 				m, err := backend.FindOne("test_models", testModel.GetID())
@@ -100,9 +103,12 @@ var _ = Describe("Backend", func() {
 			})
 
 			It("Should delete many", func() {
-				Expect(backend.Create(NewTestModel(1))).ToNot(HaveOccurred())
-				Expect(backend.Create(NewTestModel(2))).ToNot(HaveOccurred())
-				Expect(backend.Create(NewTestModel(3))).ToNot(HaveOccurred())
+				m1 := NewTestModel(1)
+				m2 := NewTestModel(2)
+				m3 := NewTestModel(3)
+				Expect(backend.Create(&m1)).ToNot(HaveOccurred())
+				Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+				Expect(backend.Create(&m3)).ToNot(HaveOccurred())
 
 				err := backend.Q("test_models").Delete()
 				Expect(err).ToNot(HaveOccurred())
@@ -229,7 +235,7 @@ var _ = Describe("Backend", func() {
 				err := backend.Create(&model)
 				Expect(err).ToNot(HaveOccurred())
 
-				m2m, err := backend.M2M(model, "ChildSlicePtr")	
+				m2m, err := backend.M2M(&model, "ChildSlicePtr")	
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m2m.Count()).To(Equal(1))
 				Expect(m2m.All()[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
@@ -271,6 +277,19 @@ var _ = Describe("Backend", func() {
 				backend, connectionError = sql.New("postgres", "postgres://test:test@localhost/test?sslmode=disable")
 				testBackend()
 			})
+
+			Context("MySQL", func() {
+				backend, connectionError = sql.New("mysql", "test:test@/test?charset=utf8&parseTime=True&loc=Local")
+				testBackend()
+			})
+
+			/*
+			Context("Sqlite3", func() {
+				backend, connectionError = sql.New("sqlite3", ".test.sqlite3")
+				testBackend()
+				os.Remove(".test.sqlite3")
+			})
+			*/
 		})
 	})
 })

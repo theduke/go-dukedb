@@ -467,8 +467,13 @@ var _ = Describe("Utils", func() {
 
 		It("Should set slice", func() {
 			childSlice := NewTestModelSlice(1, 2)
-			modelSlice, _ := InterfaceToModelSlice(childSlice)
-			SetStructModelField(testParent, "ChildSlice", modelSlice)
+			
+			modelSlice, err := InterfaceToModelSlice(childSlice)
+			Expect(err).ToNot(HaveOccurred())
+
+			err = SetStructModelField(testParent, "ChildSlice", modelSlice)
+			Expect(err).ToNot(HaveOccurred())
+
 			Expect(testParent.ChildSlice).To(Equal(childSlice))
 		})
 
@@ -478,15 +483,14 @@ var _ = Describe("Utils", func() {
 			SetStructModelField(testParent, "ChildSlicePtr", modelSlice)
 			Expect(testParent.ChildSlicePtr).To(Equal(childSlice))
 		})
-
 	})
 
 	Describe("ParseFieldTag", func() {
 		It("Should parse primary_key", func() {
-			info, _ := ParseFieldTag("primary_key;")
+			info, _ := ParseFieldTag("primary-key;")
 			Expect(info.PrimaryKey).To(Equal(true))
 
-			info, _ = ParseFieldTag("primary_key")
+			info, _ = ParseFieldTag("primary-key")
 			Expect(info.PrimaryKey).To(Equal(true))
 		})
 
@@ -583,7 +587,7 @@ var _ = Describe("Utils", func() {
 			It("Should determine explicit primary key field", func() {
 				type PKModel struct {
 					BaseModel
-					Name string `db:"primary_key"`
+					Name string `db:"primary-key"`
 				}
 
 				info, err := NewModelInfo(&PKModel{})
@@ -608,7 +612,7 @@ var _ = Describe("Utils", func() {
 			It("Should run .GetPkName() correctly", func() {
 				type PKModel struct {
 					BaseModel
-					Name string `db:"primary_key;name:custom_name"`
+					Name string `db:"primary-key;name:custom_name"`
 				}
 
 				info, err := NewModelInfo(&PKModel{})
@@ -619,7 +623,7 @@ var _ = Describe("Utils", func() {
 			It("Should map field names correctly (.MapFieldName())", func() {
 					type PKModel struct {
 						BaseModel
-						Name string `db:"primary_key;name:custom_name"`
+						Name string `db:"primary-key;name:custom_name"`
 					}
 
 					info, err := NewModelInfo(&PKModel{})

@@ -432,7 +432,11 @@ func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 	result := make([]Model, 0)
 
 	for i := 0; i < reflSlice.Len(); i ++ {
-		item := reflSlice.Index(i).Interface()
+		itemVal := reflSlice.Index(i)
+		if itemVal.Type().Kind() == reflect.Struct {
+			itemVal = itemVal.Addr()
+		}
+		item := itemVal.Interface()
 		modelItem, ok := item.(Model)
 
 		// Check that slice items actually implement model interface.
@@ -1040,17 +1044,68 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 		}
 
 		switch specifier {
-		case "primary_key":
+
+		case "name":
+			if value == "" {
+				return nil, Error{
+					Code: "invalid_name",
+					Message: "name specifier must be in format name:the_name",
+				}
+			}
+
+			info.BackendName = value
+
+		case "primary-key":
 			info.PrimaryKey = true
+
 		case "-":
 			info.Ignore = true
+
 		case "ignore-zero":
 			info.IgnoreIfZero = true
+
+		case "auto-increment":
+			info.AutoIncrement = true
+
+		case "unique":
+			info.Unique = true
+
+		case "min":
+			x, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return nil, Error{
+					Code: "invalid_min",
+					Message: "min:xx must be a valid number",
+				}
+			}
+			info.Min = x
+
+		case "max":
+			x, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return nil, Error{
+					Code: "invalid_max",
+					Message: "max:xx must be a valid number",
+				}
+			}
+			info.Max = x
+
+		case "unique-with":
+			parts := strings.Split(value, ",")
+			if parts[0] == "" {
+				return nil, Error{
+					Code: "invalid_unique_with",
+					Message: "unique-with must be a comma-separated list of fields",
+				}
+			}
+			info.UniqueWith = parts
+
 		case "m2m":
 			info.M2M = true
 			if value != "" {
 				info.M2MCollection = value
 			}
+
 		case "has-one":
 			info.HasOne = true
 			if value != "" {
@@ -1063,6 +1118,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 				info.HasOneField = itemParts[1]
 				info.HasOneForeignField = itemParts[2]
 			}
+
 		case "belongs-to":
 			info.BelongsTo = true
 			if value != "" {
@@ -1075,15 +1131,6 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 				info.BelongsToField = itemParts[1]
 				info.BelongsToForeignField = itemParts[2]
 			}
-		case "name":
-			if value == "" {
-				return nil, Error{
-					Code: "invalid_name",
-					Message: "name specifier must be in format name:the_name",
-				}
-			}
-
-			info.BackendName = value
 		}
 	}
 

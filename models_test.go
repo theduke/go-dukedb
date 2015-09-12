@@ -48,7 +48,7 @@ func (t TestModel) GetID() string {
 	return strconv.FormatUint(t.ID, 10)
 }
 
-func (t TestModel) SetID(x string) error {
+func (t *TestModel) SetID(x string) error {
 	id, err := strconv.ParseUint(x, 10, 64)
 	if err != nil {
 		return err
