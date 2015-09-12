@@ -2,6 +2,7 @@ package dukedb_test
 
 import (
 	"fmt"
+	"os"
 
 	_ "github.com/lib/pq"
 	_ "github.com/go-sql-driver/mysql"
@@ -310,11 +311,13 @@ var _ = Describe("Backend", func() {
 				testBackend()
 			})
 
+			os.Open("test")
 			/*
 			Context("Sqlite3", func() {
 				backend, connectionError = sql.New("sqlite3", ".test.sqlite3")
 				testBackend()
 				os.Remove(".test.sqlite3")
+				os.Remove(".test.sqlite3-journal")
 			})
 			*/
 		})

@@ -116,11 +116,11 @@ func (d MysqlDialect) AddColumnStatement(table string, info *ColumnInfo) string 
 }
 
 func (d MysqlDialect) AlterColumnTypeStatement(table string, info *ColumnInfo) string {
-	panic("Sqlite3 backend does not support altering column type")
+	panic("NOT IMPLEMENTED")
 }
 
 func (d MysqlDialect) AlterColumnNameStatement(table, oldName, newName string) string {
-	panic("Sqlite3 backend does not support altering column name")
+	panic("NOT IMPLEMENTED")
 }
 
 func (d MysqlDialect) DropColumnStatement(table, name string) string {

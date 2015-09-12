@@ -34,7 +34,7 @@ type TestModel struct {
 	MyParentID uint64 `db:"ignore-zero"`
 
 	StrVal string
-	IntVal int
+	IntVal int64
 }
 
 func (t TestModel) Collection() string {
@@ -77,7 +77,7 @@ func (t TestParent) Collection() string {
 func NewTestModel(index int) TestModel{
 	return TestModel{
 		StrVal: fmt.Sprintf("str%v", index),
-		IntVal: index,
+		IntVal: int64(index),
 	}
 }
 

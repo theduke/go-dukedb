@@ -749,6 +749,11 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 		return
 	}
 
+	// Rather annoying fix for sqlite3 driver.
+	if info.Name == "IntVal" {
+		fmt.Printf("val: %v - len %v\n", val, val.Len())
+	}
+
 	switch fieldKind {
 	case reflect.Bool:
 		switch valKind {

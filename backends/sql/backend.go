@@ -31,14 +31,15 @@ var _ db.MigrationBackend = (*Backend)(nil)
 var _ db.TransactionBackend = (*Backend)(nil)
 
 func New(driver, driverOptions string) (*Backend, db.DbError) {
-	b := Backend{
-	}
+	b := Backend{}
 
 	switch driver {
 	case "postgres":
 			b.dialect = &PostgresDialect{}
 	case "mysql":
 		b.dialect = &MysqlDialect{}
+	case "sqlite3":
+		b.dialect = &Sqlite3Dialect{}
 	default:
 		panic("Unsupported sql driver: " + driver)
 	}
@@ -508,6 +509,66 @@ func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfac
 	}
 
 	return result, nil
+}
+
+func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface{}) ([]db.Model, db.DbError) {
+	rows, err := b.SqlQuery(sql, args...)
+	if err != nil {
+		return nil, db.Error{
+			Code: "sql_error",
+			Message: err.Error(),
+		}
+	}
+	defer rows.Close()
+
+	cols, err  := rows.Columns()
+	if err != nil {
+		return nil, db.Error{
+			Code: "sql_rows_error",
+			Message: err.Error(),
+		}
+	}
+
+	models := make([]db.Model, 0)
+
+	for rows.Next() {
+		model, _ := b.NewModel(info.Collection)
+		modelVal := reflect.ValueOf(model).Elem()
+
+		vals := make([]interface{}, 0)
+		for _, col := range cols {
+			fieldName := info.MapFieldName(col)
+			if fieldName == "" {
+				fmt.Printf("skipping column %v\n", col)
+				var x interface{}
+				vals = append(vals, &x)
+			} else {
+				vals = append(vals, modelVal.FieldByName(fieldName).Addr().Interface())
+			}
+		}
+
+		if err := rows.Scan(vals...); err != nil {
+			return nil, db.Error{
+				Code: "sql_scan_error",
+				Message: err.Error(),
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, db.Error{
+			Code: "sql_rows_error",
+			Message: err.Error(),
+		}
+	}
+
+	modelSlice, err := db.InterfaceToModelSlice(models)
+	if err != nil {
+		return nil, db.Error{
+			Code: "model_conversion_error",
+			Message: err.Error(),
+		}
+	}
+	return modelSlice, nil
 }
 
 // Perform a query.	
