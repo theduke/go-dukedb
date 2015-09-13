@@ -90,6 +90,8 @@ func DropTableStatement(d Dialect, table string, ifExists bool) string {
 
 	stmt += " " + d.Quote(table)
 
+	stmt += " CASCADE"
+
 	return stmt
 }
 

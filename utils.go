@@ -953,7 +953,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 		FieldInfo: make(map[string]*FieldInfo),
 	}
 
-	info.BackendName = CamelCaseToUnderscore(info.ItemName) + "s"
+	info.BackendName = CamelCaseToUnderscore(info.Collection)
 
 	err := info.buildFieldInfo(reflect.ValueOf(model).Elem())
 	if err != nil {
@@ -1150,6 +1150,12 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 		field := modelVal.Field(i)
 		fieldType := modelType.Field(i)
 		fieldKind := fieldType.Type.Kind()
+
+		// Ignore private fields.
+		firstChar := fieldType.Name[0:1]
+		if strings.ToLower(firstChar) == firstChar {
+			continue
+		}
 
 		if fieldKind == reflect.Struct && fieldType.Anonymous {
 			// Embedded struct. Find nested fields.

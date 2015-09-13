@@ -82,7 +82,7 @@ func (d PostgresDialect) ColumnType(info *db.FieldInfo) string {
 			return "bytea"
 		}
 	}
-	panic(fmt.Sprintf("invalid field type %s for field %v for postgres", info.Type, info.Name))
+	panic(fmt.Sprintf("Field %v has unsupported type %v (postgres)", info.Name, info.Type))
 }
 
 func (d PostgresDialect) BuildTableInfo(modelInfo *db.ModelInfo) *TableInfo {
