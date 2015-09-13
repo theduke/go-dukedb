@@ -2,7 +2,6 @@ package sql
 
 import (
 	"time"
-	"log"
 
 	db "github.com/theduke/go-dukedb"
 )
@@ -24,7 +23,6 @@ func (b Backend) MigrationsSetup() db.DbError {
 	initialRun := count == -1
 
 	if initialRun {
-		log.Println("MIGRATE: Building migration tables.")
 		tx := b.Begin()
 
 		if err := tx.CreateCollection("migration_attempts"); err != nil {
@@ -56,7 +54,6 @@ func (b Backend) MigrationsSetup() db.DbError {
 		}
 
 		tx.Commit()
-		log.Println("MIGRATE: Migrations table created.")
 	}
 
 	return nil

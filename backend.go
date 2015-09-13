@@ -3,6 +3,8 @@ package dukedb
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type BaseM2MCollection struct {
@@ -38,6 +40,7 @@ func (c BaseM2MCollection) GetByID(id string) Model {
 
 type BaseBackend struct {
 	Debug     bool
+	Logger *logrus.Logger
 	ModelInfo map[string]*ModelInfo
 }
 
@@ -48,6 +51,14 @@ func (b *BaseBackend) GetDebug() bool {
 func (b *BaseBackend) SetDebug(x bool) {
 	fmt.Printf("setting debuguu in base to: %v\n", x)
 	b.Debug = x
+}
+
+func(b *BaseBackend) GetLogger() *logrus.Logger {
+	return b.Logger
+}
+
+func(b *BaseBackend) SetLogger(x *logrus.Logger) {
+	b.Logger = x
 }
 
 func (b *BaseBackend) RegisterModel(m Model) error {

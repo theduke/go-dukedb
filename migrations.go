@@ -2,7 +2,6 @@ package dukedb
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 )
@@ -85,15 +84,12 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 				return err
 			}
 		}
-	} else {
-		log.Println("MIGRATE: DB is already at newest schema version: " + strconv.Itoa(targetVersion))
 	}
 
 	return nil
 }
 
 func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
-	log.Println("MIGRATE: Migrating to db version " + strconv.Itoa(m.Version) + ": " + m.Name)
 
 	backend := handler.Backend
 

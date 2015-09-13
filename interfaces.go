@@ -2,12 +2,16 @@ package dukedb
 
 import (
 	"time"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type DbError interface {
 	GetCode() string
 	GetMessage() string
 	GetData() interface{}
+	GetErrors() []error
+	AddError(error)
 	Error() string
 }
 
@@ -16,6 +20,9 @@ type Backend interface {
 
 	GetDebug() bool
 	SetDebug(bool)
+
+	GetLogger() *logrus.Logger
+	SetLogger(*logrus.Logger)
 
 	// Duplicate the backend.
 	Copy() Backend

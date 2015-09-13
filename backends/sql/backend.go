@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"fmt"
 	"strconv"
-	"log"
 
 	"database/sql"
 
@@ -144,8 +143,8 @@ func (b Backend) BuildRelationshipInfo() {
 }
 
 func (b Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
-	if b.Debug {
-		log.Printf("%v | %+v", query, args)
+	if b.Debug && b.Logger != nil {
+		b.Logger.Debugf("%v | %+v", query, args)
 	}
 
 	if b.Tx != nil {
@@ -156,8 +155,8 @@ func (b Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) 
 }
 
 func (b Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) {
-	if b.Debug{
-		log.Printf("%v | %+v", query, args)
+	if b.Debug && b.Logger != nil {
+		b.Logger.Debugf("%v | %+v", query, args)
 	}
 
 	if b.Tx != nil {

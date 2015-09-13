@@ -8,6 +8,7 @@ type Error struct {
 	Code    string      `json:"code,omitempty"`
 	Message string      `json:"title,omitempty"`
 	Data    interface{} `json:"-"`
+	Errors []error `json:"-"`
 }
 
 func (e Error) GetCode() string {
@@ -20,6 +21,14 @@ func (e Error) GetMessage() string {
 
 func (e Error) GetData() interface{} {
 	return e.Data
+}
+
+func (e Error) GetErrors() []error {
+	return e.Errors
+}
+
+func (e Error) AddError(err error) {
+	e.Errors = append(e.Errors, err)
 }
 
 func (e Error) Error() string {
