@@ -25,8 +25,8 @@ type Backend interface {
 	GetAllModelInfo() map[string]*ModelInfo
 	// Determine if a model type is registered with the backend.
 	HasModel(string) bool
-	
-	// After all models have been registered, build the relationship 
+
+	// After all models have been registered, build the relationship
 	// info.
 	BuildRelationshipInfo()
 
@@ -43,8 +43,8 @@ type Backend interface {
 
 	// Return a new query connected to the backend.
 	Q(modelType string) *Query
-	
-	// Perform a query.	
+
+	// Perform a query.
 	Query(*Query) ([]Model, DbError)
 	QueryOne(*Query) (Model, DbError)
 
@@ -55,12 +55,12 @@ type Backend interface {
 	// relation.
 	BuildRelationQuery(q *RelationQuery) (*Query, DbError)
 
-	// Return a M2MCollection instance for a model, which allows 
+	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
 	M2M(obj Model, name string) (M2MCollection, DbError)
 
 	// Convenience methods.
-	 
+
 	// Find first model with primary key ID.
 	FindOne(modelType string, id string) (Model, DbError)
 

@@ -43,7 +43,7 @@ var _ = Describe("Query", func() {
 
 	It("Should set order", func() {
 		q := Q("test_model").Order("fieldxx", true).
-		  SetOrders(Order("field1", true), Order("field2", false))
+			SetOrders(Order("field1", true), Order("field2", false))
 
 		Expect(q.Orders).To(Equal([]OrderSpec{
 			Order("field1", true),

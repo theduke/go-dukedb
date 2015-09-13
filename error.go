@@ -5,9 +5,9 @@ import (
 )
 
 type Error struct {
-	Code string `json:"code,omitempty"`
-	Message string `json:"title,omitempty"`
-	Data interface{} `json:"-"`
+	Code    string      `json:"code,omitempty"`
+	Message string      `json:"title,omitempty"`
+	Data    interface{} `json:"-"`
 }
 
 func (e Error) GetCode() string {

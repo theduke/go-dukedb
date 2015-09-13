@@ -1,9 +1,9 @@
 package dukedb
 
 import (
+	"errors"
 	"fmt"
 	"strings"
-	"errors"
 )
 
 type Filter interface {
@@ -53,7 +53,7 @@ func (a *AndCondition) Type() string {
 
 func And(f ...Filter) *AndCondition {
 	a := AndCondition{}
-	a.Filters = f	
+	a.Filters = f
 	return &a
 }
 
@@ -62,7 +62,7 @@ func And(f ...Filter) *AndCondition {
  */
 
 type OrCondition struct {
- 	multiFilter
+	multiFilter
 }
 
 // Ensure OrCondition implements MultiFilter.
@@ -104,7 +104,7 @@ func Not(f ...Filter) *NotCondition {
  */
 
 type FieldCondition struct {
-	Typ string
+	Typ   string
 	Field string
 	Value interface{}
 }
@@ -126,7 +126,7 @@ func Eq(field string, val interface{}) *FieldCondition {
 	eq := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"eq",
+		Typ:   "eq",
 	}
 	return &eq
 }
@@ -139,7 +139,7 @@ func Neq(field string, val interface{}) *FieldCondition {
 	neq := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"neq",
+		Typ:   "neq",
 	}
 	return &neq
 }
@@ -152,7 +152,7 @@ func Like(field string, val interface{}) *FieldCondition {
 	like := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"like",
+		Typ:   "like",
 	}
 	return &like
 }
@@ -165,11 +165,10 @@ func In(field string, val interface{}) *FieldCondition {
 	in := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"in",
+		Typ:   "in",
 	}
 	return &in
 }
-
 
 /**
  * Less than Lt.
@@ -179,7 +178,7 @@ func Lt(field string, val interface{}) *FieldCondition {
 	lt := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"lt",
+		Typ:   "lt",
 	}
 	return &lt
 }
@@ -192,7 +191,7 @@ func Lte(field string, val interface{}) *FieldCondition {
 	lte := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"lte",
+		Typ:   "lte",
 	}
 	return &lte
 }
@@ -205,7 +204,7 @@ func Gt(field string, val interface{}) *FieldCondition {
 	gt := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"gt",
+		Typ:   "gt",
 	}
 	return &gt
 }
@@ -218,7 +217,7 @@ func Gte(field string, val interface{}) *FieldCondition {
 	gte := FieldCondition{
 		Field: field,
 		Value: val,
-		Typ:"gte",
+		Typ:   "gte",
 	}
 	return &gte
 }
@@ -248,8 +247,8 @@ func conditionToFilterType(cond string) string {
 	default:
 		panic(fmt.Sprintf("Unknown field contidion: '%v'", cond))
 	}
-	
-	return typ	
+
+	return typ
 }
 
 /**
@@ -257,7 +256,7 @@ func conditionToFilterType(cond string) string {
  */
 
 type OrderSpec struct {
-	Field string
+	Field     string
 	Ascending bool
 }
 
@@ -284,12 +283,12 @@ type Query struct {
 
 	Joins []*RelationQuery
 
-	LimitNum int	
+	LimitNum  int
 	OffsetNum int
-	Orders []OrderSpec
+	Orders    []OrderSpec
 
 	FieldSpec []string
-	Filters []Filter
+	Filters   []Filter
 }
 
 func Q(model string) *Query {
@@ -374,7 +373,7 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 	typ := conditionToFilterType(condition)
 
 	f := FieldCondition{
-		Typ:typ,
+		Typ:   typ,
 		Field: field,
 		Value: val,
 	}
@@ -389,7 +388,6 @@ func (q *Query) AndQ(filters ...Filter) *Query {
 func (q *Query) And(field string, val interface{}) *Query {
 	return q.Filter(field, val)
 }
-
 
 func (q *Query) AndCond(field, condition string, val interface{}) *Query {
 	return q.FilterCond(field, condition, val)
@@ -413,7 +411,7 @@ func (q *Query) OrQ(filters ...Filter) *Query {
 		}
 
 		// One filter is already present.
-		// If it is OR, append to the or. 
+		// If it is OR, append to the or.
 		// Otherwise create a new top level Or.
 		if q.Filters[0].Type() == "or" {
 			or := q.Filters[0].(*OrCondition)
@@ -435,7 +433,7 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	typ := conditionToFilterType(condition)
 
 	f := FieldCondition{
-		Typ:typ,
+		Typ:   typ,
 		Field: field,
 		Value: val,
 	}
@@ -480,7 +478,7 @@ func (q *Query) GetJoin(field string) *RelationQuery {
 		if join.RelationName == field {
 			if len(parts) > 1 {
 				// Nested join, call GetJoin again on found join query.
-				return join.GetJoin(strings.Join(parts[1:], "."))	
+				return join.GetJoin(strings.Join(parts[1:], "."))
 			} else {
 				// Not nested, just return the join.
 				return join
@@ -500,14 +498,13 @@ func (q *Query) RelatedCustom(name, collection, joinKey, foreignKey, typ string)
 	return RelQCustom(q, name, collection, joinKey, foreignKey, typ)
 }
 
-
 /**
  * RelationQuery.
  */
 
-const(
+const (
 	InnerJoin = "inner"
-	LeftJoin = "left"
+	LeftJoin  = "left"
 	RightJoin = "right"
 	CrossJoin = "cross"
 )
@@ -515,18 +512,18 @@ const(
 type RelationQuery struct {
 	Query
 
-	BaseQuery *Query
+	BaseQuery    *Query
 	RelationName string
 
 	JoinType string
 
-	JoinFieldName string
+	JoinFieldName    string
 	ForeignFieldName string
 }
 
 func RelQ(q *Query, name string) *RelationQuery {
 	relQ := RelationQuery{
-		BaseQuery: q,
+		BaseQuery:    q,
 		RelationName: name,
 	}
 	relQ.Backend = q.Backend
@@ -536,10 +533,10 @@ func RelQ(q *Query, name string) *RelationQuery {
 
 func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *RelationQuery {
 	relQ := RelationQuery{
-		BaseQuery: q,
-		JoinFieldName: joinKey,
+		BaseQuery:        q,
+		JoinFieldName:    joinKey,
 		ForeignFieldName: foreignKey,
-		JoinType: typ,
+		JoinType:         typ,
 	}
 	relQ.RelationName = name
 	relQ.Model = collection
@@ -590,7 +587,6 @@ func (q *RelationQuery) Last() (Model, DbError) {
 	}
 	return newQ.Last()
 }
-
 
 func (q *RelationQuery) Count() (int, DbError) {
 	if q.Backend == nil {

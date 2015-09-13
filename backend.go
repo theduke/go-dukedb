@@ -6,10 +6,9 @@ import (
 )
 
 type BaseM2MCollection struct {
-	Name string
-	Items []Model	
+	Name  string
+	Items []Model
 }
-
 
 func (c BaseM2MCollection) Count() int {
 	return len(c.Items)
@@ -38,15 +37,15 @@ func (c BaseM2MCollection) GetByID(id string) Model {
 }
 
 type BaseBackend struct {
-	Debug bool
+	Debug     bool
 	ModelInfo map[string]*ModelInfo
 }
 
-func(b *BaseBackend) GetDebug() bool {
+func (b *BaseBackend) GetDebug() bool {
 	return b.Debug
 }
 
-func(b *BaseBackend) SetDebug(x bool) {
+func (b *BaseBackend) SetDebug(x bool) {
 	fmt.Printf("setting debuguu in base to: %v\n", x)
 	b.Debug = x
 }
@@ -83,7 +82,7 @@ func (b BaseBackend) NewModel(name string) (interface{}, DbError) {
 	info, ok := b.ModelInfo[name]
 	if !ok {
 		return nil, Error{
-			Code: "model_type_not_found", 
+			Code:    "model_type_not_found",
 			Message: fmt.Sprintf("Model type '%v' not registered with backend GORM", name),
 		}
 	}
@@ -100,7 +99,7 @@ func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
 	info, ok := b.ModelInfo[name]
 	if !ok {
 		return nil, Error{
-			Code: "model_type_not_found", 
+			Code:    "model_type_not_found",
 			Message: fmt.Sprintf("Model type '%v' not registered with backend GORM", name),
 		}
 	}
@@ -125,7 +124,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 
 		if len(baseModels) == 0 {
 			return nil, Error{
-				Code: "relation_on_empty_result",
+				Code:    "relation_on_empty_result",
 				Message: "Called .Related() or .Join() on a query without result",
 			}
 		}
@@ -149,7 +148,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 		foreignFieldName = q.ForeignFieldName
 
 		if foreignFieldName == "" {
-			// No foreign key specified, use primary key.			
+			// No foreign key specified, use primary key.
 			relatedInfo := b.GetModelInfo(targetModelName)
 			foreignFieldName = relatedInfo.PkField
 		}
@@ -170,7 +169,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 
 			// Set field names on query so Join logic can use it.
 			// Attention: ususally these fields contain the converted names,
-			// but join logic requires the field names so we abuse those 
+			// but join logic requires the field names so we abuse those
 			// RelatedQuery fields here.
 			q.JoinFieldName = joinField
 			q.ForeignFieldName = relInfo.HasOneForeignField
@@ -180,7 +179,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 
 			// Set field names on query so Join logic can use it.
 			// Attention: ususally these fields contain the converted names,
-			// but join logic requires the field names so we abuse those 
+			// but join logic requires the field names so we abuse those
 			// RelatedQuery fields here.
 			q.JoinFieldName = joinField
 			q.ForeignFieldName = relInfo.BelongsToForeignField
@@ -203,7 +202,7 @@ func BuildRelationQuery(b Backend, baseModels []Model, q *RelationQuery) (*Query
 
 	if len(vals) > 1 {
 		newQuery = newQuery.FilterCond(foreignFieldName, "in", vals)
-	}	else {
+	} else {
 		newQuery = newQuery.Filter(foreignFieldName, vals[0])
 	}
 
@@ -263,7 +262,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 
 			foreignFieldName := b.GetModelInfo(fieldInfo.RelationItem.Collection()).FieldInfo[fieldInfo.BelongsToForeignField].BackendName
 
-			items := make([]reflect.Value, 0)			
+			items := make([]reflect.Value, 0)
 
 			if !fieldInfo.RelationIsMany {
 				items = append(items, modelVal.FieldByName(name))
@@ -309,7 +308,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				} else {
 					// Relation already exists! Just update the foreign field.
 					err := b.UpdateByMap(relation, map[string]interface{}{
-						foreignFieldName: belongsToKey ,
+						foreignFieldName: belongsToKey,
 					})
 					if err != nil {
 						return err
@@ -388,7 +387,7 @@ func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 	info := b.GetModelInfo(modelType)
 	if info == nil {
 		return nil, Error{
-			Code: "model_type_not_found", 
+			Code:    "model_type_not_found",
 			Message: fmt.Sprintf("Model type '%v' not registered with backend GORM", modelType),
 		}
 	}
@@ -453,4 +452,3 @@ func assignJoinModels(objs, joinedModels []Model, targetField, joinedField, join
 		}
 	}
 }
-

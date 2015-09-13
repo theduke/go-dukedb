@@ -43,9 +43,9 @@ var _ = Describe("Utils", func() {
 
 	Describe("GetStructFieldValue", func() {
 		type TestStruct struct {
-			Val string
-			ValEmpty string
-			IntVal int
+			Val       string
+			ValEmpty  string
+			IntVal    int
 			StructVal *TestStruct
 		}
 
@@ -53,8 +53,8 @@ var _ = Describe("Utils", func() {
 
 		BeforeEach(func() {
 			testStruct = TestStruct{
-				Val: "test", 
-				IntVal: 33,  
+				Val:       "test",
+				IntVal:    33,
 				StructVal: &TestStruct{Val: "test2"},
 			}
 		})
@@ -145,9 +145,9 @@ var _ = Describe("Utils", func() {
 
 	Describe("SortStructSlice", func() {
 		type Sortable struct {
-			IntVal int
+			IntVal   int
 			FloatVal float32
-			StrVal string
+			StrVal   string
 		}
 
 		var sortables []interface{}
@@ -164,27 +164,27 @@ var _ = Describe("Utils", func() {
 
 		It("Should sort asc by int field", func() {
 			SortStructSlice(sortables, "IntVal", true)
-			Expect((sortables[0]).(Sortable).IntVal).To(Equal(1))	
-			Expect(sortables[4].(Sortable).IntVal).To(Equal(5))	
+			Expect((sortables[0]).(Sortable).IntVal).To(Equal(1))
+			Expect(sortables[4].(Sortable).IntVal).To(Equal(5))
 		})
 
 		It("Should sort desc by int field", func() {
 			SortStructSlice(sortables, "IntVal", false)
-			Expect((sortables[0]).(Sortable).IntVal).To(Equal(5))	
-			Expect(sortables[4].(Sortable).IntVal).To(Equal(1))	
+			Expect((sortables[0]).(Sortable).IntVal).To(Equal(5))
+			Expect(sortables[4].(Sortable).IntVal).To(Equal(1))
 		})
 
 		It("Should sort asc by string field", func() {
 			SortStructSlice(sortables, "StrVal", true)
-			Expect((sortables[0]).(Sortable).StrVal).To(Equal("1"))	
-			Expect(sortables[4].(Sortable).StrVal).To(Equal("5"))	
+			Expect((sortables[0]).(Sortable).StrVal).To(Equal("1"))
+			Expect(sortables[4].(Sortable).StrVal).To(Equal("5"))
 		})
 	})
-	
+
 	Describe("ConvertStringToType", func() {
 		It("Should convert int", func() {
 			Expect(ConvertStringToType("-22", reflect.Int)).To(Equal(-22))
-		})	
+		})
 
 		It("Should convert int64", func() {
 			Expect(ConvertStringToType("-22", reflect.Int64)).To(Equal(int64(-22)))
@@ -216,7 +216,7 @@ var _ = Describe("Utils", func() {
 
 	Describe("SetStructFieldValueFromString", func() {
 		type TestStruct struct {
-			Val string
+			Val    string
 			IntVal int
 		}
 
@@ -263,15 +263,15 @@ var _ = Describe("Utils", func() {
 	})
 
 	Describe("GetModelSliceFieldValues", func() {
-		var modelSlice []Model	
+		var modelSlice []Model
 
 		BeforeEach(func() {
 			modelSlice = []Model{&TestModel{
-				ID: 1,
+				ID:     1,
 				StrVal: "str1",
 				IntVal: 1,
 			}, &TestModel{
-				ID: 2,
+				ID:     2,
 				StrVal: "str2",
 				IntVal: 2,
 			}}
@@ -359,7 +359,7 @@ var _ = Describe("Utils", func() {
 		})
 
 		It("Should fail on non-model slice", func() {
-			_, err := InterfaceToModelSlice([]int{1,2})
+			_, err := InterfaceToModelSlice([]int{1, 2})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("slice_values_do_not_implement_model_if"))
 		})
@@ -467,7 +467,7 @@ var _ = Describe("Utils", func() {
 
 		It("Should set slice", func() {
 			childSlice := NewTestModelSlice(1, 2)
-			
+
 			modelSlice, err := InterfaceToModelSlice(childSlice)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -509,7 +509,6 @@ var _ = Describe("Utils", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.GetCode()).To(Equal("invalid_name"))
 		})
-
 
 		It("Should parse m2m", func() {
 			info, _ := ParseFieldTag("m2m")
@@ -560,7 +559,7 @@ var _ = Describe("Utils", func() {
 			It("Should fail on invalid tags", func() {
 				type InvalidTagModel struct {
 					TestModel
-					InvalidField string `db:"has-one:xxx"` 
+					InvalidField string `db:"has-one:xxx"`
 				}
 
 				_, err := NewModelInfo(&InvalidTagModel{})
@@ -576,7 +575,7 @@ var _ = Describe("Utils", func() {
 				_, err := NewModelInfo(&NoPKModel{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.GetCode()).To(Equal("primary_key_not_found"))
-			})	
+			})
 
 			It("Should determine ID field as primary key", func() {
 				info, err := NewModelInfo(&TestModel{})
@@ -608,7 +607,6 @@ var _ = Describe("Utils", func() {
 
 		Describe("ModelInfoMethods", func() {
 
-
 			It("Should run .GetPkName() correctly", func() {
 				type PKModel struct {
 					BaseModel
@@ -621,27 +619,27 @@ var _ = Describe("Utils", func() {
 			})
 
 			It("Should map field names correctly (.MapFieldName())", func() {
-					type PKModel struct {
-						BaseModel
-						Name string `db:"primary-key;name:custom_name"`
-					}
+				type PKModel struct {
+					BaseModel
+					Name string `db:"primary-key;name:custom_name"`
+				}
 
-					info, err := NewModelInfo(&PKModel{})
-					Expect(err).ToNot(HaveOccurred())
-					Expect(info.MapFieldName("custom_name")).To(Equal("Name"))
-				})
+				info, err := NewModelInfo(&PKModel{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(info.MapFieldName("custom_name")).To(Equal("Name"))
+			})
 		})
 
 	})
 
 	Describe("Building of relationship info", func() {
 		It("Builds relationship info without errors", func() {
-			parent, _ := NewModelInfo(&TestParent{})	
+			parent, _ := NewModelInfo(&TestParent{})
 			model, _ := NewModelInfo(&TestModel{})
 
 			modelInfo := map[string]*ModelInfo{
-				"test_parents": parent, 
-				"test_models": model,
+				"test_parents": parent,
+				"test_models":  model,
 			}
 			Expect(BuildAllRelationInfo(modelInfo)).ToNot(HaveOccurred())
 		})
@@ -651,12 +649,12 @@ var _ = Describe("Utils", func() {
 		var modelInfo map[string]*ModelInfo
 
 		BeforeEach(func() {
-			parent, _ := NewModelInfo(&TestParent{})	
+			parent, _ := NewModelInfo(&TestParent{})
 			model, _ := NewModelInfo(&TestModel{})
 
 			modelInfo = map[string]*ModelInfo{
-				"test_parents": parent, 
-				"test_models": model,
+				"test_parents": parent,
+				"test_models":  model,
 			}
 			BuildAllRelationInfo(modelInfo)
 		})
@@ -672,7 +670,7 @@ var _ = Describe("Utils", func() {
 
 		It("Finds explicit has-one", func() {
 			child := modelInfo["test_models"]
-			
+
 			Expect(child.FieldInfo["MyParent"].HasOne).To(Equal(true))
 			Expect(child.FieldInfo["MyParent"].RelationIsMany).To(Equal(false))
 			Expect(child.FieldInfo["MyParent"].HasOneField).To(Equal("MyParentID"))
@@ -775,7 +773,7 @@ var _ = Describe("Utils", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 
-			// The ordering by json.Unmarshal() is random, so checking has to be done 
+			// The ordering by json.Unmarshal() is random, so checking has to be done
 			// with order in mind.
 			or := q.Filters[0].(*OrCondition)
 			first := or.Filters[0].(*FieldCondition)

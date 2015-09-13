@@ -9,15 +9,14 @@ type BaseModelStrID struct {
 	ID string
 }
 
-func(m *BaseModelStrID) GetID() string {
+func (m *BaseModelStrID) GetID() string {
 	return m.ID
 }
 
-func(m *BaseModelStrID) SetID(x string) error {
+func (m *BaseModelStrID) SetID(x string) error {
 	m.ID = x
 	return nil
 }
-
 
 // A base model with an integer id that can be embedded.
 type BaseModelIntID struct {

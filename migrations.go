@@ -1,10 +1,10 @@
 package dukedb
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"time"
-	"fmt"
 )
 
 /**
@@ -14,7 +14,7 @@ import (
 
 type MigrationHandler struct {
 	migrations []*Migration
-	Backend MigrationBackend
+	Backend    MigrationBackend
 }
 
 func NewMigrationHandler(backend Backend) *MigrationHandler {
@@ -59,7 +59,7 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 	if isLocked {
 		// Last attempt was aborted. DB is locked.
 		return Error{
-			Code: "migrations_locked",
+			Code:    "migrations_locked",
 			Message: "Can not migrate database: Last migration was aborted. DB is locked.",
 		}
 	}
@@ -75,7 +75,7 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 			migration := m.Get(nextVersion)
 			if migration == nil {
 				return Error{
-					Code: "unknown_migration",
+					Code:    "unknown_migration",
 					Message: fmt.Sprintf("Unknown migration version: %v", nextVersion),
 				}
 			}
@@ -120,7 +120,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 		if hasTransactions {
 			tx.Rollback()
 		} else {
-			// No transaction, so update the attempt to reflect 
+			// No transaction, so update the attempt to reflect
 			// finished state but fail.
 			attempt.SetFinishedAt(time.Now())
 			backend.Update(attempt)
@@ -128,7 +128,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 
 		return Error{
 			Code: "migration_failed",
-			Message: fmt.Sprintf("Migration to %v (version %v) failed: %v", 
+			Message: fmt.Sprintf("Migration to %v (version %v) failed: %v",
 				m.Name, m.Version, err),
 		}
 	}
@@ -142,7 +142,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 		}
 
 		return Error{
-			Code: "attempt_update_fail",
+			Code:    "attempt_update_fail",
 			Message: "Migration succeded, but could not update the attempt in the database: " + err.Error(),
 		}
 	}
@@ -159,7 +159,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
  */
 
 type Migration struct {
-	Version 	  int
+	Version     int
 	Name        string
 	Description string
 	SkipOnNew   bool // Determines if this migration can be skipped if setting up a new database.
@@ -167,51 +167,50 @@ type Migration struct {
 	Down        func(MigrationBackend) error
 }
 
-
 /**
  * Base MigrationAttempt
  */
 
- type BaseMigrationAttempt struct {
-	Version int
-	StartedAt time.Time
+type BaseMigrationAttempt struct {
+	Version    int
+	StartedAt  time.Time
 	FinishedAt time.Time
-	Complete bool
+	Complete   bool
 }
 
 func (m BaseMigrationAttempt) Collection() string {
 	return "migration_attempts"
 }
 
-func(a *BaseMigrationAttempt) GetVersion() int {
+func (a *BaseMigrationAttempt) GetVersion() int {
 	return a.Version
 }
 
-func(a *BaseMigrationAttempt) SetVersion(x int) {
+func (a *BaseMigrationAttempt) SetVersion(x int) {
 	a.Version = x
 }
 
-func(a *BaseMigrationAttempt) GetStartedAt() time.Time {
+func (a *BaseMigrationAttempt) GetStartedAt() time.Time {
 	return a.StartedAt
 }
 
-func(a *BaseMigrationAttempt) SetStartedAt(x time.Time) {
+func (a *BaseMigrationAttempt) SetStartedAt(x time.Time) {
 	a.StartedAt = x
 }
 
-func(a *BaseMigrationAttempt) GetFinishedAt() time.Time {
+func (a *BaseMigrationAttempt) GetFinishedAt() time.Time {
 	return a.FinishedAt
 }
 
-func(a *BaseMigrationAttempt) SetFinishedAt(x time.Time) {
+func (a *BaseMigrationAttempt) SetFinishedAt(x time.Time) {
 	a.FinishedAt = x
 }
 
-func(a *BaseMigrationAttempt) GetComplete() bool {
+func (a *BaseMigrationAttempt) GetComplete() bool {
 	return a.Complete
 }
 
-func(a *BaseMigrationAttempt) SetComplete(x bool) {
+func (a *BaseMigrationAttempt) SetComplete(x bool) {
 	a.Complete = x
 }
 
@@ -220,11 +219,11 @@ type BaseMigrationAttemptIntID struct {
 	ID uint64
 }
 
-func(a *BaseMigrationAttemptIntID) GetID() string {
+func (a *BaseMigrationAttemptIntID) GetID() string {
 	return strconv.FormatUint(a.ID, 10)
 }
 
-func(a *BaseMigrationAttemptIntID) SetID(x string) error {
+func (a *BaseMigrationAttemptIntID) SetID(x string) error {
 	id, err := strconv.ParseUint(x, 10, 64)
 	if err != nil {
 		return err

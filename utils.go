@@ -1,13 +1,13 @@
 package dukedb
 
-import(
-	"reflect"
-	"errors"
-	"strings"
-	"fmt"
-	"strconv"
-	"sort"
+import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 /**
@@ -17,8 +17,8 @@ import(
 // Convert a CamelCase string to underscore version, eg camel_case.
 func CamelCaseToUnderscore(str string) string {
 	u := ""
-	
-	didChange := false	
+
+	didChange := false
 	for i, c := range str {
 		if c >= 65 && c <= 90 {
 			if i == 0 {
@@ -65,14 +65,13 @@ func FilterToSqlCondition(filter string) (string, DbError) {
 		typ = "IN"
 	default:
 		return "", Error{
-			Code: "unknown_filter",
+			Code:    "unknown_filter",
 			Message: "Unknown filter '" + filter + "'",
 		}
 	}
 
 	return typ, nil
 }
-
 
 /**
  * Generic interface variable handling/comparison functions.
@@ -84,7 +83,7 @@ func IsZero(val interface{}) bool {
 		strval := val.(string)
 		return strval == "" || strval == "0"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-		num, err := NumericToInt64(val)	 
+		num, err := NumericToInt64(val)
 		if err != nil {
 			return false
 		}
@@ -99,7 +98,7 @@ func IsZero(val interface{}) bool {
 func ConvertStringToType(value string, typ reflect.Kind) (interface{}, error) {
 	switch typ {
 	case reflect.Int:
-		x, err := strconv.Atoi(value) 
+		x, err := strconv.Atoi(value)
 		return interface{}(x), err
 	case reflect.Int64:
 		x, err := strconv.ParseInt(value, 10, 64)
@@ -125,12 +124,12 @@ func CompareValues(condition string, a, b interface{}) (bool, DbError) {
 
 	switch typ {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-		return CompareNumericValues(condition, a, b)		
+		return CompareNumericValues(condition, a, b)
 	case reflect.String:
 		return CompareStringValues(condition, a, b)
 	default:
 		return false, Error{
-			Code: "unsupported_comparison_type",
+			Code:    "unsupported_comparison_type",
 			Message: fmt.Sprintf("Type %v can not be compared", typ),
 		}
 	}
@@ -159,7 +158,7 @@ func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
 
 	default:
 		return false, Error{
-			Code: "unknown_filter", 
+			Code:    "unknown_filter",
 			Message: fmt.Sprintf("Unknown filter type '%v'", condition),
 		}
 	}
@@ -168,19 +167,19 @@ func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
 func CompareNumericValues(condition string, a, b interface{}) (bool, DbError) {
 	typ := reflect.TypeOf(a).Kind()
 	switch typ {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			return CompareIntValues(condition, a, b)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			return CompareUintValues(condition, a, b)
-		case reflect.Float32, reflect.Float64:
-			return CompareFloatValues(condition, a, b)
-		default:
-			return false, Error{
-				Code: "unsupported_type_for_numeric_comparison",
-				Message: fmt.Sprintf(
-					"For a numeric comparision with %v, a numeric type is expected. Got: %v",
-					condition, typ),
-			}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return CompareIntValues(condition, a, b)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return CompareUintValues(condition, a, b)
+	case reflect.Float32, reflect.Float64:
+		return CompareFloatValues(condition, a, b)
+	default:
+		return false, Error{
+			Code: "unsupported_type_for_numeric_comparison",
+			Message: fmt.Sprintf(
+				"For a numeric comparision with %v, a numeric type is expected. Got: %v",
+				condition, typ),
+		}
 	}
 }
 
@@ -189,31 +188,31 @@ func NumericToInt64(x interface{}) (int64, DbError) {
 
 	switch reflect.TypeOf(x).Kind() {
 	case reflect.Int:
-			val = int64(x.(int))
-		case reflect.Int8:
-			val = int64(x.(int8))
-		case reflect.Int16:
-			val = int64(x.(int16))
-		case reflect.Int32:
-			val = int64(x.(int32))
-		case reflect.Int64:
-			val = x.(int64)
-		case reflect.Uint:
-			val = int64(x.(uint))
-		case reflect.Uint8:
-			val = int64(x.(uint8))
-		case reflect.Uint16:
-			val = int64(x.(uint16))
-		case reflect.Uint32:
-			val = int64(x.(uint32))
-		case reflect.Uint64:
-			val = int64(x.(uint64))
-		case reflect.Float32:
-			val = int64(x.(float32))
-		case reflect.Float64:
-			val = int64(x.(float64))
-		default:
-			return int64(0), Error{Code: "non_numeric_type"}
+		val = int64(x.(int))
+	case reflect.Int8:
+		val = int64(x.(int8))
+	case reflect.Int16:
+		val = int64(x.(int16))
+	case reflect.Int32:
+		val = int64(x.(int32))
+	case reflect.Int64:
+		val = x.(int64)
+	case reflect.Uint:
+		val = int64(x.(uint))
+	case reflect.Uint8:
+		val = int64(x.(uint8))
+	case reflect.Uint16:
+		val = int64(x.(uint16))
+	case reflect.Uint32:
+		val = int64(x.(uint32))
+	case reflect.Uint64:
+		val = int64(x.(uint64))
+	case reflect.Float32:
+		val = int64(x.(float32))
+	case reflect.Float64:
+		val = int64(x.(float64))
+	default:
+		return int64(0), Error{Code: "non_numeric_type"}
 	}
 
 	return val, nil
@@ -224,31 +223,31 @@ func NumericToUint64(x interface{}) (uint64, DbError) {
 
 	switch reflect.TypeOf(x).Kind() {
 	case reflect.Int:
-			val = uint64(x.(int))
-		case reflect.Int8:
-			val = uint64(x.(int8))
-		case reflect.Int16:
-			val = uint64(x.(int16))
-		case reflect.Int32:
-			val = uint64(x.(int32))
-		case reflect.Int64:
-			val = uint64(x.(int64))
-		case reflect.Uint:
-			val = uint64(x.(uint))
-		case reflect.Uint8:
-			val = uint64(x.(uint8))
-		case reflect.Uint16:
-			val = uint64(x.(uint16))
-		case reflect.Uint32:
-			val = uint64(x.(uint32))
-		case reflect.Uint64:
-			val = x.(uint64)
-		case reflect.Float32:
-			val = uint64(x.(float32))
-		case reflect.Float64:
-			val = uint64(x.(float64))
-		default:
-			return uint64(0), Error{Code: "non_numeric_type"}
+		val = uint64(x.(int))
+	case reflect.Int8:
+		val = uint64(x.(int8))
+	case reflect.Int16:
+		val = uint64(x.(int16))
+	case reflect.Int32:
+		val = uint64(x.(int32))
+	case reflect.Int64:
+		val = uint64(x.(int64))
+	case reflect.Uint:
+		val = uint64(x.(uint))
+	case reflect.Uint8:
+		val = uint64(x.(uint8))
+	case reflect.Uint16:
+		val = uint64(x.(uint16))
+	case reflect.Uint32:
+		val = uint64(x.(uint32))
+	case reflect.Uint64:
+		val = x.(uint64)
+	case reflect.Float32:
+		val = uint64(x.(float32))
+	case reflect.Float64:
+		val = uint64(x.(float64))
+	default:
+		return uint64(0), Error{Code: "non_numeric_type"}
 	}
 
 	return val, nil
@@ -259,31 +258,31 @@ func NumericToFloat64(x interface{}) (float64, DbError) {
 
 	switch reflect.TypeOf(x).Kind() {
 	case reflect.Int:
-			val = float64(x.(int))
-		case reflect.Int8:
-			val = float64(x.(int8))
-		case reflect.Int16:
-			val = float64(x.(int16))
-		case reflect.Int32:
-			val = float64(x.(int32))
-		case reflect.Int64:
-			val = float64(x.(int64))
-		case reflect.Uint:
-			val = float64(x.(uint))
-		case reflect.Uint8:
-			val = float64(x.(uint8))
-		case reflect.Uint16:
-			val = float64(x.(uint16))
-		case reflect.Uint32:
-			val = float64(x.(uint32))
-		case reflect.Uint64:
-			val = float64(x.(uint64))
-		case reflect.Float32:
-			val = float64(x.(float32))
-		case reflect.Float64:
-			val = x.(float64)
-		default:
-			return float64(0), Error{Code: "non_numeric_type"}
+		val = float64(x.(int))
+	case reflect.Int8:
+		val = float64(x.(int8))
+	case reflect.Int16:
+		val = float64(x.(int16))
+	case reflect.Int32:
+		val = float64(x.(int32))
+	case reflect.Int64:
+		val = float64(x.(int64))
+	case reflect.Uint:
+		val = float64(x.(uint))
+	case reflect.Uint8:
+		val = float64(x.(uint8))
+	case reflect.Uint16:
+		val = float64(x.(uint16))
+	case reflect.Uint32:
+		val = float64(x.(uint32))
+	case reflect.Uint64:
+		val = float64(x.(uint64))
+	case reflect.Float32:
+		val = float64(x.(float32))
+	case reflect.Float64:
+		val = x.(float64)
+	default:
+		return float64(0), Error{Code: "non_numeric_type"}
 	}
 
 	return val, nil
@@ -315,7 +314,7 @@ func CompareIntValues(condition string, a, b interface{}) (bool, DbError) {
 		return aVal >= bVal, nil
 	default:
 		return false, Error{
-			Code: "unknown_filter",
+			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
 	}
@@ -347,7 +346,7 @@ func CompareUintValues(condition string, a, b interface{}) (bool, DbError) {
 		return aVal >= bVal, nil
 	default:
 		return false, Error{
-			Code: "unknown_filter",
+			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
 	}
@@ -379,7 +378,7 @@ func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
 		return aVal >= bVal, nil
 	default:
 		return false, Error{
-			Code: "unknown_filter",
+			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
 	}
@@ -431,7 +430,7 @@ func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 
 	result := make([]Model, 0)
 
-	for i := 0; i < reflSlice.Len(); i ++ {
+	for i := 0; i < reflSlice.Len(); i++ {
 		itemVal := reflSlice.Index(i)
 		if itemVal.Type().Kind() == reflect.Struct {
 			itemVal = itemVal.Addr()
@@ -461,14 +460,13 @@ func ModelToInterfaceSlice(models []Model) []interface{} {
 	return slice
 }
 
-
 /**
  * Sorter for sorting structs by field.
  */
 
 type structFieldSorter struct {
-	items []interface{}
-	field string
+	items     []interface{}
+	field     string
 	ascending bool
 }
 
@@ -505,8 +503,8 @@ func (s structFieldSorter) Less(i, j int) bool {
 
 func StructFieldSorter(items []interface{}, field string, asc bool) structFieldSorter {
 	return structFieldSorter{
-		items: items,
-		field: field,
+		items:     items,
+		field:     field,
 		ascending: asc,
 	}
 }
@@ -515,11 +513,9 @@ func SortStructSlice(items []interface{}, field string, ascending bool) {
 	sort.Sort(StructFieldSorter(items, field, ascending))
 }
 
-
 /**
  * Setting and getting fields from a struct with reflect.
  */
-
 
 // Given a struct or a pointer to a struct, retrieve the value of a field from
 // the struct with reflection.
@@ -542,10 +538,10 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
 		return nil, Error{
-			Code: "field_not_found", 
+			Code:    "field_not_found",
 			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
 		}
-	}	
+	}
 
 	return field.Interface(), nil
 }
@@ -553,9 +549,9 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 // Given a pointer to a struct, set the given field to the given value.
 // If the target value is not a string, it will be automatically converted
 // to the proper type.
-// Returns an error if no pointer to a struct is given, if the field does not 
+// Returns an error if no pointer to a struct is given, if the field does not
 // exist, or if the string value can not be converted to the actual type.
-func SetStructFieldValueFromString(obj interface{}, fieldName string,  val string) DbError {
+func SetStructFieldValueFromString(obj interface{}, fieldName string, val string) DbError {
 	objVal := reflect.ValueOf(obj)
 	if objVal.Type().Kind() != reflect.Ptr {
 		return Error{Code: "pointer_expected"}
@@ -569,7 +565,7 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string,  val strin
 	field := objVal.FieldByName(fieldName)
 	if !field.IsValid() {
 		return Error{
-			Code: "unknown_field",
+			Code:    "unknown_field",
 			Message: fmt.Sprintf("Field %v does not exist on %v", fieldName, objVal),
 		}
 	}
@@ -601,7 +597,7 @@ func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, 
 
 // Given a struct, set the specified field that contains either a single Model
 // or a model slice to the given models.
-// If the target field type is struct or pointer to struct, it will be set to 
+// If the target field type is struct or pointer to struct, it will be set to
 // the first model in []models.
 // If it is a slice, it will be set to the models with the correct type.
 func SetStructModelField(obj interface{}, fieldName string, models []Model) error {
@@ -613,7 +609,7 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 	if objVal.Elem().Type().Kind() != reflect.Struct {
 		return errors.New("pointer_to_struct_expected")
 	}
-	
+
 	field := objVal.Elem().FieldByName(fieldName)
 	if !field.IsValid() {
 		return errors.New("unknown_field")
@@ -639,7 +635,7 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 			}
 
 			if sliceType.Kind() == reflect.Ptr {
-				slice = reflect.Append(slice, val.Addr())	
+				slice = reflect.Append(slice, val.Addr())
 			} else {
 				slice = reflect.Append(slice, val)
 			}
@@ -683,7 +679,7 @@ func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{
 	model, err := NewStruct(info.Item)
 	if err != nil {
 		return nil, Error{
-			Code: "model_build_error",
+			Code:    "model_build_error",
 			Message: err.Error(),
 		}
 	}
@@ -691,7 +687,7 @@ func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{
 	err = UpdateModelFromData(info, model, data)
 	if err != nil {
 		return nil, Error{
-			Code: "model_update_error",
+			Code:    "model_update_error",
 			Message: err.Error(),
 		}
 	}
@@ -884,25 +880,25 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
 
 // Contains information about a single field of a Model.
 type FieldInfo struct {
-	Name string
-	Type reflect.Kind
+	Name       string
+	Type       reflect.Kind
 	StructType string
 
-	PrimaryKey bool
+	PrimaryKey    bool
 	AutoIncrement bool
-	Ignore bool
-	IgnoreIfZero bool
-	NotNull bool
-	Default string
+	Ignore        bool
+	IgnoreIfZero  bool
+	NotNull       bool
+	Default       string
 
-	Unique bool
+	Unique     bool
 	UniqueWith []string
-	Index string
+	Index      string
 
 	Min float64
 	Max float64
 
-	BackendName string
+	BackendName       string
 	BackendConstraint string
 
 	/**
@@ -910,18 +906,18 @@ type FieldInfo struct {
 	 */
 
 	// True if this field is a foreign key for a has one/belongs to relationship.
-	M2M bool
+	M2M           bool
 	M2MCollection string
 
-	HasOne bool
-	HasOneField string
+	HasOne             bool
+	HasOneField        string
 	HasOneForeignField string
 
-	BelongsTo bool
-	BelongsToField string
+	BelongsTo             bool
+	BelongsToField        string
 	BelongsToForeignField string
 
-	RelationItem Model
+	RelationItem   Model
 	RelationIsMany bool
 }
 
@@ -934,8 +930,8 @@ type ModelInfo struct {
 	// Name of the struct field.
 	PkField string
 
-	Item Model
-	ItemName string
+	Item       Model
+	ItemName   string
 	Collection string
 
 	BackendName string
@@ -947,10 +943,10 @@ type ModelInfo struct {
 // Returns an error for all failures.
 func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	info := ModelInfo{
-		Item: model,
-		ItemName: reflect.ValueOf(model).Elem().Type().Name(),
+		Item:       model,
+		ItemName:   reflect.ValueOf(model).Elem().Type().Name(),
 		Collection: model.Collection(),
-		FieldInfo: make(map[string]*FieldInfo),
+		FieldInfo:  make(map[string]*FieldInfo),
 	}
 
 	info.BackendName = CamelCaseToUnderscore(info.Collection)
@@ -958,9 +954,9 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	err := info.buildFieldInfo(reflect.ValueOf(model).Elem())
 	if err != nil {
 		return nil, Error{
-			Code: "build_field_info_failed",
+			Code:    "build_field_info_failed",
 			Message: fmt.Sprintf("Could not build field info for %v: %v", info.ItemName, err.GetMessage()),
-			Data: err,
+			Data:    err,
 		}
 	}
 
@@ -984,7 +980,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 			// TODO: allow a way to disable autoincrement with a tag.
 			switch fieldInfo.Type {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				fieldInfo.AutoIncrement = true				
+				fieldInfo.AutoIncrement = true
 			}
 
 			if info.PkField == "" {
@@ -995,7 +991,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 
 	if info.PkField == "" {
 		return nil, Error{
-			Code: "primary_key_not_found",
+			Code:    "primary_key_not_found",
 			Message: fmt.Sprintf("Primary key could not be determined for model %v", info.ItemName),
 		}
 	}
@@ -1034,7 +1030,7 @@ func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 }
 
 // Parse the information contained in a 'db:"xxx"' field tag.
-func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
+func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 	info := FieldInfo{}
 
 	parts := strings.Split(tag, ";")
@@ -1044,7 +1040,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 		specifier := part
 		var value string
 		if len(itemParts) > 1 {
-			specifier = itemParts[0]	
+			specifier = itemParts[0]
 			value = itemParts[1]
 		}
 
@@ -1053,7 +1049,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 		case "name":
 			if value == "" {
 				return nil, Error{
-					Code: "invalid_name",
+					Code:    "invalid_name",
 					Message: "name specifier must be in format name:the_name",
 				}
 			}
@@ -1079,7 +1075,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
 				return nil, Error{
-					Code: "invalid_min",
+					Code:    "invalid_min",
 					Message: "min:xx must be a valid number",
 				}
 			}
@@ -1089,7 +1085,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
 				return nil, Error{
-					Code: "invalid_max",
+					Code:    "invalid_max",
 					Message: "max:xx must be a valid number",
 				}
 			}
@@ -1099,7 +1095,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			parts := strings.Split(value, ",")
 			if parts[0] == "" {
 				return nil, Error{
-					Code: "invalid_unique_with",
+					Code:    "invalid_unique_with",
 					Message: "unique-with must be a comma-separated list of fields",
 				}
 			}
@@ -1116,7 +1112,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			if value != "" {
 				if len(itemParts) < 3 {
 					return nil, Error{
-						Code: "invalid_has_one",
+						Code:    "invalid_has_one",
 						Message: "Explicit has-one needs to be in format 'has-one:localField:foreignKey'",
 					}
 				}
@@ -1129,7 +1125,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError)  {
 			if value != "" {
 				if len(itemParts) < 3 {
 					return nil, Error{
-						Code: "invalid_belongs_to",
+						Code:    "invalid_belongs_to",
 						Message: "Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'",
 					}
 				}
@@ -1165,7 +1161,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 			continue
 		}
 
-		fieldInfo, err := ParseFieldTag(fieldType.Tag.Get("db"))	
+		fieldInfo, err := ParseFieldTag(fieldType.Tag.Get("db"))
 		if err != nil {
 			return err
 		}
@@ -1192,7 +1188,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 
 			if ptrType.Kind() == reflect.Struct {
 				fieldInfo.StructType = ptrType.PkgPath() + "." + ptrType.Name()
-			} 
+			}
 
 			// Check if it points to a Model.
 			if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
@@ -1208,14 +1204,14 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 			if sliceKind == reflect.Struct {
 				// Slice contains structs.
 				fieldInfo.StructType = sliceKind.String()
-				
+
 				// Same as above code for plain structs.
 				if relItem, ok := reflect.New(sliceType).Interface().(Model); ok {
 					fieldInfo.RelationItem = relItem
 					fieldInfo.RelationIsMany = true
 				}
 			} else if sliceKind == reflect.Ptr {
-				// Slice contains pointers. 
+				// Slice contains pointers.
 				// Check if it points to a model. Same as above for pointers.
 				ptrType := sliceType.Elem()
 				if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
@@ -1248,9 +1244,9 @@ func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 	return nil
 }
 
-// Recursive helper for building the relationship information. 
+// Recursive helper for building the relationship information.
 // Will properly analyze all embedded structs as well.
-// WARNING: will panic on errors. 
+// WARNING: will panic on errors.
 func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
 	for name := range model.FieldInfo {
 		fieldInfo := model.FieldInfo[name]
@@ -1283,7 +1279,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 		relatedFields := relatedInfo.FieldInfo
 
 		if !(fieldInfo.BelongsTo || fieldInfo.HasOne || fieldInfo.M2M) {
-			// No explicit relationship defined. Try to determine it.	
+			// No explicit relationship defined. Try to determine it.
 
 			// Can be either HasOne or BelongsTo, since m2m needs to be explicitly specified.
 
@@ -1320,7 +1316,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 				return Error{
 					Code: "has_one_field_not_determined",
 					Message: fmt.Sprintf("has-one specified on model %v, but field %v not found. Specify ID field.",
-						modelName, relatedName + "ID"),
+						modelName, relatedName+"ID"),
 				}
 			}
 			if _, ok := model.FieldInfo[fieldInfo.HasOneField]; !ok {
@@ -1329,7 +1325,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 					Message: fmt.Sprintf("Specified has-one field %v not found on model %v",
 						fieldInfo.HasOneField, modelName),
 				}
-			} 
+			}
 
 			// Ignore zero values to avoid inserts with 0.
 			model.FieldInfo[fieldInfo.HasOneField].IgnoreIfZero = true
@@ -1346,24 +1342,24 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 				return Error{
 					Code: "belongs_to_foreign_field_not_determined",
 					Message: fmt.Sprintf("belongs-to specified on model %v, but field %v not found. Specify ID field.",
-						modelName, modelName + "ID"),
+						modelName, modelName+"ID"),
 				}
 			}
 			if _, ok := relatedFields[fieldInfo.BelongsToForeignField]; !ok {
 				return Error{
 					Code: "belongs_to_foreign_field_missing",
 					Message: fmt.Sprintf("Specified belongs-to field %v not found on model %v",
-					fieldInfo.BelongsToForeignField, relatedName),
+						fieldInfo.BelongsToForeignField, relatedName),
 				}
 			}
 
 			if fieldInfo.BelongsToField == "" {
 				fieldInfo.BelongsToField = model.PkField
-			}	
+			}
 
 			if _, ok := model.FieldInfo[fieldInfo.BelongsToField]; !ok {
 				return Error{
-					Code: "belongs_to_field_missing",
+					Code:    "belongs_to_field_missing",
 					Message: fmt.Sprintf("Model %v has no field %v", modelName, fieldInfo.BelongsToField),
 				}
 			}
@@ -1372,7 +1368,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 		} else if fieldInfo.M2M {
 			if fieldInfo.M2MCollection == "" {
 				fieldInfo.M2MCollection = model.BackendName + "_" + relatedInfo.BackendName
-			}	
+			}
 		}
 
 		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {
@@ -1395,7 +1391,7 @@ func ParseJsonQuery(collection string, js []byte) (*Query, DbError) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
 		return nil, Error{
-			Code: "invalid_json",
+			Code:    "invalid_json",
 			Message: "Query json could not be unmarshaled. Check for invalid json.",
 		}
 	}
@@ -1405,19 +1401,19 @@ func ParseJsonQuery(collection string, js []byte) (*Query, DbError) {
 
 // Build a database query based a map[string]interface{} data structure
 // resembling a Mongo query.
-// 
+//
 // It returns a Query equal to the Mongo query, with unsupported features omitted.
 // An error is returned if the building of the query fails.
 func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError) {
 	q := Q(collection)
 
-	// First, Handle joins so query and field specification parsing can use 
+	// First, Handle joins so query and field specification parsing can use
 	// join info.
 	if rawJoins, ok := data["joins"]; ok {
 		rawJoinSlice, ok := rawJoins.([]interface{})
 		if !ok {
 			return nil, Error{
-				Code: "invalid_joins",
+				Code:    "invalid_joins",
 				Message: "Joins must be an array of strings",
 			}
 		}
@@ -1429,14 +1425,14 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 			join, ok := rawJoin.(string)
 			if !ok {
 				return nil, Error{
-					Code: "invalid_joins",
+					Code:    "invalid_joins",
 					Message: "Joins must be an array of strings",
 				}
 			}
 			joins = append(joins, join)
 		}
 
-		// To handle nested joins, parseQueryJoins has to be called repeatedly 
+		// To handle nested joins, parseQueryJoins has to be called repeatedly
 		// until no more joins are returned.
 		for depth := 1; true; depth++ {
 			var err DbError
@@ -1455,11 +1451,11 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 		query, ok := rawQuery.(map[string]interface{})
 		if !ok {
 			return nil, Error{
-				Code: "invalid_filters",
+				Code:    "invalid_filters",
 				Message: "The filters key must contain a dict",
 			}
 		}
-		
+
 		if err := parseQueryFilters(q, query); err != nil {
 			return nil, err
 		}
@@ -1470,7 +1466,7 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 		fields, ok := rawFields.([]interface{})
 		if !ok {
 			return nil, Error{
-				Code: "invalid_fields",
+				Code:    "invalid_fields",
 				Message: "Fields specification must be an array",
 			}
 		}
@@ -1479,7 +1475,7 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 			field, ok := rawField.(string)
 			if !ok {
 				return nil, Error{
-					Code: "invalid_fields",
+					Code:    "invalid_fields",
 					Message: "Fields specification must be an array of strings",
 				}
 			}
@@ -1487,10 +1483,10 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 			parts := strings.Split(field, ".")
 			if len(parts) > 1 {
 				// Possibly a field on a joined model. Check if a parent join can be found.
-				joinQ := q.GetJoin(strings.Join(parts[:len(parts) - 1], "."))
+				joinQ := q.GetJoin(strings.Join(parts[:len(parts)-1], "."))
 				if joinQ != nil {
 					// Join query found, add field to the join query.
-					joinQ.AddFields(parts[len(parts) - 1])
+					joinQ.AddFields(parts[len(parts)-1])
 				} else {
 					// No join query found, maybe the backend supports nested fields.
 					joinQ.AddFields(field)
@@ -1506,7 +1502,7 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 	if rawLimit, ok := data["limit"]; ok {
 		if limit, err := NumericToInt64(rawLimit); err != nil {
 			return nil, Error{
-				Code: "limit_non_numeric",
+				Code:    "limit_non_numeric",
 				Message: "Limit must be a number",
 			}
 		} else {
@@ -1518,14 +1514,13 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 	if rawOffset, ok := data["offset"]; ok {
 		if offset, err := NumericToInt64(rawOffset); err != nil {
 			return nil, Error{
-				Code: "offset_non_numeric",
+				Code:    "offset_non_numeric",
 				Message: "Offset must be a number",
 			}
 		} else {
 			q.Offset(int(offset))
 		}
 	}
-
 
 	return q, nil
 }
@@ -1540,22 +1535,22 @@ func parseQueryJoins(q *Query, joins []string, depth int) ([]string, DbError) {
 			// The depth of the join equals to the one that should be processed, so do!
 			if len(parts) > 1 {
 				// Nested join! So try to retrieve the parent join query.
-				joinQ := q.GetJoin(strings.Join(parts[:joinDepth - 1], "."))
+				joinQ := q.GetJoin(strings.Join(parts[:joinDepth-1], "."))
 				if joinQ == nil {
 					// Parent join not found, obviosly an error.
 					return nil, Error{
-						Code: "invalid_nested_join",
+						Code:    "invalid_nested_join",
 						Message: fmt.Sprintf("Tried to join %v, but the parent join was not found", name),
 					}
 				}
 				// Join the current join on the parent join.
-				joinQ.Join(parts[len(parts) - 1])
+				joinQ.Join(parts[len(parts)-1])
 			} else {
 				// Not nested, just join on the main query.
 				q.Join(name)
 			}
 		} else {
-			// Join has other depth than the one that is processed, so append to 
+			// Join has other depth than the one that is processed, so append to
 			// remaining.
 			remaining = append(remaining, name)
 		}
@@ -1587,7 +1582,7 @@ func parseQueryFilters(q *Query, filters map[string]interface{}) DbError {
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
 func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
-	// Handle 
+	// Handle
 	switch name {
 	case "$eq":
 		return Eq("placeholder", data), nil
@@ -1611,7 +1606,7 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 
 	if name == "$nor" {
 		return nil, Error{
-			Code: "unsupported_nor_query",
+			Code:    "unsupported_nor_query",
 			Message: "$nor queryies are not supported",
 		}
 	}
@@ -1642,7 +1637,7 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 
 	if nestedData, ok := data.(map[string]interface{}); ok {
 		// Nested dict with multipe AND clauses.
-		
+
 		// Build an AND filter.
 		and := And()
 		for key := range nestedData {

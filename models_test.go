@@ -3,7 +3,7 @@ package dukedb_test
 import (
 	"fmt"
 	"strconv"
-	
+
 	. "github.com/theduke/go-dukedb"
 
 	. "github.com/onsi/ginkgo"
@@ -13,14 +13,14 @@ import (
 type BaseModel struct {
 }
 
-func (i BaseModel) GetID() string { 
-	return "" 
+func (i BaseModel) GetID() string {
+	return ""
 }
 func (i BaseModel) SetID(x string) error {
 	return nil
 }
-func (i BaseModel) Collection() string { 
-	return "base_model" 
+func (i BaseModel) Collection() string {
+	return "base_model"
 }
 
 type TestModel struct {
@@ -30,8 +30,8 @@ type TestModel struct {
 	TestParentID uint64 `db:"ignore-zero"`
 
 	// For explicit has-one/belongs-to
-	MyParent *TestParent `db:"has-one:MyParentID:ID"`
-	MyParentID uint64 `db:"ignore-zero"`
+	MyParent   *TestParent `db:"has-one:MyParentID:ID"`
+	MyParentID uint64      `db:"ignore-zero"`
 
 	StrVal string
 	IntVal int64
@@ -60,13 +60,13 @@ func (t *TestModel) SetID(x string) error {
 type TestParent struct {
 	TestModel
 
-	Child TestModel
+	Child   TestModel
 	ChildID uint64
 
 	ChildPtr *TestModel
 
-	ChildSlice []TestModel
-	ChildSlice2 []TestModel `db:"belongs-to:ID:MyParentID"`
+	ChildSlice    []TestModel
+	ChildSlice2   []TestModel  `db:"belongs-to:ID:MyParentID"`
 	ChildSlicePtr []*TestModel `db:"m2m"`
 }
 
@@ -74,7 +74,7 @@ func (t TestParent) Collection() string {
 	return "test_parents"
 }
 
-func NewTestModel(index int) TestModel{
+func NewTestModel(index int) TestModel {
 	return TestModel{
 		StrVal: fmt.Sprintf("str%v", index),
 		IntVal: int64(index),
@@ -89,29 +89,29 @@ func NewTestParent(index int, withChildren bool) TestParent {
 	var childSlice []TestModel
 	var childPtrSlice []*TestModel
 	if withChildren {
-		child = NewTestModel(index * 10 + 1)
+		child = NewTestModel(index*10 + 1)
 
-		child2 := NewTestModel(index * 10 + 2)
+		child2 := NewTestModel(index*10 + 2)
 		childPtr = &child2
 
-		childSlice = NewTestModelSlice(index * 10 + 3, 2)
-		childPtrSlice = NewTestModelPtrSlice(index * 10 + 5, 2)
+		childSlice = NewTestModelSlice(index*10+3, 2)
+		childPtrSlice = NewTestModelPtrSlice(index*10+5, 2)
 	}
 
 	return TestParent{
 		TestModel: base,
 
-		Child: child,
+		Child:    child,
 		ChildPtr: childPtr,
 
-		ChildSlice: childSlice,
+		ChildSlice:    childSlice,
 		ChildSlicePtr: childPtrSlice,
 	}
 }
 
 func NewTestModelSlice(startIndex int, count int) []TestModel {
 	slice := make([]TestModel, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		slice = append(slice, NewTestModel(i))
 	}
 
@@ -120,7 +120,7 @@ func NewTestModelSlice(startIndex int, count int) []TestModel {
 
 func NewTestModelPtrSlice(startIndex int, count int) []*TestModel {
 	slice := make([]*TestModel, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		model := NewTestModel(i)
 		slice = append(slice, &model)
 	}
@@ -130,7 +130,7 @@ func NewTestModelPtrSlice(startIndex int, count int) []*TestModel {
 
 func NewTestModelInterfaceSlice(startIndex int, count int) []Model {
 	slice := make([]Model, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		model := NewTestModel(i)
 		slice = append(slice, &model)
 	}
@@ -140,7 +140,7 @@ func NewTestModelInterfaceSlice(startIndex int, count int) []Model {
 
 func NewTestParentSlice(startIndex int, count int, withChildren bool) []TestParent {
 	slice := make([]TestParent, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		slice = append(slice, NewTestParent(i, withChildren))
 	}
 
@@ -149,7 +149,7 @@ func NewTestParentSlice(startIndex int, count int, withChildren bool) []TestPare
 
 func NewTestParentPtrSlice(startIndex int, count int, withChildren bool) []*TestParent {
 	slice := make([]*TestParent, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		parent := NewTestParent(i, withChildren)
 		slice = append(slice, &parent)
 	}
@@ -159,7 +159,7 @@ func NewTestParentPtrSlice(startIndex int, count int, withChildren bool) []*Test
 
 func NewTestParentInterfaceSlice(startIndex int, count int, withChildren bool) []Model {
 	slice := make([]Model, 0)
-	for i := startIndex; i < startIndex + count; i++ {
+	for i := startIndex; i < startIndex+count; i++ {
 		model := NewTestParent(i, withChildren)
 		slice = append(slice, &model)
 	}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/lib/pq"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 
 	. "github.com/theduke/go-dukedb"
@@ -121,7 +121,7 @@ var _ = Describe("Backend", func() {
 			It("Should filter with field backend name", func() {
 				model := NewTestModel(60)
 				Expect(backend.Create(&model)).ToNot(HaveOccurred())
-				
+
 				m, err := backend.Q("test_models").Filter("int_val", 60).First()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m.GetID()).To(Equal(model.GetID()))
@@ -130,7 +130,7 @@ var _ = Describe("Backend", func() {
 			It("Should filter with struct field name", func() {
 				model := NewTestModel(61)
 				Expect(backend.Create(&model)).ToNot(HaveOccurred())
-				
+
 				m, err := backend.Q("test_models").Filter("IntVal", 61).First()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m.GetID()).To(Equal(model.GetID()))
@@ -139,7 +139,7 @@ var _ = Describe("Backend", func() {
 			It("Should filter with simple AND", func() {
 				model := NewTestModel(63)
 				Expect(backend.Create(&model)).ToNot(HaveOccurred())
-				
+
 				m, err := backend.Q("test_models").Filter("IntVal", 63).Filter("str_val", "str63").First()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m.GetID()).To(Equal(model.GetID()))
@@ -238,7 +238,7 @@ var _ = Describe("Backend", func() {
 				err := backend.Create(&model)
 				Expect(err).ToNot(HaveOccurred())
 
-				m2m, err := backend.M2M(&model, "ChildSlicePtr")	
+				m2m, err := backend.M2M(&model, "ChildSlicePtr")
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m2m.Count()).To(Equal(1))
 				Expect(m2m.All()[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
@@ -313,12 +313,12 @@ var _ = Describe("Backend", func() {
 
 			os.Open("test")
 			/*
-			Context("Sqlite3", func() {
-				backend, connectionError = sql.New("sqlite3", ".test.sqlite3")
-				testBackend()
-				os.Remove(".test.sqlite3")
-				os.Remove(".test.sqlite3-journal")
-			})
+				Context("Sqlite3", func() {
+					backend, connectionError = sql.New("sqlite3", ".test.sqlite3")
+					testBackend()
+					os.Remove(".test.sqlite3")
+					os.Remove(".test.sqlite3-journal")
+				})
 			*/
 		})
 	})
