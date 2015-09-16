@@ -571,7 +571,7 @@ func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface
 }
 
 // Perform a query.	
-func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
+func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
 		return nil, db.Error{
@@ -601,12 +601,16 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 
 	// Do joins.
 	if len(q.Joins) > 0 {
-		if err := db.BackendDoJoins(&b, q.Model, models, q.Joins); err != nil {
+		if err := db.BackendDoJoins(b, q.Model, models, q.Joins); err != nil {
 			return nil, db.Error{
 				Code: "join_error",
 				Message: err.Error(),
 			}
 		}
+	}
+
+	for _, m := range models {
+		db.CallModelHook(b, m, "AfterQuery")
 	}
 
 	return models, nil
@@ -670,6 +674,10 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		}
 	}
 
+	if err := db.CallModelHook(b, m, "BeforeCreate"); err != nil {
+		return err
+	}
+
 	// Persist relationships before create.
 	err := db.BackendPersistRelations(b, info, m)
 	if err != nil {
@@ -716,6 +724,8 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		return err
 	}
 
+	db.CallModelHook(b, m, "AfterCreate")
+
 	return nil
 }
 
@@ -745,6 +755,10 @@ func (b *Backend) Update(m db.Model) db.DbError {
 		}
 	}
 
+	if err := db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
+		return err
+	}
+
 	data, err := db.ModelToMap(info, m, false)
 	if err != nil {
 		return err
@@ -766,6 +780,8 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	if err != nil {
 		return err
 	}
+
+	db.CallModelHook(b, m, "AfterUpdate")
 
 	return nil
 }
@@ -806,13 +822,17 @@ func (b Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbEr
 	return nil
 }
 
-func (b Backend) Delete(m db.Model) db.DbError {
+func (b *Backend) Delete(m db.Model) db.DbError {
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
 			Code: "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
+	}
+
+	if err := db.CallModelHook(b, m, "BeforeDelete"); err != nil {
+		return err
 	}
 
 	spec, err := b.selectForModel(info, m)
@@ -828,6 +848,8 @@ func (b Backend) Delete(m db.Model) db.DbError {
 			Message: err2.Error(),
 		}
 	}
+
+	db.CallModelHook(b, m, "AfterDelete")
 
 	return nil
 }

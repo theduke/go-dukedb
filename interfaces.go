@@ -10,6 +10,7 @@ type DbError interface {
 	GetCode() string
 	GetMessage() string
 	GetData() interface{}
+	IsInternal() bool
 	GetErrors() []error
 	AddError(error)
 	Error() string
@@ -136,4 +137,32 @@ type Model interface {
 	Collection() string
 	GetID() string
 	SetID(string) error
+}
+
+type ModelBeforeCreateHook interface {
+	BeforeCreate(Backend) DbError
+}
+
+type ModelAfterCreateHook interface {
+	AfterCreate(Backend)
+}
+
+type ModelBeforeUpdateHook interface {
+	BeforeUpdate(Backend) DbError
+}
+
+type ModelAfterUpdateHook interface {
+	AfterUpdate(Backend)
+}
+
+type ModelBeforeDeleteHook interface {
+	BeforeDelete(Backend) DbError
+}
+
+type ModelAfterDeleteHook interface {
+	AfterDelete(Backend)
+}
+
+type ModelAfterQueryHook interface {
+	AfterQuery(Backend)
 }

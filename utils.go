@@ -875,6 +875,55 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
 }
 
 /**
+ * Model hooks.
+ */
+
+func CallModelHook(b Backend, m Model, hook string) DbError {
+	switch hook {
+	case "BeforeCreate":
+		if h, ok := m.(ModelBeforeCreateHook); ok {
+			return h.BeforeCreate(b)
+		}
+		return nil	
+	case "AfterCreate":
+		if h, ok := m.(ModelAfterCreateHook); ok {
+			h.AfterCreate(b)
+		}
+		return nil	
+	case "BeforeUpdate":
+		if h, ok := m.(ModelBeforeUpdateHook); ok {
+			return h.BeforeUpdate(b)
+		}
+		return nil	
+	case "AfterUpdate":
+		if h, ok := m.(ModelAfterUpdateHook); ok {
+			h.AfterUpdate(b)
+		}
+		return nil	
+	case "BeforeDelete":
+		if h, ok := m.(ModelBeforeDeleteHook); ok {
+			return h.BeforeDelete(b)
+		}
+		return nil	
+	case "AfterDelete":
+		if h, ok := m.(ModelAfterDeleteHook); ok {
+			h.AfterDelete(b)
+		}
+		return nil	
+	case "AfterQuery":
+		if h, ok := m.(ModelAfterQueryHook); ok {
+			h.AfterQuery(b)
+		}
+		return nil	
+	default:
+		return Error{
+			Code: "invalid_hook",
+			Message: fmt.Sprintf("Unknown hook %v", hook),
+		}
+	}
+}
+
+/**
  * ModelInfo struct and methods
  */
 

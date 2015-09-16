@@ -269,6 +269,10 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 		}
 	}
 
+	for _, m := range models {
+		db.CallModelHook(b, m, "AfterQuery")
+	}
+
 	return models, nil
 }
 
@@ -327,6 +331,10 @@ func (b Backend) Create(m db.Model) db.DbError {
 		}
 	}
 
+	if err := db.CallModelHook(b, m, "BeforeCreate"); err != nil {
+		return err
+	}
+
 	id := m.GetID()
 	if _, ok := b.data[modelName][id]; ok {
 		return db.Error{
@@ -337,6 +345,8 @@ func (b Backend) Create(m db.Model) db.DbError {
 
 	b.data[modelName][id] = m
 	m.SetID(len(b.data[modelName]) + 1)
+
+	db.CallModelHook(b, m, "AfterCreate")
 
 	return nil
 }
@@ -350,7 +360,13 @@ func (b Backend) Update(m db.Model) db.DbError {
 		}
 	}
 
+	if err := db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
+		return err
+	}
+
 	b.data[modelName][m.GetID()] = m
+
+	db.CallModelHook(b, m, "AfterUpdate")
 
 	return nil
 }
@@ -364,6 +380,10 @@ func (b Backend) Delete(m db.Model) db.DbError {
 		}
 	}
 
+	if err := db.CallModelHook(b, m, "BeforeDelete"); err != nil {
+		return err
+	}
+
 	id := m.GetID()
 	if _, ok := b.data[modelName][id]; !ok {
 		return db.Error{
@@ -373,6 +393,8 @@ func (b Backend) Delete(m db.Model) db.DbError {
 	}
 
 	delete(b.data[modelName], id)
+
+	db.CallModelHook(b, m, "AfterDelete")
 
 	return nil
 }

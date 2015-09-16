@@ -8,6 +8,7 @@ type Error struct {
 	Code    string      `json:"code,omitempty"`
 	Message string      `json:"title,omitempty"`
 	Data    interface{} `json:"-"`
+	Internal bool
 	Errors []error `json:"-"`
 }
 
@@ -21,6 +22,10 @@ func (e Error) GetMessage() string {
 
 func (e Error) GetData() interface{} {
 	return e.Data
+}
+
+func (e Error) IsInternal() bool {
+	return e.Internal
 }
 
 func (e Error) GetErrors() []error {
