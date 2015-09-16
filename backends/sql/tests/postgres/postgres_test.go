@@ -11,6 +11,6 @@ import (
 )
 
 var _ = Describe("Postgres", func() {
-	backend, _ = sql.New("postgres", "postgres://test:@localhost/test?sslmode=disable")
+	backend, _ := sql.New("postgres", "postgres://@localhost:10001/test?sslmode=disable")
 	tests.TestBackend(backend)
 })

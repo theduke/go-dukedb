@@ -12,6 +12,7 @@ func TestBackend(backend db.Backend) {
 		backend.SetDebug(true)
 		backend.RegisterModel(&TestModel{})
 		backend.RegisterModel(&TestParent{})
+		backend.RegisterModel(&HooksModel{})
 		backend.BuildRelationshipInfo()
 
 		Expect(backend.GetDebug()).To(Equal(true))
@@ -27,6 +28,9 @@ func TestBackend(backend db.Backend) {
 		Expect(err).ToNot(HaveOccurred())
 
 		err = backend.CreateCollection("test_parents")
+		Expect(err).ToNot(HaveOccurred())
+
+		err = backend.CreateCollection("hooks_models")
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -275,4 +279,57 @@ func TestBackend(backend db.Backend) {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(m).To(BeNil())
 	})
+
+	// Hooks tests.
+	It("Should call before/afterCreate hooks", func() {
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+		Expect(m.CalledHooks).To(Equal([]string{"before_create", "after_create"}))
+	})
+
+	It("Should stop on error in BeforeCreate()", func() {
+		m := &HooksModel{HookError: true}
+		Expect(backend.Create(m)).To(Equal(db.Error{Code: "before_create"}))
+	})
+
+	It("Should call before/afterUpdate hooks", func() {
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+
+		m.CalledHooks = nil
+
+		Expect(backend.Update(m)).ToNot(HaveOccurred())
+		Expect(m.CalledHooks).To(Equal([]string{"before_update", "after_update"}))
+	})
+
+	It("Should stop on error in BeforeUpdate()", func() {
+		m := &HooksModel{HookError: true}
+		Expect(backend.Update(m)).To(Equal(db.Error{Code: "before_update"}))
+	})
+
+	It("Should call before/afterDelete hooks", func() {
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+
+		m.CalledHooks = nil
+
+		Expect(backend.Delete(m)).ToNot(HaveOccurred())
+		Expect(m.CalledHooks).To(Equal([]string{"before_delete", "after_delete"}))
+	})
+
+	It("Should stop on error in BeforeDelete()", func() {
+		m := &HooksModel{HookError: true}
+		Expect(backend.Delete(m)).To(Equal(db.Error{Code: "before_delete"}))
+	})
+
+	It("Should call AfterQuery hook", func() {
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+		m.CalledHooks = nil
+
+		m2, err := backend.FindOne("hooks_models", m.GetID())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(m2.(*HooksModel).CalledHooks).To(Equal([]string{"after_query"}))
+	})
+
 }

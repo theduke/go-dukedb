@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/theduke/go-dukedb/backends/sql"
-	db "github.com/theduke/go-dukedb"
 )
 
 func TestPostgres(t *testing.T) {
@@ -23,8 +22,6 @@ func TestPostgres(t *testing.T) {
 var serverCmd *exec.Cmd
 var tmpDir string
 var finishedChannel chan bool
-
-var backend db.Backend
 
 var _ = BeforeSuite(func() {
 	tmpDir = path.Join(os.TempDir(), "dukedb_backend_postgres_test")
@@ -49,7 +46,7 @@ var _ = BeforeSuite(func() {
 		"unix_socket_directories=" + tmpDir,
 	}
 	fmt.Printf("Starting postgres server\n")
-	serverCmd := exec.Command("postgres", args...) 
+	serverCmd = exec.Command("postgres", args...) 
 
   err = serverCmd.Start()
   Expect(err).NotTo(HaveOccurred())
@@ -57,17 +54,16 @@ var _ = BeforeSuite(func() {
   // Give the server some time to start.
   time.Sleep(time.Second * 3)
 
-  // Create a database.
-  fmt.Printf("Creating test database\n")
- 	_, err = exec.Command("bash", "-c", "echo \"create database test;\" | psql -h localhost -p 10001 -d postgres").Output()
- 	Expect(err).ToNot(HaveOccurred()) 
-
- 	fmt.Printf("Connecting to test database\n")
- 	backend, err = sql.New("postgres", "postgres://test:@localhost/test?sslmode=disable")
+ 	fmt.Printf("Connecting to postgres database\n")
+ 	backend, err := sql.New("postgres", "postgres://@localhost:10001/postgres?sslmode=disable")
  	Expect(err).ToNot(HaveOccurred())
  	Expect(backend).ToNot(BeNil())
+
+ 	_, err = backend.SqlExec("CREATE DATABASE test")
+ 	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
+	serverCmd.Process.Kill()
 	os.RemoveAll(tmpDir)  
 })

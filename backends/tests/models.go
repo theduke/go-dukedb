@@ -54,6 +54,56 @@ func (t *TestModel) SetID(x string) error {
 	return nil
 }
 
+type HooksModel struct {
+	TestModel
+	CalledHooks []string `db:"-"`
+	HookError bool `db:"-"`
+}
+
+func (h HooksModel) Collection() string {
+	return "hooks_models"
+}
+
+func (h *HooksModel) BeforeCreate(Backend) DbError {
+	h.CalledHooks = append(h.CalledHooks, "before_create")
+	if h.HookError {
+		return Error{Code: "before_create"}
+	}
+	return nil
+}
+
+func (h *HooksModel) AfterCreate(Backend) {
+	h.CalledHooks = append(h.CalledHooks, "after_create")
+}
+
+func (h *HooksModel) BeforeUpdate(Backend) DbError {
+	h.CalledHooks = append(h.CalledHooks, "before_update")
+	if h.HookError {
+		return Error{Code: "before_update"}
+	}
+	return nil
+}
+
+func (h *HooksModel) AfterUpdate(Backend) {
+	h.CalledHooks = append(h.CalledHooks, "after_update")
+}
+
+func (h *HooksModel) BeforeDelete(Backend) DbError {
+	h.CalledHooks = append(h.CalledHooks, "before_delete")
+	if h.HookError {
+		return Error{Code: "before_delete"}
+	}
+	return nil
+}
+
+func (h *HooksModel) AfterDelete(Backend) {
+	h.CalledHooks = append(h.CalledHooks, "after_delete")
+}
+
+func (h *HooksModel) AfterQuery(Backend) {
+	h.CalledHooks = append(h.CalledHooks, "after_query")
+}
+
 type TestParent struct {
 	TestModel
 
