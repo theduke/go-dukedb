@@ -334,6 +334,9 @@ func (b Backend) Create(m db.Model) db.DbError {
 	if err := db.CallModelHook(b, m, "BeforeCreate"); err != nil {
 		return err
 	}
+	if err := db.CallModelHook(b, m, "Validate"); err != nil {
+		return err
+	}
 
 	id := m.GetID()
 	if _, ok := b.data[modelName][id]; ok {
@@ -361,6 +364,9 @@ func (b Backend) Update(m db.Model) db.DbError {
 	}
 
 	if err := db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
+		return err
+	}
+	if err := db.CallModelHook(b, m, "Validate"); err != nil {
 		return err
 	}
 

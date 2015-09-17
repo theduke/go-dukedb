@@ -281,10 +281,10 @@ func TestBackend(backend db.Backend) {
 	})
 
 	// Hooks tests.
-	It("Should call before/afterCreate hooks", func() {
+	It("Should call before/afterCreate + Validate hooks", func() {
 		m := &HooksModel{}
 		Expect(backend.Create(m)).ToNot(HaveOccurred())
-		Expect(m.CalledHooks).To(Equal([]string{"before_create", "after_create"}))
+		Expect(m.CalledHooks).To(Equal([]string{"before_create", "validate", "after_create"}))
 	})
 
 	It("Should stop on error in BeforeCreate()", func() {
@@ -299,7 +299,7 @@ func TestBackend(backend db.Backend) {
 		m.CalledHooks = nil
 
 		Expect(backend.Update(m)).ToNot(HaveOccurred())
-		Expect(m.CalledHooks).To(Equal([]string{"before_update", "after_update"}))
+		Expect(m.CalledHooks).To(Equal([]string{"before_update", "validate", "after_update"}))
 	})
 
 	It("Should stop on error in BeforeUpdate()", func() {

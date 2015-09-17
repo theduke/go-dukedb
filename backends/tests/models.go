@@ -64,6 +64,11 @@ func (h HooksModel) Collection() string {
 	return "hooks_models"
 }
 
+func (h *HooksModel) Validate() DbError {
+	h.CalledHooks = append(h.CalledHooks, "validate")
+	return nil
+}
+
 func (h *HooksModel) BeforeCreate(Backend) DbError {
 	h.CalledHooks = append(h.CalledHooks, "before_create")
 	if h.HookError {

@@ -880,6 +880,11 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
 
 func CallModelHook(b Backend, m Model, hook string) DbError {
 	switch hook {
+	case "Validate":
+		if h, ok := m.(ModelValidateHook); ok {
+			return h.Validate()
+		}
+		return nil		
 	case "BeforeCreate":
 		if h, ok := m.(ModelBeforeCreateHook); ok {
 			return h.BeforeCreate(b)

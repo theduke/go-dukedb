@@ -677,6 +677,9 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	if err := db.CallModelHook(b, m, "BeforeCreate"); err != nil {
 		return err
 	}
+	if err := db.CallModelHook(b, m, "Validate"); err != nil {
+		return err
+	}
 
 	// Persist relationships before create.
 	err := db.BackendPersistRelations(b, info, m)
@@ -756,6 +759,9 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	}
 
 	if err := db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
+		return err
+	}
+	if err := db.CallModelHook(b, m, "Validate"); err != nil {
 		return err
 	}
 

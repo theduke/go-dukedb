@@ -139,6 +139,10 @@ type Model interface {
 	SetID(string) error
 }
 
+type ModelValidateHook interface {
+	Validate() DbError
+}
+
 type ModelBeforeCreateHook interface {
 	BeforeCreate(Backend) DbError
 }
