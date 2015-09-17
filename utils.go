@@ -211,6 +211,12 @@ func NumericToInt64(x interface{}) (int64, DbError) {
 		val = int64(x.(float32))
 	case reflect.Float64:
 		val = int64(x.(float64))
+	case reflect.String:
+		x, err := strconv.ParseInt(x.(string), 10, 64)
+		if err != nil {
+			return int64(0), Error{Code: "non_numeric_string"}
+		}
+		val = x
 	default:
 		return int64(0), Error{Code: "non_numeric_type"}
 	}
@@ -246,7 +252,14 @@ func NumericToUint64(x interface{}) (uint64, DbError) {
 		val = uint64(x.(float32))
 	case reflect.Float64:
 		val = uint64(x.(float64))
+	case reflect.String:
+		x, err := strconv.ParseInt(x.(string), 10, 64)
+		if err != nil {
+			return uint64(0), Error{Code: "non_numeric_string"}
+		}
+		val = uint64(x)
 	default:
+		panic("nonnumeric")
 		return uint64(0), Error{Code: "non_numeric_type"}
 	}
 
@@ -281,6 +294,12 @@ func NumericToFloat64(x interface{}) (float64, DbError) {
 		val = float64(x.(float32))
 	case reflect.Float64:
 		val = x.(float64)
+	case reflect.String:
+		x, err := strconv.ParseFloat(x.(string), 64)
+		if err != nil {
+			return val, Error{Code: "non_numeric_string"}
+		}
+		val = x
 	default:
 		return float64(0), Error{Code: "non_numeric_type"}
 	}

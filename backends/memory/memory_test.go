@@ -1,19 +1,14 @@
 package memory_test
 
 import (
-	. "github.com/theduke/go-dukedb/backends/memory"
-
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	//. "github.com/onsi/gomega"
+
+	"github.com/theduke/go-dukedb/backends/tests"
+	. "github.com/theduke/go-dukedb/backends/memory"
 )
 
 var _ = Describe("Memory", func() {
-
-	var _ Backend
-
-
-	It("SHould ok", func() {
-		Expect(1).To(Equal(1))
-	})
-
+	backend := New()
+	tests.TestBackend(backend)
 })

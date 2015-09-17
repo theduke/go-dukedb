@@ -3,8 +3,7 @@ package memory
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/jinzhu/gorm"
+	"strconv"
 
 	db "github.com/theduke/go-dukedb"
 )
@@ -23,7 +22,7 @@ type Backend struct {
 var _ db.Backend = (*Backend)(nil)
 var _ db.MigrationBackend = (*Backend)(nil)
 
-func New(gorm *gorm.DB) *Backend {
+func New() *Backend {
 	b := Backend{}
 
 	b.ModelInfo = make(map[string]*db.ModelInfo)
@@ -37,7 +36,7 @@ func New(gorm *gorm.DB) *Backend {
 	return &b
 }
 
-func (b Backend) GetName() string {
+func (b *Backend) GetName() string {
 	return "memory"
 }
 
@@ -45,7 +44,7 @@ func (b *Backend) SetDebug(d bool) {
 	b.Debug = d
 }
 
-func (b Backend) Copy() db.Backend {
+func (b *Backend) Copy() db.Backend {
 	copied := Backend{}
 
 	copied.ModelInfo = b.ModelInfo
@@ -54,7 +53,7 @@ func (b Backend) Copy() db.Backend {
 	return &copied
 }
 
-func (b Backend) CreateCollection(name string) db.DbError {
+func (b *Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -63,11 +62,12 @@ func (b Backend) CreateCollection(name string) db.DbError {
 		}
 	}
 
-	//  NoOp.
+	b.data[name] = make(map[string]interface{})
+	
 	return nil
 }
 
-func (b Backend) DropCollection(name string) db.DbError {
+func (b *Backend) DropCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -83,7 +83,7 @@ func (b Backend) DropCollection(name string) db.DbError {
 	return nil
 }
 
-func (b Backend) DropAllCollections() db.DbError {
+func (b *Backend) DropAllCollections() db.DbError {
 	for name := range b.ModelInfo {
 		if err := b.DropCollection(name); err != nil {
 			return err
@@ -99,7 +99,7 @@ func (b *Backend) Q(model string) *db.Query {
 	return q
 }
 
-func filterStruct(item interface{}, filter db.Filter) (bool, db.DbError) {
+func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, db.DbError) {
 	filterType := filter.Type()
 
 	if filterType == "and" {
@@ -107,7 +107,7 @@ func filterStruct(item interface{}, filter db.Filter) (bool, db.DbError) {
 
 		// Check each and filter.
 		for _, andFilter := range and.Filters {
-			if ok, err := filterStruct(item, andFilter); err != nil {
+			if ok, err := filterStruct(info, item, andFilter); err != nil {
 				// Error occurred, return it.
 				return false, err
 			} else if (!ok) {
@@ -125,7 +125,7 @@ func filterStruct(item interface{}, filter db.Filter) (bool, db.DbError) {
 
 		// Check each or filter.
 		for _, orFilter := range or.Filters {
-			if ok, err := filterStruct(item, orFilter); err != nil {
+			if ok, err := filterStruct(info, item, orFilter); err != nil {
 				// Error occurred, return it.
 				return false, err
 			} else if (ok) {
@@ -141,21 +141,29 @@ func filterStruct(item interface{}, filter db.Filter) (bool, db.DbError) {
 	if filterType == "not" {
 		not := filter.(*db.NotCondition)
 
-		if ok, err := filterStruct(item, not.Filter); err != nil {
-			// Error occurred, return it.
-			return false, err
-		} else if (ok) {
-			// A positive match means a NOT condition is true, so return false.
-			return false, nil
-		} else {
-			return true, nil
+		for _, notFilter := range not.Filters {
+			if ok, err := filterStruct(info, item, notFilter); err != nil {
+				// Error occurred, return it.
+				return false, err
+			} else if (ok) {
+				// One positivie match means a NOT condition is true, so return false
+				return false, nil
+			}
 		}
+
+		return true, nil
 	}
 
 	if condition, ok := filter.(*db.FieldCondition); ok {
 		val := condition.Value
 		// The actual value for the filtered field.
-		structVal, err := db.GetStructFieldValue(item, condition.Field)
+
+		fieldName := condition.Field
+		if mappedName := info.MapFieldName(fieldName); mappedName != "" {
+			fieldName = mappedName
+		}
+
+		structVal, err := db.GetStructFieldValue(item, fieldName)
 		if err != nil {
 			return false, err
 		}
@@ -175,7 +183,7 @@ func filterStruct(item interface{}, filter db.Filter) (bool, db.DbError) {
 	}
 }
 
-func (b Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
+func (b *Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
 		return nil, db.Error{
@@ -184,24 +192,25 @@ func (b Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
 		}
 	}
 
-	result := make([]interface{}, 0)
+	items := make([]interface{}, 0)
 
-	// Filter items.
-	if q.Filters != nil {
-		for _, item := range b.data[q.Model] {
-			isMatched := true
+	for _, item := range b.data[q.Model] {
+		isMatched := true
+		
+		// Filter items.
+		if q.Filters != nil {
 			for _, filter := range q.Filters {
-				if ok, err := filterStruct(item, filter); err != nil {
+				if ok, err := filterStruct(info, item, filter); err != nil {
 					return nil, err
 				} else if !ok {
 					isMatched = false
 					break
 				}
 			}
+		}	
 
-			if isMatched {
-				result = append(result, item)
-			}
+		if isMatched {
+			items = append(items, item)
 		}
 	}
 
@@ -231,19 +240,19 @@ func (b Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
 			}
 		}
 
-		db.SortStructSlice(result, field, q.Orders[0].Ascending)	
+		db.SortStructSlice(items, field, q.Orders[0].Ascending)	
 	}
 
 	// Limit & Offset.
 
 	if q.OffsetNum != 0 {
-		result = result[q.OffsetNum:]
+		items = items[q.OffsetNum:]
 	}
 	if q.LimitNum != 0 {
-		result = result[:q.LimitNum]
+		items = items[:q.LimitNum]
 	}
 
-	return result, nil
+	return items, nil
 }
 
 func (b *Backend) BuildRelationQuery(q *db.RelationQuery) (*db.Query, db.DbError) {
@@ -251,23 +260,13 @@ func (b *Backend) BuildRelationQuery(q *db.RelationQuery) (*db.Query, db.DbError
 }
 
 // Perform a query.	
-func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
+func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
 	}
 
 	models, _ := db.InterfaceToModelSlice(result)
-
-	// Do joins.
-	if len(q.Joins) > 0 {
-		if err := db.BackendDoJoins(&b, q.Model, models, q.Joins); err != nil {
-			return nil, db.Error{
-				Code: "join_error",
-				Message: err.Error(),
-			}
-		}
-	}
 
 	for _, m := range models {
 		db.CallModelHook(b, m, "AfterQuery")
@@ -276,11 +275,11 @@ func (b Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	return models, nil
 }
 
-func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
-	return db.BackendQueryOne(&b, q)
+func (b *Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
+	return db.BackendQueryOne(b, q)
 }
 
-func (b Backend) Count(q *db.Query) (int, db.DbError) {
+func (b *Backend) Count(q *db.Query) (int, db.DbError) {
 	info := b.GetModelInfo(q.Model)
 	if info == nil {
 		return 0, db.Error{
@@ -300,20 +299,20 @@ func (b Backend) Count(q *db.Query) (int, db.DbError) {
 	return len(result), nil
 }
 
-func (b Backend) Last(q *db.Query) (db.Model, db.DbError) {
-	return db.BackendLast(&b, q)
+func (b *Backend) Last(q *db.Query) (db.Model, db.DbError) {
+	return db.BackendLast(b, q)
 }
 
 // Find first model with primary key ID.
-func (b Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(&b, modelType, id)	
+func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
+	return db.BackendFindOne(b, modelType, id)	
 }
 
-func (b Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
+func (b *Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
 	return b.Q(modelType).Filter(field, value).Find()
 }
 
-func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
 	return b.Q(modelType).Filter(field, value).First()
 }
 
@@ -322,7 +321,7 @@ func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model
 // Store the model.
 // Fails if the model type was not registered, or if the primary key already
 // exists.	 
-func (b Backend) Create(m db.Model) db.DbError {
+func (b *Backend) Create(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
@@ -346,15 +345,21 @@ func (b Backend) Create(m db.Model) db.DbError {
 		}
 	}
 
-	b.data[modelName][id] = m
-	m.SetID(len(b.data[modelName]) + 1)
+	newId := strconv.Itoa(len(b.data[modelName]) + 1)
+	if err := m.SetID(newId); err != nil {
+		return db.Error{
+			Code: "set_id_error",
+			Message: fmt.Sprintf("Error while setting the id %v on model %v", newId, modelName),
+		}
+	}
+	b.data[modelName][m.GetID()] = m
 
 	db.CallModelHook(b, m, "AfterCreate")
 
 	return nil
 }
 
-func (b Backend) Update(m db.Model) db.DbError {
+func (b *Backend) Update(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
@@ -377,7 +382,26 @@ func (b Backend) Update(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) Delete(m db.Model) db.DbError {
+func (b *Backend) UpdateByMap(m db.Model, data map[string]interface{}) db.DbError {
+	modelName := m.Collection()
+	info := b.GetModelInfo(modelName)
+
+	if info == nil {
+		return db.Error{
+			Code: "unknown_model",
+			Message: fmt.Sprintf("The model %v was not registered with backend", modelName),
+		}
+	}
+
+	if err := db.UpdateModelFromData(info, m, data); err != nil {
+		return err
+	}
+
+	b.data[modelName][m.GetID()] = m
+	return nil
+}
+
+func (b *Backend) Delete(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
@@ -405,7 +429,7 @@ func (b Backend) Delete(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) DeleteMany(q *db.Query) db.DbError {
+func (b *Backend) DeleteMany(q *db.Query) db.DbError {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return err
@@ -424,7 +448,7 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  * M2M
  */
 
-func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
+func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
 	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 
