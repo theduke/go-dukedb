@@ -726,8 +726,8 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.Model).To(Equal("col"))
-			Expect(q.Filters[0]).To(BeEquivalentTo(Eq("name", "testname")))
+			Expect(q.GetCollection()).To(Equal("col"))
+			Expect(q.GetFilters()[0]).To(BeEquivalentTo(Eq("name", "testname")))
 		})
 
 		It("Shold parse comparison operator condition correctly", func() {
@@ -738,8 +738,8 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.Model).To(Equal("col"))
-			Expect(q.Filters[0]).To(BeEquivalentTo(Gt("intField", float64(20))))
+			Expect(q.GetCollection()).To(Equal("col"))
+			Expect(q.GetFilters()[0]).To(BeEquivalentTo(Gt("intField", float64(20))))
 		})
 
 		It("Shold parse multiple conditions correctly", func() {
@@ -751,8 +751,8 @@ var _ = Describe("Utils", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 
-			first := q.Filters[0].(*FieldCondition)
-			second := q.Filters[1].(*FieldCondition)
+			first := q.GetFilters()[0].(*FieldCondition)
+			second := q.GetFilters()[1].(*FieldCondition)
 
 			// The ordering by json.Unmarshal() is random, so swap the filters
 			// if the order is reversed.
@@ -777,7 +777,7 @@ var _ = Describe("Utils", func() {
 
 			// The ordering by json.Unmarshal() is random, so checking has to be done
 			// with order in mind.
-			or := q.Filters[0].(*OrCondition)
+			or := q.GetFilters()[0].(*OrCondition)
 			first := or.Filters[0].(*FieldCondition)
 			second := or.Filters[1].(*FieldCondition)
 
@@ -799,7 +799,7 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.LimitNum).To(Equal(20))
+			Expect(q.GetLimit()).To(Equal(20))
 		})
 
 		It("Shold parse offset correctly", func() {
@@ -810,7 +810,7 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.OffsetNum).To(Equal(20))
+			Expect(q.GetOffset()).To(Equal(20))
 		})
 
 		It("Shold parse fields correctly", func() {
@@ -821,7 +821,7 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.FieldSpec).To(Equal([]string{"field1", "field2"}))
+			Expect(q.GetFields()).To(Equal([]string{"field1", "field2"}))
 		})
 
 		It("Shold parse joins", func() {
@@ -832,7 +832,7 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.Joins[0]).To(Equal(RelQ(q, "Children")))
+			Expect(q.GetJoins()[0]).To(Equal(RelQ(q, "Children")))
 		})
 
 		It("Shold parse joined fields", func() {
@@ -844,7 +844,7 @@ var _ = Describe("Utils", func() {
 			q, err := ParseJsonQuery("col", []byte(json))
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(q.Joins[0].FieldSpec).To(Equal([]string{"field1", "field2"}))
+			Expect(q.GetJoins()[0].GetFields()).To(Equal([]string{"field1", "field2"}))
 		})
 
 		It("Shold parse nested joins", func() {
@@ -856,11 +856,11 @@ var _ = Describe("Utils", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 
-			Expect(len(q.Joins)).To(Equal(1))
-			Expect(q.Joins[0].RelationName).To(Equal("Children"))
+			Expect(len(q.GetJoins())).To(Equal(1))
+			Expect(q.GetJoins()[0].GetRelationName()).To(Equal("Children"))
 
-			Expect(len(q.Joins[0].Joins)).To(Equal(1))
-			Expect(q.Joins[0].Joins[0].RelationName).To(Equal("Tags"))
+			Expect(len(q.GetJoins()[0].GetJoins())).To(Equal(1))
+			Expect(q.GetJoins()[0].GetJoins()[0].GetRelationName()).To(Equal("Tags"))
 		})
 	})
 })

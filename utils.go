@@ -903,45 +903,45 @@ func CallModelHook(b Backend, m Model, hook string) DbError {
 		if h, ok := m.(ModelValidateHook); ok {
 			return h.Validate()
 		}
-		return nil		
+		return nil
 	case "BeforeCreate":
 		if h, ok := m.(ModelBeforeCreateHook); ok {
 			return h.BeforeCreate(b)
 		}
-		return nil	
+		return nil
 	case "AfterCreate":
 		if h, ok := m.(ModelAfterCreateHook); ok {
 			h.AfterCreate(b)
 		}
-		return nil	
+		return nil
 	case "BeforeUpdate":
 		if h, ok := m.(ModelBeforeUpdateHook); ok {
 			return h.BeforeUpdate(b)
 		}
-		return nil	
+		return nil
 	case "AfterUpdate":
 		if h, ok := m.(ModelAfterUpdateHook); ok {
 			h.AfterUpdate(b)
 		}
-		return nil	
+		return nil
 	case "BeforeDelete":
 		if h, ok := m.(ModelBeforeDeleteHook); ok {
 			return h.BeforeDelete(b)
 		}
-		return nil	
+		return nil
 	case "AfterDelete":
 		if h, ok := m.(ModelAfterDeleteHook); ok {
 			h.AfterDelete(b)
 		}
-		return nil	
+		return nil
 	case "AfterQuery":
 		if h, ok := m.(ModelAfterQueryHook); ok {
 			h.AfterQuery(b)
 		}
-		return nil	
+		return nil
 	default:
 		return Error{
-			Code: "invalid_hook",
+			Code:    "invalid_hook",
 			Message: fmt.Sprintf("Unknown hook %v", hook),
 		}
 	}
@@ -1460,7 +1460,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
  * Query parser functions.
  */
 
-func ParseJsonQuery(collection string, js []byte) (*Query, DbError) {
+func ParseJsonQuery(collection string, js []byte) (Query, DbError) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
 		return nil, Error{
@@ -1477,7 +1477,7 @@ func ParseJsonQuery(collection string, js []byte) (*Query, DbError) {
 //
 // It returns a Query equal to the Mongo query, with unsupported features omitted.
 // An error is returned if the building of the query fails.
-func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError) {
+func ParseQuery(collection string, data map[string]interface{}) (Query, DbError) {
 	q := Q(collection)
 
 	// First, Handle joins so query and field specification parsing can use
@@ -1598,7 +1598,7 @@ func ParseQuery(collection string, data map[string]interface{}) (*Query, DbError
 	return q, nil
 }
 
-func parseQueryJoins(q *Query, joins []string, depth int) ([]string, DbError) {
+func parseQueryJoins(q Query, joins []string, depth int) ([]string, DbError) {
 	remaining := make([]string, 0)
 
 	for _, name := range joins {
@@ -1632,7 +1632,7 @@ func parseQueryJoins(q *Query, joins []string, depth int) ([]string, DbError) {
 	return remaining, nil
 }
 
-func parseQueryFilters(q *Query, filters map[string]interface{}) DbError {
+func parseQueryFilters(q Query, filters map[string]interface{}) DbError {
 	filter, err := parseQueryFilter("", filters)
 	if err != nil {
 		return err

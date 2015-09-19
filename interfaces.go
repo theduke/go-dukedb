@@ -16,6 +16,142 @@ type DbError interface {
 	Error() string
 }
 
+type BackendQueryMixin interface {
+	GetBackend() Backend
+	SetBackend(Backend)
+
+	Find() ([]Model, DbError)
+	First() (Model, DbError)
+	Last() (Model, DbError)
+	Count() (int, DbError)
+	Delete() DbError
+}
+
+type Query interface {
+	BackendQueryMixin
+
+	GetCollection() string
+
+	Limit(int) Query
+	GetLimit() int
+
+	Offset(int) Query
+	GetOffset() int
+
+	Fields(...string) Query
+	AddFields(...string) Query
+	LimitFields(...string) Query
+	GetFields() []string
+
+	Order(name string, asc bool) Query
+	SetOrders(...OrderSpec) Query
+	GetOrders() []OrderSpec
+
+	// Filters.
+
+	FilterQ(...Filter) Query
+	Filter(field string, val interface{}) Query
+	FilterCond(field string, condition string, val interface{}) Query
+
+	AndQ(filters ...Filter) Query
+	And(field string, val interface{}) Query
+	AndCond(field, condition string, val interface{}) Query
+
+	OrQ(filters ...Filter) Query
+	Or(field string, val interface{}) Query
+	OrCond(field string, condition string, val interface{}) Query
+
+	NotQ(...Filter) Query
+	Not(field string, val interface{}) Query
+	NotCond(field string, condition string, val interface{}) Query
+
+	GetFilters() []Filter
+	SetFilters(f ...Filter) Query
+
+	// Joins.
+
+	JoinQ(jq RelationQuery) Query
+	Join(fieldName string) Query
+	GetJoin(field string) RelationQuery
+	GetJoins() []RelationQuery
+
+	// Related.
+
+	Related(name string) RelationQuery
+	RelatedCustom(name, collection, joinKey, foreignKey, typ string) RelationQuery
+}
+
+type RelationQuery interface {
+	// RelationQuery specific methods.
+
+	GetCollection() string
+
+	GetBaseQuery() Query
+	SetBaseQuery(Query)
+
+	GetRelationName() string
+	GetJoinType() string
+
+	GetJoinFieldName() string
+	SetJoinFieldName(string)
+
+	GetForeignFieldName() string
+	SetForeignFieldName(string)
+
+	Build() (Query, DbError)
+
+	// BackendQuery methods.
+	BackendQueryMixin
+
+	Limit(int) RelationQuery
+	GetLimit() int
+
+	Offset(int) RelationQuery
+	GetOffset() int
+
+	Fields(...string) RelationQuery
+	AddFields(...string) RelationQuery
+	LimitFields(...string) RelationQuery
+	GetFields() []string
+
+	Order(name string, asc bool) RelationQuery
+	SetOrders(...OrderSpec) RelationQuery
+	GetOrders() []OrderSpec
+
+	// Filters.
+
+	FilterQ(...Filter) RelationQuery
+	Filter(field string, val interface{}) RelationQuery
+	FilterCond(field string, condition string, val interface{}) RelationQuery
+
+	AndQ(filters ...Filter) RelationQuery
+	And(field string, val interface{}) RelationQuery
+	AndCond(field, condition string, val interface{}) RelationQuery
+
+	OrQ(filters ...Filter) RelationQuery
+	Or(field string, val interface{}) RelationQuery
+	OrCond(field string, condition string, val interface{}) RelationQuery
+
+	NotQ(...Filter) RelationQuery
+	Not(field string, val interface{}) RelationQuery
+	NotCond(field string, condition string, val interface{}) RelationQuery
+
+	GetFilters() []Filter
+	SetFilters(f ...Filter) RelationQuery
+
+	// Joins.
+
+	JoinQ(jq RelationQuery) RelationQuery
+	Join(fieldName string) RelationQuery
+	GetJoin(field string) RelationQuery
+	GetJoins() []RelationQuery
+
+	// Related.
+
+	Related(name string) RelationQuery
+	RelatedCustom(name, collection, joinKey, foreignKey, typ string) RelationQuery
+}
+
 type Backend interface {
 	GetName() string
 
@@ -50,18 +186,18 @@ type Backend interface {
 	DropAllCollections() DbError
 
 	// Return a new query connected to the backend.
-	Q(modelType string) *Query
+	Q(modelType string) Query
 
 	// Perform a query.
-	Query(*Query) ([]Model, DbError)
-	QueryOne(*Query) (Model, DbError)
+	Query(Query) ([]Model, DbError)
+	QueryOne(Query) (Model, DbError)
 
-	Last(*Query) (Model, DbError)
-	Count(*Query) (int, DbError)
+	Last(Query) (Model, DbError)
+	Count(Query) (int, DbError)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
-	BuildRelationQuery(q *RelationQuery) (*Query, DbError)
+	BuildRelationQuery(q RelationQuery) (Query, DbError)
 
 	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
@@ -79,7 +215,7 @@ type Backend interface {
 	Update(Model) DbError
 	UpdateByMap(Model, map[string]interface{}) DbError
 	Delete(Model) DbError
-	DeleteMany(*Query) DbError
+	DeleteMany(Query) DbError
 }
 
 type M2MCollection interface {
