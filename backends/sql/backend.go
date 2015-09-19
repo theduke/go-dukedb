@@ -1,15 +1,14 @@
 package sql
 
 import (
-	"reflect"
 	"fmt"
+	"reflect"
 	"strconv"
 
 	"database/sql"
 
 	db "github.com/theduke/go-dukedb"
 )
-
 
 type Backend struct {
 	db.BaseBackend
@@ -34,7 +33,7 @@ func New(driver, driverOptions string) (*Backend, db.DbError) {
 
 	switch driver {
 	case "postgres":
-			b.dialect = &PostgresDialect{}
+		b.dialect = &PostgresDialect{}
 	case "mysql":
 		b.dialect = &MysqlDialect{}
 	case "sqlite3":
@@ -46,7 +45,7 @@ func New(driver, driverOptions string) (*Backend, db.DbError) {
 	DB, err := sql.Open(driver, driverOptions)
 	if err != nil {
 		return nil, db.Error{
-			Code: "connection_error",
+			Code:    "connection_error",
 			Message: err.Error(),
 		}
 	}
@@ -72,9 +71,9 @@ func (b *Backend) SetDebug(d bool) {
 
 func (b Backend) Copy() db.Backend {
 	copied := Backend{
-		Db: b.Db,
-		dialect: b.dialect,
-		TableInfo: b.TableInfo,	
+		Db:               b.Db,
+		dialect:          b.dialect,
+		TableInfo:        b.TableInfo,
 		MigrationHandler: b.MigrationHandler,
 	}
 	copied.ModelInfo = b.ModelInfo
@@ -111,19 +110,19 @@ func (b Backend) BuildRelationshipInfo() {
 
 			column := tableInfo.Columns[modelInfo.GetPkField().BackendName]
 			pkColumn := &ColumnInfo{
-				Name: modelInfo.BackendName + "_" + column.Name,
-				Type: column.Type,
-				NotNull: true,
-				ForeignKey: column.Name,
+				Name:            modelInfo.BackendName + "_" + column.Name,
+				Type:            column.Type,
+				NotNull:         true,
+				ForeignKey:      column.Name,
 				ForeignKeyTable: tableInfo.Name,
 			}
 
 			column = relatedTableInfo.Columns[relatedInfo.GetPkField().BackendName]
 			foreignColumn := &ColumnInfo{
-				Name: relatedInfo.BackendName + "_" + column.Name,
-				Type: column.Type,
-				NotNull: true,
-				ForeignKey: column.Name,
+				Name:            relatedInfo.BackendName + "_" + column.Name,
+				Type:            column.Type,
+				NotNull:         true,
+				ForeignKey:      column.Name,
 				ForeignKeyTable: relatedTableInfo.Name,
 			}
 
@@ -131,7 +130,7 @@ func (b Backend) BuildRelationshipInfo() {
 				table := &TableInfo{
 					Name: fieldInfo.M2MCollection,
 					Columns: map[string]*ColumnInfo{
-						pkColumn.Name: pkColumn,
+						pkColumn.Name:      pkColumn,
 						foreignColumn.Name: foreignColumn,
 					},
 					UniqueFields: [][]string{[]string{pkColumn.Name, foreignColumn.Name}},
@@ -170,10 +169,10 @@ func (b Backend) sqlScanRow(query string, args []interface{}, vars ...interface{
 	rows, err := b.SqlQuery(query, args...)
 	if err != nil {
 		return db.Error{
-			Code: "sql_error",
+			Code:    "sql_error",
 			Message: err.Error(),
-			Data: err,
-		}	
+			Data:    err,
+		}
 	}
 
 	defer rows.Close()
@@ -181,28 +180,28 @@ func (b Backend) sqlScanRow(query string, args []interface{}, vars ...interface{
 	rows.Scan(vars...)
 	if err := rows.Err(); err != nil {
 		return db.Error{
-			Code: "sql_rows_error",
+			Code:    "sql_rows_error",
 			Message: err.Error(),
 		}
-	}	
+	}
 
 	return nil
-} 
+}
 
 func (b Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
 		}
 	}
 
 	tableInfo := b.TableInfo[info.BackendName]
-	stmt := b.dialect.CreateTableStatement(tableInfo, true)	
+	stmt := b.dialect.CreateTableStatement(tableInfo, true)
 	if _, err := b.SqlExec(stmt); err != nil {
 		return db.Error{
-			Code: "create_table_failed",
+			Code:    "create_table_failed",
 			Message: err.Error(),
 		}
 	}
@@ -212,10 +211,10 @@ func (b Backend) CreateCollection(name string) db.DbError {
 		field := info.FieldInfo[name]
 		if field.M2M {
 			table := b.TableInfo[field.M2MCollection]
-			stmt := b.dialect.CreateTableStatement(table, true)	
+			stmt := b.dialect.CreateTableStatement(table, true)
 			if _, err := b.SqlExec(stmt); err != nil {
 				return db.Error{
-					Code: "create_m2m_table_failed",
+					Code:    "create_m2m_table_failed",
 					Message: err.Error(),
 				}
 			}
@@ -226,10 +225,10 @@ func (b Backend) CreateCollection(name string) db.DbError {
 }
 
 func (b Backend) DropTable(name string, ifExists bool) db.DbError {
-	stmt := b.dialect.DropTableStatement(name, ifExists)	
+	stmt := b.dialect.DropTableStatement(name, ifExists)
 	if _, err := b.SqlExec(stmt); err != nil {
 		return db.Error{
-			Code: "drop_table_failed",
+			Code:    "drop_table_failed",
 			Message: err.Error(),
 		}
 	}
@@ -241,7 +240,7 @@ func (b Backend) DropCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
 		}
 	}
@@ -250,7 +249,7 @@ func (b Backend) DropCollection(name string) db.DbError {
 	for fieldName := range info.FieldInfo {
 		field := info.FieldInfo[fieldName]
 		if field.M2M {
-			b.DropTable(field.M2MCollection, true)	
+			b.DropTable(field.M2MCollection, true)
 		}
 	}
 
@@ -269,10 +268,9 @@ func (b Backend) DropAllCollections() db.DbError {
 				continue
 			}
 
-ColumnLoop:
+		ColumnLoop:
 			for columnName := range t.Columns {
 				column := t.Columns[columnName]
-
 
 				if column.ForeignKey != "" && column.ForeignKeyTable != info.BackendName {
 					// Try to find the collection for the table name.
@@ -302,16 +300,15 @@ ColumnLoop:
 	return nil
 }
 
-
-func (b *Backend) Q(model string) *db.Query {
+func (b *Backend) Q(model string) db.Query {
 	q := db.Q(model)
-	q.Backend = b
+	q.SetBackend(b)
 	return q
 }
 
 func (b Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connector string) (string, []interface{}) {
 	sql := "("
-	args := make([]interface{}, 0)	
+	args := make([]interface{}, 0)
 
 	count := len(filters)
 	for i := 0; i < count; i++ {
@@ -320,7 +317,7 @@ func (b Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connec
 		sql += subSql
 		args = append(args, subArgs...)
 
-		if i < count -1 {
+		if i < count-1 {
 			sql += " " + connector + " "
 		}
 	}
@@ -349,7 +346,7 @@ func (b Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []in
 			cond.Field = fieldInfo.BackendName
 		}
 
-		sql = cond.Field + " " + operator 
+		sql = cond.Field + " " + operator
 		if filterName == "in" {
 			sql += " (" + b.dialect.ReplacementCharacter() + ")"
 		} else {
@@ -378,12 +375,12 @@ func (b Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []in
 	return sql, args
 }
 
-func (b Backend) selectByQuery(q *db.Query) (*SelectSpec, db.DbError) {
-	info := b.GetModelInfo(q.Model)
+func (b Backend) selectByQuery(q db.Query) (*SelectSpec, db.DbError) {
+	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
-			Code: "unknown_model",
-			Message: fmt.Sprintf("Model '%v' not registered with sql backend", q.Model),
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Model '%v' not registered with sql backend", q.GetCollection()),
 		}
 	}
 
@@ -391,11 +388,14 @@ func (b Backend) selectByQuery(q *db.Query) (*SelectSpec, db.DbError) {
 	where := ""
 	whereArgs := make([]interface{}, 0)
 
-	if q.Filters != nil && len(q.Filters) > 0 {
-		if len(q.Filters) == 1 {
-			where, whereArgs = b.filterToSql(info, q.Filters[0])
+	filters := q.GetFilters()
+	filterLen := len(filters)
+
+	if filters != nil && filterLen > 0 {
+		if filterLen == 1 {
+			where, whereArgs = b.filterToSql(info, filters[0])
 		} else {
-			filter := db.And(q.Filters...)
+			filter := db.And(filters...)
 			where, whereArgs = b.filterToSql(info, filter)
 		}
 	}
@@ -403,9 +403,9 @@ func (b Backend) selectByQuery(q *db.Query) (*SelectSpec, db.DbError) {
 	// Handle field specificiaton.
 	columns := []string{"*"}
 
-	if len(q.FieldSpec) > 0 {
+	if len(q.GetFields()) > 0 {
 		columns = make([]string, 0)
-		for _, field := range q.FieldSpec {
+		for _, field := range q.GetFields() {
 			if fieldInfo, ok := info.FieldInfo[field]; ok {
 				columns = append(columns, fieldInfo.BackendName)
 			} else {
@@ -415,49 +415,50 @@ func (b Backend) selectByQuery(q *db.Query) (*SelectSpec, db.DbError) {
 	}
 
 	// Ordering.
-	orders := ""
-	if q.Orders != nil {
-
-		count := len(q.Orders)
+	sqlOrder := ""
+	orders := q.GetOrders()
+	if orders != nil {
+		count := len(orders)
 		for i := 0; i < count; i++ {
-			orders += q.Orders[i].String()
-			if i < count - 1 {
-				orders += ", "
+			sqlOrder += orders[i].String()
+			if i < count-1 {
+				sqlOrder += ", "
 			}
 		}
 	}
 
 	// Handle joins.
-	var joins []Join
-	if q.Joins != nil {
-		for _, join := range q.Joins {
-			if join.JoinType == "" || join.Model == "" || join.JoinFieldName == "" || join.ForeignFieldName == "" {
+	var sqlJoins []Join
+	joins := q.GetJoins()
+	if joins != nil {
+		for _, join := range joins {
+			if join.GetJoinType() == "" || join.GetCollection() == "" || join.GetJoinFieldName() == "" || join.GetForeignFieldName() == "" {
 				continue
 			}
 
 			joinSpec := Join{
-				Table: join.Model,
-				Type: join.JoinType,
-				JoinColumn: join.JoinFieldName,
-				ForeignKeyColumn: join.ForeignFieldName,
+				Table:            join.GetCollection(),
+				Type:             join.GetJoinType(),
+				JoinColumn:       join.GetJoinFieldName(),
+				ForeignKeyColumn: join.GetForeignFieldName(),
 			}
-			joins = append(joins, joinSpec)
+			sqlJoins = append(sqlJoins, joinSpec)
 		}
 	}
 
 	return &SelectSpec{
-		Table: info.BackendName,
-		Columns: columns,
-		Where: where,
+		Table:     info.BackendName,
+		Columns:   columns,
+		Where:     where,
 		WhereArgs: whereArgs,
-		Orders: orders,
-		Limit: q.LimitNum,
-		Offset: q.OffsetNum,
-		Joins: joins,
+		Orders:    sqlOrder,
+		Limit:     q.GetLimit(),
+		Offset:    q.GetOffset(),
+		Joins:     sqlJoins,
 	}, nil
 }
 
-func (b *Backend) BuildRelationQuery(q *db.RelationQuery) (*db.Query, db.DbError) {
+func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) {
 	return db.BuildRelationQuery(b, nil, q)
 }
 
@@ -465,16 +466,16 @@ func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfac
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
 		return nil, db.Error{
-			Code: "sql_error",
+			Code:    "sql_error",
 			Message: err.Error(),
 		}
 	}
 	defer rows.Close()
 
-	cols, err  := rows.Columns()
+	cols, err := rows.Columns()
 	if err != nil {
 		return nil, db.Error{
-			Code: "sql_rows_error",
+			Code:    "sql_rows_error",
 			Message: err.Error(),
 		}
 	}
@@ -489,7 +490,7 @@ func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfac
 	for rows.Next() {
 		if err := rows.Scan(valPointers...); err != nil {
 			return nil, db.Error{
-				Code: "sql_scan_error",
+				Code:    "sql_scan_error",
 				Message: err.Error(),
 			}
 		}
@@ -502,7 +503,7 @@ func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfac
 	}
 	if err := rows.Err(); err != nil {
 		return nil, db.Error{
-			Code: "sql_rows_error",
+			Code:    "sql_rows_error",
 			Message: err.Error(),
 		}
 	}
@@ -514,16 +515,16 @@ func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
 		return nil, db.Error{
-			Code: "sql_error",
+			Code:    "sql_error",
 			Message: err.Error(),
 		}
 	}
 	defer rows.Close()
 
-	cols, err  := rows.Columns()
+	cols, err := rows.Columns()
 	if err != nil {
 		return nil, db.Error{
-			Code: "sql_rows_error",
+			Code:    "sql_rows_error",
 			Message: err.Error(),
 		}
 	}
@@ -548,14 +549,14 @@ func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface
 
 		if err := rows.Scan(vals...); err != nil {
 			return nil, db.Error{
-				Code: "sql_scan_error",
+				Code:    "sql_scan_error",
 				Message: err.Error(),
 			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, db.Error{
-			Code: "sql_rows_error",
+			Code:    "sql_rows_error",
 			Message: err.Error(),
 		}
 	}
@@ -563,20 +564,20 @@ func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface
 	modelSlice, err := db.InterfaceToModelSlice(models)
 	if err != nil {
 		return nil, db.Error{
-			Code: "model_conversion_error",
+			Code:    "model_conversion_error",
 			Message: err.Error(),
 		}
 	}
 	return modelSlice, nil
 }
 
-// Perform a query.	
-func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
-	info := b.GetModelInfo(q.Model)
+// Perform a query.
+func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
+	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
-			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.Model),
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.GetCollection()),
 		}
 	}
 
@@ -600,10 +601,10 @@ func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	models, _ := db.InterfaceToModelSlice(slice)
 
 	// Do joins.
-	if len(q.Joins) > 0 {
-		if err := db.BackendDoJoins(b, q.Model, models, q.Joins); err != nil {
+	if len(q.GetJoins()) > 0 {
+		if err := db.BackendDoJoins(b, q.GetCollection(), models, q.GetJoins()); err != nil {
 			return nil, db.Error{
-				Code: "join_error",
+				Code:    "join_error",
 				Message: err.Error(),
 			}
 		}
@@ -616,20 +617,20 @@ func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	return models, nil
 }
 
-func (b Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
+func (b Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
 	return db.BackendQueryOne(&b, q)
 }
 
-func (b Backend) Count(q *db.Query) (int, db.DbError) {
-	info := b.GetModelInfo(q.Model)
+func (b Backend) Count(q db.Query) (int, db.DbError) {
+	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return -1, db.Error{
-			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.Model),
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.GetCollection()),
 		}
 	}
 
-	q.FieldSpec = []string{"COUNT(*) as count"}
+	q.Fields("COUNT(*) as count")
 
 	spec, err := b.selectByQuery(q)
 	if err != nil {
@@ -641,17 +642,17 @@ func (b Backend) Count(q *db.Query) (int, db.DbError) {
 	if err := b.sqlScanRow(stmt, args, &count); err != nil {
 		return -1, err
 	}
-		
+
 	return count, nil
 }
 
-func (b Backend) Last(q *db.Query) (db.Model, db.DbError) {
+func (b Backend) Last(q db.Query) (db.Model, db.DbError) {
 	return db.BackendLast(&b, q)
 }
 
 // Find first model with primary key ID.
 func (b Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(&b, modelType, id)	
+	return db.BackendFindOne(&b, modelType, id)
 }
 
 func (b Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
@@ -664,12 +665,11 @@ func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model
 
 // Auto-persist related models.
 
-	 
 func (b *Backend) Create(m db.Model) db.DbError {
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
@@ -695,12 +695,11 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	tableInfo := b.TableInfo[info.BackendName]
 	sql, args := b.dialect.InsertMapStatement(tableInfo, data)
 
-
 	if b.dialect.HasLastInsertID() {
 		result, err2 := b.SqlExec(sql, args...)
 		if err2 != nil {
 			return db.Error{
-				Code: "sql_insert_error",
+				Code:    "sql_insert_error",
 				Message: err2.Error(),
 			}
 		}
@@ -717,7 +716,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		}
 		if len(rows) == 1 {
 			data := rows[0]
-			db.UpdateModelFromData(info, m, data)	
+			db.UpdateModelFromData(info, m, data)
 		}
 	}
 
@@ -753,7 +752,7 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
@@ -796,7 +795,7 @@ func (b Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbEr
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
@@ -820,7 +819,7 @@ func (b Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbEr
 	_, err2 := b.SqlExec(stmt, args...)
 	if err2 != nil {
 		return db.Error{
-			Code: "sql_update_error",
+			Code:    "sql_update_error",
 			Message: err2.Error(),
 		}
 	}
@@ -832,7 +831,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v was not registered with sql backend", m.Collection()),
 		}
 	}
@@ -850,7 +849,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	_, err2 := b.SqlExec(stmt, args...)
 	if err2 != nil {
 		return db.Error{
-			Code: "sql_delete_error",
+			Code:    "sql_delete_error",
 			Message: err2.Error(),
 		}
 	}
@@ -860,7 +859,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) DeleteMany(q *db.Query) db.DbError {
+func (b Backend) DeleteMany(q db.Query) db.DbError {
 	spec, err := b.selectByQuery(q)
 	if err != nil {
 		return err
@@ -871,7 +870,7 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
 	_, err2 := b.SqlExec(stmt, args...)
 	if err2 != nil {
 		return db.Error{
-			Code: "sql_delete_error",
+			Code:    "sql_delete_error",
 			Message: err2.Error(),
 		}
 	}
@@ -883,21 +882,20 @@ func (b Backend) DeleteMany(q *db.Query) db.DbError {
  * M2M
  */
 
-
 func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
 		return nil, db.Error{
-			Code: "unknown_field",
+			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", obj.Collection(), name),
 		}
 	}
 
 	if !fieldInfo.M2M {
 		return nil, db.Error{
-			Code: "no_m2m_field",
+			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.Collection()),
 		}
 	}
@@ -905,27 +903,27 @@ func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 	relationInfo := b.GetModelInfo(fieldInfo.RelationItem.Collection())
 	if relationInfo == nil {
 		return nil, db.Error{
-			Code: "unknown_relation_model",
+			Code:    "unknown_relation_model",
 			Message: fmt.Sprintf("Model '%v' not registered with sql backend", fieldInfo.RelationItem.Collection()),
 		}
 	}
 
 	col := &M2MCollection{
-		Backend: &b,
-		Model: obj,
-		ModelInfo: info,
+		Backend:      &b,
+		Model:        obj,
+		ModelInfo:    info,
 		RelationInfo: relationInfo,
 
 		Name: name,
 
 		table: fieldInfo.M2MCollection,
 
-		modelField: info.PkField,
-		modelColumnName: info.GetPkField().BackendName,
+		modelField:           info.PkField,
+		modelColumnName:      info.GetPkField().BackendName,
 		joinTableModelColumn: info.BackendName + "_" + info.GetPkField().BackendName,
 
-		relationField: relationInfo.PkField,
-		relationColumnName: relationInfo.GetPkField().BackendName,
+		relationField:           relationInfo.PkField,
+		relationColumnName:      relationInfo.GetPkField().BackendName,
 		joinTableRelationColumn: relationInfo.BackendName + "_" + relationInfo.GetPkField().BackendName,
 	}
 
@@ -934,7 +932,7 @@ func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 		return nil, err
 	}
 	col.Query = query
-	
+
 	items, err := b.Query(col.Query)
 	if err != nil {
 		return nil, err
@@ -949,29 +947,29 @@ type M2MCollection struct {
 
 	Backend *Backend
 
-	Model db.Model
-	ModelInfo *db.ModelInfo
+	Model        db.Model
+	ModelInfo    *db.ModelInfo
 	RelationInfo *db.ModelInfo
 
 	Name string
 
 	table string
-	
-	modelField string
-	modelColumnName string
+
+	modelField           string
+	modelColumnName      string
 	joinTableModelColumn string
 
-	relationField string
-	relationColumnName string
+	relationField           string
+	relationColumnName      string
 	joinTableRelationColumn string
 
-	Query *db.Query
+	Query db.Query
 }
 
 // Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
 var _ db.M2MCollection = (*M2MCollection)(nil)
 
-func (c M2MCollection) BuildQuery() (*db.Query, db.DbError) {
+func (c M2MCollection) BuildQuery() (db.Query, db.DbError) {
 	pk, _ := db.GetStructFieldValue(c.Model, c.modelField)
 	return c.Backend.Q(c.ModelInfo.Collection).Filter(c.modelField, pk).Related(c.Name).Build()
 }
@@ -984,7 +982,7 @@ func (c *M2MCollection) Add(items ...db.Model) db.DbError {
 			relationId, _ := db.GetStructFieldValue(item, c.relationField)
 
 			data := map[string]interface{}{
-				c.joinTableModelColumn: modelId,
+				c.joinTableModelColumn:    modelId,
 				c.joinTableRelationColumn: relationId,
 			}
 			stmt, args := c.Backend.dialect.InsertMapStatement(c.Backend.TableInfo[c.table], data)
@@ -992,7 +990,7 @@ func (c *M2MCollection) Add(items ...db.Model) db.DbError {
 			_, err := c.Backend.SqlExec(stmt, args...)
 			if err != nil {
 				return db.Error{
-					Code: "sql_insert_error",
+					Code:    "sql_insert_error",
 					Message: err.Error(),
 				}
 			}
@@ -1017,8 +1015,8 @@ func (c *M2MCollection) Delete(items ...db.Model) db.DbError {
 
 	where, whereArgs := c.Backend.filterToSql(c.ModelInfo, filters)
 	spec := &SelectSpec{
-		Table: c.table,
-		Where: where,
+		Table:     c.table,
+		Where:     where,
 		WhereArgs: whereArgs,
 	}
 
@@ -1026,7 +1024,7 @@ func (c *M2MCollection) Delete(items ...db.Model) db.DbError {
 	_, err := c.Backend.SqlExec(stmt, args)
 	if err != nil {
 		return db.Error{
-			Code: "sql_delete_error",
+			Code:    "sql_delete_error",
 			Message: err.Error(),
 		}
 	}
@@ -1047,8 +1045,8 @@ func (c *M2MCollection) Clear() db.DbError {
 	filter := db.Eq(c.modelColumnName, modelId)
 	where, whereArgs := c.Backend.filterToSql(c.ModelInfo, filter)
 	spec := &SelectSpec{
-		Table: c.table,
-		Where: where,
+		Table:     c.table,
+		Where:     where,
 		WhereArgs: whereArgs,
 	}
 
@@ -1056,7 +1054,7 @@ func (c *M2MCollection) Clear() db.DbError {
 	_, err := c.Backend.SqlExec(stmt, args)
 	if err != nil {
 		return db.Error{
-			Code: "sql_delete_error",
+			Code:    "sql_delete_error",
 			Message: err.Error(),
 		}
 	}

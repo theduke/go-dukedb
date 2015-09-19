@@ -8,7 +8,6 @@ import (
 	db "github.com/theduke/go-dukedb"
 )
 
-
 type Backend struct {
 	db.BaseBackend
 
@@ -67,13 +66,13 @@ func (b *Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
 		}
 	}
 
 	b.data[name] = make(map[string]interface{})
-	
+
 	return nil
 }
 
@@ -81,7 +80,7 @@ func (b *Backend) DropCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
 		}
 	}
@@ -103,9 +102,9 @@ func (b *Backend) DropAllCollections() db.DbError {
 	return nil
 }
 
-func (b *Backend) Q(model string) *db.Query {
+func (b *Backend) Q(model string) db.Query {
 	q := db.Q(model)
-	q.Backend = b
+	q.SetBackend(b)
 	return q
 }
 
@@ -120,7 +119,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 			if ok, err := filterStruct(info, item, andFilter); err != nil {
 				// Error occurred, return it.
 				return false, err
-			} else if (!ok) {
+			} else if !ok {
 				// No match, return false.
 				return false, nil
 			}
@@ -138,7 +137,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 			if ok, err := filterStruct(info, item, orFilter); err != nil {
 				// Error occurred, return it.
 				return false, err
-			} else if (ok) {
+			} else if ok {
 				// One positivie match is enough. Return true.
 				return true, nil
 			}
@@ -155,7 +154,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 			if ok, err := filterStruct(info, item, notFilter); err != nil {
 				// Error occurred, return it.
 				return false, err
-			} else if (ok) {
+			} else if ok {
 				// One positivie match means a NOT condition is true, so return false
 				return false, nil
 			}
@@ -188,28 +187,28 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 
 	// If execution comes here, filter type is unsupported.
 	return false, db.Error{
-		Code: "unsupported_filter",
+		Code:    "unsupported_filter",
 		Message: fmt.Sprintf("The filter %v is not supported by the memory backend", filter.Type()),
 	}
 }
 
-func (b *Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
-	info := b.GetModelInfo(q.Model)
+func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
+	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
-			Code: "unknown_model",
-			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.Model),
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.GetCollection()),
 		}
 	}
 
 	items := make([]interface{}, 0)
 
-	for _, item := range b.data[q.Model] {
+	for _, item := range b.data[q.GetCollection()] {
 		isMatched := true
-		
+
 		// Filter items.
-		if q.Filters != nil {
-			for _, filter := range q.Filters {
+		if q.GetFilters() != nil {
+			for _, filter := range q.GetFilters() {
 				if ok, err := filterStruct(info, item, filter); err != nil {
 					return nil, err
 				} else if !ok {
@@ -217,7 +216,7 @@ func (b *Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
 					break
 				}
 			}
-		}	
+		}
 
 		if isMatched {
 			items = append(items, item)
@@ -225,52 +224,52 @@ func (b *Backend) executeQuery(q *db.Query) ([]interface{}, db.DbError) {
 	}
 
 	// Handle field specificiaton.
-	if len(q.FieldSpec) > 0 {
+	if len(q.GetFields()) > 0 {
 		return nil, db.Error{
-			Code: "memory_backend_unsupported_feature_fieldspec",
+			Code:    "memory_backend_unsupported_feature_fieldspec",
 			Message: "The memory backend does not support limiting fields",
 		}
 	}
 
 	// Ordering.
-	if q.Orders != nil && len(q.Orders) > 0 {
-		if len(q.Orders) > 1 {
+	if q.GetOrders() != nil && len(q.GetOrders()) > 0 {
+		if len(q.GetOrders()) > 1 {
 			return nil, db.Error{
-				Code: "memory_backend_unsupported_feature_multiple_orders",
+				Code:    "memory_backend_unsupported_feature_multiple_orders",
 				Message: "The memory backend does not support multiple orderings",
 			}
 		}
 
 		// Ensure the field exists.
-		field := q.Orders[0].Field
+		field := q.GetOrders()[0].Field
 		if _, ok := info.FieldInfo[info.MapFieldName(field)]; !ok {
 			return nil, db.Error{
-				Code: "cant_sort_on_inexistant_field",
+				Code:    "cant_sort_on_inexistant_field",
 				Message: fmt.Sprintf("Trying to sort on non-existant field %v", field),
 			}
 		}
 
-		db.SortStructSlice(items, field, q.Orders[0].Ascending)	
+		db.SortStructSlice(items, field, q.GetOrders()[0].Ascending)
 	}
 
 	// Limit & Offset.
 
-	if q.OffsetNum != 0 {
-		items = items[q.OffsetNum:]
+	if q.GetOffset() != 0 {
+		items = items[q.GetOffset():]
 	}
-	if q.LimitNum != 0 {
-		items = items[:q.LimitNum]
+	if q.GetLimit() != 0 {
+		items = items[:q.GetLimit()]
 	}
 
 	return items, nil
 }
 
-func (b *Backend) BuildRelationQuery(q *db.RelationQuery) (*db.Query, db.DbError) {
+func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) {
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-// Perform a query.	
-func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
+// Perform a query.
+func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
@@ -285,23 +284,23 @@ func (b *Backend) Query(q *db.Query) ([]db.Model, db.DbError) {
 	return models, nil
 }
 
-func (b *Backend) QueryOne(q *db.Query) (db.Model, db.DbError) {
+func (b *Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
 	return db.BackendQueryOne(b, q)
 }
 
-func (b *Backend) Count(q *db.Query) (int, db.DbError) {
-	info := b.GetModelInfo(q.Model)
+func (b *Backend) Count(q db.Query) (int, db.DbError) {
+	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return 0, db.Error{
-			Code: "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.Model),
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.GetCollection()),
 		}
 	}
 
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return 0, db.Error{
-			Code: "memory_count_error",
+			Code:    "memory_count_error",
 			Message: err.Error(),
 		}
 	}
@@ -309,13 +308,13 @@ func (b *Backend) Count(q *db.Query) (int, db.DbError) {
 	return len(result), nil
 }
 
-func (b *Backend) Last(q *db.Query) (db.Model, db.DbError) {
+func (b *Backend) Last(q db.Query) (db.Model, db.DbError) {
 	return db.BackendLast(b, q)
 }
 
 // Find first model with primary key ID.
 func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(b, modelType, id)	
+	return db.BackendFindOne(b, modelType, id)
 }
 
 func (b *Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
@@ -330,12 +329,12 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Mode
 
 // Store the model.
 // Fails if the model type was not registered, or if the primary key already
-// exists.	 
+// exists.
 func (b *Backend) Create(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
 		}
 	}
@@ -350,7 +349,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	id := m.GetID()
 	if _, ok := b.data[modelName][id]; ok {
 		return db.Error{
-			Code: "pk_exists",
+			Code:    "pk_exists",
 			Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
 		}
 	}
@@ -358,7 +357,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	newId := strconv.Itoa(len(b.data[modelName]) + 1)
 	if err := m.SetID(newId); err != nil {
 		return db.Error{
-			Code: "set_id_error",
+			Code:    "set_id_error",
 			Message: fmt.Sprintf("Error while setting the id %v on model %v", newId, modelName),
 		}
 	}
@@ -373,7 +372,7 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
 		}
 	}
@@ -398,7 +397,7 @@ func (b *Backend) UpdateByMap(m db.Model, data map[string]interface{}) db.DbErro
 
 	if info == nil {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("The model %v was not registered with backend", modelName),
 		}
 	}
@@ -415,7 +414,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	modelName := m.Collection()
 	if !b.HasModel(modelName) {
 		return db.Error{
-			Code: "unknown_model",
+			Code:    "unknown_model",
 			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
 		}
 	}
@@ -427,7 +426,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	id := m.GetID()
 	if _, ok := b.data[modelName][id]; !ok {
 		return db.Error{
-			Code: "not_found",
+			Code:    "not_found",
 			Message: fmt.Sprintf("A model of type %v with id %v does not exists", modelName, id),
 		}
 	}
@@ -439,7 +438,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	return nil
 }
 
-func (b *Backend) DeleteMany(q *db.Query) db.DbError {
+func (b *Backend) DeleteMany(q db.Query) db.DbError {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return err
@@ -458,20 +457,20 @@ func (b *Backend) DeleteMany(q *db.Query) db.DbError {
  * M2M
  */
 
-func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError) {
+func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
 		return nil, db.Error{
-			Code: "unknown_field",
+			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", obj.Collection(), name),
 		}
 	}
 
 	if !fieldInfo.M2M {
 		return nil, db.Error{
-			Code: "no_m2m_field",
+			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.Collection()),
 		}
 	}
@@ -486,7 +485,7 @@ func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.	DbError)
 }
 
 type M2MCollection struct {
-	Name string
+	Name  string
 	items reflect.Value
 }
 
