@@ -1,13 +1,13 @@
 package mysql_test
 
 import (
-	"testing"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path"
+	"testing"
 	"time"
-	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -37,7 +37,7 @@ var _ = BeforeSuite(func() {
 
 	// Run initdb.
 	fmt.Printf("Running mysql_install_db\n")
-	_, err = exec.Command("mysql_install_db", "--datadir=" + tmpDir, "--user=" + user.Username).Output()
+	_, err = exec.Command("mysql_install_db", "--datadir="+tmpDir, "--user="+user.Username).Output()
 	Expect(err).ToNot(HaveOccurred())
 
 	args := []string{
@@ -47,24 +47,24 @@ var _ = BeforeSuite(func() {
 		"--socket=" + path.Join(tmpDir, "mysql.sock"),
 	}
 	fmt.Printf("Starting mysql server\n")
-	serverCmd = exec.Command("mysqld", args...) 
+	serverCmd = exec.Command("mysqld", args...)
 
-  err = serverCmd.Start()
-  Expect(err).NotTo(HaveOccurred())
+	err = serverCmd.Start()
+	Expect(err).NotTo(HaveOccurred())
 
-  // Give the server some time to start.
-  time.Sleep(time.Second * 5)
+	// Give the server some time to start.
+	time.Sleep(time.Second * 5)
 
- 	fmt.Printf("Connecting to test database\n")
- 	backend, err := sql.New("mysql", "root@tcp(127.0.0.1:10002)/?charset=utf8&parseTime=True&loc=Local")
- 	Expect(err).ToNot(HaveOccurred())
- 	Expect(backend).ToNot(BeNil())
+	fmt.Printf("Connecting to test database\n")
+	backend, err := sql.New("mysql", "root@tcp(127.0.0.1:10002)/?charset=utf8&parseTime=True&loc=Local")
+	Expect(err).ToNot(HaveOccurred())
+	Expect(backend).ToNot(BeNil())
 
- 	_, err = backend.SqlExec("CREATE DATABASE test")
- 	Expect(err).ToNot(HaveOccurred())
+	_, err = backend.SqlExec("CREATE DATABASE test")
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
 	serverCmd.Process.Kill()
-	os.RemoveAll(tmpDir)  
+	os.RemoveAll(tmpDir)
 })

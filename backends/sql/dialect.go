@@ -21,10 +21,10 @@ type Dialect interface {
 	Value(interface{}) interface{}
 
 	// Builds up the table information from model information and stores
-	// the table data indo ModelInfo.BackendData and the field info into 
+	// the table data indo ModelInfo.BackendData and the field info into
 	// FieldInfo.BackendData
 	BuildTableInfo(*db.ModelInfo) *TableInfo
-	
+
 	CreateTableStatement(info *TableInfo, ifExists bool) string
 	DropTableStatement(table string, ifExists bool) string
 

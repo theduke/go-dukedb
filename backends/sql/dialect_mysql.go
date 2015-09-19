@@ -1,8 +1,8 @@
 package sql
 
-import(
-	"reflect"
+import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	db "github.com/theduke/go-dukedb"
@@ -96,7 +96,7 @@ func (d MysqlDialect) TableConstraintStatements(info *TableInfo) []string {
 
 	if info.UniqueFields != nil {
 		for _, fields := range info.UniqueFields {
-			stmts = append(stmts, "UNIQUE(" + strings.Join(fields, ", ") + ")")
+			stmts = append(stmts, "UNIQUE("+strings.Join(fields, ", ")+")")
 		}
 	}
 

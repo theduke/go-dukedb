@@ -5,11 +5,11 @@ import (
 )
 
 type Error struct {
-	Code    string      `json:"code,omitempty"`
-	Message string      `json:"title,omitempty"`
-	Data    interface{} `json:"-"`
+	Code     string      `json:"code,omitempty"`
+	Message  string      `json:"title,omitempty"`
+	Data     interface{} `json:"-"`
 	Internal bool
-	Errors []error `json:"-"`
+	Errors   []error `json:"-"`
 }
 
 func (e Error) GetCode() string {

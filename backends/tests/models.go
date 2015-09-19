@@ -1,6 +1,6 @@
 package tests
 
-import(
+import (
 	"fmt"
 	"strconv"
 
@@ -57,7 +57,7 @@ func (t *TestModel) SetID(x string) error {
 type HooksModel struct {
 	TestModel
 	CalledHooks []string `db:"-"`
-	HookError bool `db:"-"`
+	HookError   bool     `db:"-"`
 }
 
 func (h HooksModel) Collection() string {

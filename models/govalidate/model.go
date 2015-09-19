@@ -1,13 +1,12 @@
 package govalidate
 
-import(
-  "github.com/asaskevich/govalidator"
+import (
+	"github.com/asaskevich/govalidator"
 
-  db "github.com/theduke/go-dukedb"
+	db "github.com/theduke/go-dukedb"
 )
 
-
-type Model struct {}
+type Model struct{}
 
 func (m Model) Validate() db.DbError {
 	ok, err := govalidator.ValidateStruct(m)
@@ -17,14 +16,14 @@ func (m Model) Validate() db.DbError {
 
 	if errs, ok := err.(govalidator.Errors); ok {
 		return db.Error{
-			Code: "validation_error",
+			Code:   "validation_error",
 			Errors: errs,
 		}
 	}
 
 	return db.Error{
-		Code: "validation_error",
+		Code:    "validation_error",
 		Message: err.Error(),
-		Errors: []error{err},
+		Errors:  []error{err},
 	}
 }

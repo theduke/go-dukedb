@@ -1,14 +1,14 @@
 package tests
 
-import(
+import (
 	"os"
 	"path"
 )
 
 func AbsPath(p string) (string, error) {
-	if !path.IsAbs(p) { 
-		wd, err := os.Getwd() 
-		if err != nil { 
+	if !path.IsAbs(p) {
+		wd, err := os.Getwd()
+		if err != nil {
 			return "", err
 		}
 		p = path.Clean(path.Join(wd, p))

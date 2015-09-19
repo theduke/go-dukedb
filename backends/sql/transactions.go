@@ -1,10 +1,11 @@
-package sql	
+package sql
+
 import (
 	db "github.com/theduke/go-dukedb"
 )
 
 func (b Backend) Begin() db.Transaction {
-	copied :=  b.Copy()
+	copied := b.Copy()
 	backendCopy := copied.(*Backend)
 	tx, err := b.Db.Begin()
 	if err != nil {
@@ -20,20 +21,20 @@ func (b Backend) Begin() db.Transaction {
 func (b *Backend) Rollback() db.DbError {
 	if err := b.Tx.Rollback(); err != nil {
 		return db.Error{
-			Code: "transaction_rollback_failed",
+			Code:    "transaction_rollback_failed",
 			Message: err.Error(),
-			Data: err,
+			Data:    err,
 		}
 	}
 	return nil
 }
 
-func (b *Backend)	Commit() db.DbError {
+func (b *Backend) Commit() db.DbError {
 	if err := b.Tx.Commit(); err != nil {
 		return db.Error{
-			Code: "transaction_commit_failed",
+			Code:    "transaction_commit_failed",
 			Message: err.Error(),
-			Data: err,
+			Data:    err,
 		}
 	}
 	return nil

@@ -27,14 +27,14 @@ func (b Backend) MigrationsSetup() db.DbError {
 
 		if err := tx.CreateCollection("migration_attempts"); err != nil {
 			return db.Error{
-				Code: "migration_setup_failed",
+				Code:    "migration_setup_failed",
 				Message: "Could not create migrations table: " + err.Error(),
-				Data: err,
+				Data:    err,
 			}
 
 			tx.Rollback()
 			return db.Error{
-				Code: "migration_setup_failed",
+				Code:    "migration_setup_failed",
 				Message: err.Error(),
 			}
 		}
@@ -44,12 +44,12 @@ func (b Backend) MigrationsSetup() db.DbError {
 		migration.StartedAt = time.Now()
 		migration.FinishedAt = time.Now()
 		migration.Complete = true
-		
+
 		if err := tx.Create(&migration); err != nil {
 			return db.Error{
-				Code: "migration_setup_failed",
+				Code:    "migration_setup_failed",
 				Message: "Could not create migrations table: " + err.Error(),
-				Data: err,
+				Data:    err,
 			}
 		}
 
@@ -63,7 +63,7 @@ func (b Backend) IsMigrationLocked() (bool, db.DbError) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Last(); err != nil {
 		return true, db.Error{
-			Code: "db_error",
+			Code:    "db_error",
 			Message: err.Error(),
 		}
 	} else {
@@ -81,13 +81,13 @@ func (b Backend) DetermineMigrationVersion() (int, db.DbError) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Filter("complete", true).Last(); err != nil {
 		return -1, db.Error{
-			Code: "db_error",
+			Code:    "db_error",
 			Message: err.Error(),
 		}
 	} else {
 		lastAttempt = model.(*MigrationAttempt)
 	}
-	
+
 	return lastAttempt.Version, nil
 }
 

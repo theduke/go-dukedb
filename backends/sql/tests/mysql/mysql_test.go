@@ -4,7 +4,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	//. "github.com/onsi/gomega"
 
-
 	"github.com/theduke/go-dukedb/backends/sql"
 	"github.com/theduke/go-dukedb/backends/tests"
 )

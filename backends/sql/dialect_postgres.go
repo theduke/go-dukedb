@@ -1,8 +1,8 @@
 package sql
 
-import(
-	"reflect"
+import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -37,7 +37,7 @@ func (d PostgresDialect) FixReplacementChar(query string) string {
 		}
 
 		index += 1
-		query = strings.Replace(query, "${}$", "$" + strconv.Itoa(index), 1)
+		query = strings.Replace(query, "${}$", "$"+strconv.Itoa(index), 1)
 	}
 
 	return query
@@ -106,9 +106,9 @@ func (d PostgresDialect) TableConstraintStatements(info *TableInfo) []string {
 
 	if info.UniqueFields != nil {
 		for _, fields := range info.UniqueFields {
-			stmts = append(stmts, "UNIQUE(" + strings.Join(fields, ", ") + ")")
+			stmts = append(stmts, "UNIQUE("+strings.Join(fields, ", ")+")")
 		}
-	}	
+	}
 
 	return stmts
 }

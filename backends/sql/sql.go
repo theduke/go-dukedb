@@ -1,28 +1,28 @@
 package sql
 
-type ColumnInfo struct{
+type ColumnInfo struct {
 	Name string
 	Type string
 
-	Unique bool
+	Unique        bool
 	AutoIncrement bool
-	PrimaryKey bool
-	NotNull bool
-	Default string
-	
+	PrimaryKey    bool
+	NotNull       bool
+	Default       string
+
 	Index string
-		
-	ForeignKey string
-	ForeignKeyTable string
+
+	ForeignKey         string
+	ForeignKeyTable    string
 	ForeignKeyOnUpdate string
 	ForeignKeyOnDelete string
 
 	Constraints string
 }
 
-type TableInfo struct{
-	Name string
-	Columns map[string]*ColumnInfo
+type TableInfo struct {
+	Name         string
+	Columns      map[string]*ColumnInfo
 	UniqueFields [][]string
 
 	Constraints string
@@ -40,14 +40,14 @@ func (t TableInfo) HasForeignKeyToTable(table string) bool {
 }
 
 type Join struct {
-	Type string
-	Table string
-	JoinColumn string
+	Type             string
+	Table            string
+	JoinColumn       string
 	ForeignKeyColumn string
 
 	Columns []string
 
-	Where string
+	Where     string
 	WhereArgs []interface{}
 }
 
@@ -56,13 +56,13 @@ func (j Join) HasColumns() bool {
 }
 
 type SelectSpec struct {
-	Table string
-	Columns []string
-	Where string
+	Table     string
+	Columns   []string
+	Where     string
 	WhereArgs []interface{}
-	Orders string
-	Limit int
-	Offset int
+	Orders    string
+	Limit     int
+	Offset    int
 
 	Joins []Join
 }

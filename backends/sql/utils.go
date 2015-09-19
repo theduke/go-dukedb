@@ -1,15 +1,15 @@
 package sql
 
-import(
-	"strings"
+import (
 	"strconv"
+	"strings"
 
 	db "github.com/theduke/go-dukedb"
 )
 
 func BuildTableInfo(d Dialect, modelInfo *db.ModelInfo) *TableInfo {
 	tableInfo := &TableInfo{
-		Name: modelInfo.BackendName,
+		Name:    modelInfo.BackendName,
 		Columns: make(map[string]*ColumnInfo),
 	}
 
@@ -26,13 +26,13 @@ func BuildTableInfo(d Dialect, modelInfo *db.ModelInfo) *TableInfo {
 			Name: fieldInfo.BackendName,
 			Type: d.ColumnType(fieldInfo),
 
-			Unique: fieldInfo.Unique,
-			PrimaryKey: fieldInfo.PrimaryKey,
+			Unique:        fieldInfo.Unique,
+			PrimaryKey:    fieldInfo.PrimaryKey,
 			AutoIncrement: fieldInfo.AutoIncrement,
-			NotNull: fieldInfo.NotNull,
-			Default: fieldInfo.Default,
+			NotNull:       fieldInfo.NotNull,
+			Default:       fieldInfo.Default,
 
-			Index: fieldInfo.Index,	
+			Index: fieldInfo.Index,
 			//Constraints: ??
 		}
 
@@ -83,7 +83,7 @@ func CreateTableStatement(d Dialect, info *TableInfo, ifExists bool) string {
 }
 
 func DropTableStatement(d Dialect, table string, ifExists bool) string {
-	stmt := "DROP TABLE" 
+	stmt := "DROP TABLE"
 	if ifExists {
 		stmt += " IF EXISTS"
 	}
@@ -195,7 +195,7 @@ func UpdateByMapStatement(d Dialect, spec *SelectSpec, data map[string]interface
 	columns := make([]string, 0)
 	vals := make([]interface{}, 0)
 	for key := range data {
-		columns = append(columns, d.Quote(key) + "=" + d.ReplacementCharacter())
+		columns = append(columns, d.Quote(key)+"="+d.ReplacementCharacter())
 		vals = append(vals, d.Value(data[key]))
 	}
 
@@ -228,9 +228,9 @@ func SelectStatement(d Dialect, spec *SelectSpec) (string, []interface{}) {
 		spec.Columns = []string{"*"}
 	} else {
 		/*
-		for index, column := range spec.Columns {
-			spec.Columns[index] = d.Quote(column)
-		}
+			for index, column := range spec.Columns {
+				spec.Columns[index] = d.Quote(column)
+			}
 		*/
 	}
 
@@ -262,10 +262,10 @@ func SelectStatement(d Dialect, spec *SelectSpec) (string, []interface{}) {
 
 			if join.HasColumns() {
 				for _, column := range join.Columns {
-					spec.Columns = append(spec.Columns, quotedJoinTable + "." + d.Quote(column))
+					spec.Columns = append(spec.Columns, quotedJoinTable+"."+d.Quote(column))
 				}
 			} else {
-				spec.Columns = append(spec.Columns, quotedJoinTable + ".*")
+				spec.Columns = append(spec.Columns, quotedJoinTable+".*")
 			}
 			joinClauses = append(joinClauses, clause)
 		}
@@ -283,6 +283,6 @@ func SelectStatement(d Dialect, spec *SelectSpec) (string, []interface{}) {
 	if where != "" {
 		stmt += where
 	}
-	
+
 	return stmt, whereArgs
 }
