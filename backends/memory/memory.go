@@ -53,6 +53,16 @@ func (b *Backend) Copy() db.Backend {
 	return &copied
 }
 
+func (b *Backend) RegisterModel(m db.Model) error {
+	if err := b.BaseBackend.RegisterModel(m); err != nil {
+		return err
+	}
+
+	b.data[m.Collection()] = make(map[string]interface{})
+
+	return nil
+}
+
 func (b *Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
