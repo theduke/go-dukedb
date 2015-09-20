@@ -354,7 +354,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 				Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
 			}
 		}
-
+	} else {
 		// Generate new id.
 		newId := strconv.Itoa(len(b.data[modelName]) + 1)
 		if err := m.SetID(newId); err != nil {
