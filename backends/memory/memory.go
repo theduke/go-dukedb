@@ -347,20 +347,24 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	}
 
 	id := m.GetID()
-	if _, ok := b.data[modelName][id]; ok {
-		return db.Error{
-			Code:    "pk_exists",
-			Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
+	if id != "" {
+		if _, ok := b.data[modelName][id]; ok {
+			return db.Error{
+				Code:    "pk_exists",
+				Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
+			}
+		}
+
+		// Generate new id.
+		newId := strconv.Itoa(len(b.data[modelName]) + 1)
+		if err := m.SetID(newId); err != nil {
+			return db.Error{
+				Code:    "set_id_error",
+				Message: fmt.Sprintf("Error while setting the id %v on model %v", newId, modelName),
+			}
 		}
 	}
 
-	newId := strconv.Itoa(len(b.data[modelName]) + 1)
-	if err := m.SetID(newId); err != nil {
-		return db.Error{
-			Code:    "set_id_error",
-			Message: fmt.Sprintf("Error while setting the id %v on model %v", newId, modelName),
-		}
-	}
 	b.data[modelName][m.GetID()] = m
 
 	db.CallModelHook(b, m, "AfterCreate")
