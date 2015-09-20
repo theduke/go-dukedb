@@ -694,6 +694,36 @@ func ModelToMap(info *ModelInfo, model Model, withAutoValues bool) (map[string]i
 	return data, nil
 }
 
+func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
+	if info == nil {
+		var err DbError
+		info, err = NewModelInfo(model)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	data, err := ModelToMap(info, model, false)
+	if err != nil {
+		return nil, err
+	}
+
+	jsData := make(map[string]interface{})
+	for key := range data {
+		jsData[strings.ToLower(string(key[0]))+key[1:]] = data[key]
+	}
+
+	js, err2 := json.Marshal(jsData)
+	if err2 != nil {
+		return nil, Error{
+			Code:    "json_marshal_error",
+			Message: err2.Error(),
+		}
+	}
+
+	return js, nil
+}
+
 func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, DbError) {
 	model, err := NewStruct(info.Item)
 	if err != nil {
@@ -957,6 +987,10 @@ type FieldInfo struct {
 	Type       reflect.Kind
 	StructType string
 
+	// Specifies the name of the embedded struct that holds the field.
+	// "" if not embedded.
+	Embedded string
+
 	PrimaryKey    bool
 	AutoIncrement bool
 	Ignore        bool
@@ -1024,7 +1058,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 
 	info.BackendName = CamelCaseToUnderscore(info.Collection)
 
-	err := info.buildFieldInfo(reflect.ValueOf(model).Elem())
+	err := info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")
 	if err != nil {
 		return nil, Error{
 			Code:    "build_field_info_failed",
@@ -1212,7 +1246,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 }
 
 // Build the field information for the model.
-func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
+func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName string) DbError {
 	modelType := modelVal.Type()
 
 	for i := 0; i < modelVal.NumField(); i++ {
@@ -1228,7 +1262,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 
 		if fieldKind == reflect.Struct && fieldType.Anonymous {
 			// Embedded struct. Find nested fields.
-			if err := info.buildFieldInfo(field); err != nil {
+			if err := info.buildFieldInfo(field, fieldType.Name); err != nil {
 				return err
 			}
 			continue
@@ -1240,6 +1274,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value) DbError {
 		}
 
 		fieldInfo.Name = fieldType.Name
+		fieldInfo.Embedded = embeddedName
 
 		if fieldInfo.BackendName == "" {
 			fieldInfo.BackendName = CamelCaseToUnderscore(fieldType.Name)
@@ -1455,6 +1490,10 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 
 	return nil
 }
+
+/**
+ * Model marshaling.
+ */
 
 /**
  * Query parser functions.
