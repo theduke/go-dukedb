@@ -41,6 +41,19 @@ func CamelCaseToUnderscore(str string) string {
 	return u
 }
 
+func LowerCaseFirst(str string) string {
+	if len(str) == 0 {
+		return ""
+	}
+
+	lc := strings.ToLower(string(str[0]))
+	if len(str) > 1 {
+		lc += str[1:]
+	}
+
+	return lc
+}
+
 // Given the internal name of a filter like "eq" or "lte", return a SQL operator like = or <.
 // WARNING: panics if an unsupported filter is given.
 func FilterToSqlCondition(filter string) (string, DbError) {
@@ -78,7 +91,14 @@ func FilterToSqlCondition(filter string) (string, DbError) {
  */
 
 func IsZero(val interface{}) bool {
-	return val == reflect.Zero(reflect.TypeOf(val)).Interface()
+	reflVal := reflect.ValueOf(val)
+	reflType := reflVal.Type()
+
+	if reflType.Kind() == reflect.Slice {
+		return reflVal.Len() < 1
+	}
+
+	return val == reflect.Zero(reflType).Interface()
 }
 
 // Convert a string value to the specified type if possible.
@@ -553,6 +573,33 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	return field.Interface(), nil
 }
 
+func GetStructField(s interface{}, fieldName string) (reflect.Value, DbError) {
+	// Check if struct is valid.
+	if s == nil {
+		return reflect.Value{}, Error{Code: "pointer_or_struct_expected"}
+	}
+
+	// Check if it is a pointer, and if so, dereference it.
+	v := reflect.ValueOf(s)
+	if v.Type().Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Type().Kind() != reflect.Struct {
+		return reflect.Value{}, Error{Code: "struct_expected"}
+	}
+
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() {
+		return reflect.Value{}, Error{
+			Code:    "field_not_found",
+			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
+		}
+	}
+
+	return field, nil
+}
+
 // Given a pointer to a struct, set the given field to the given value.
 // If the target value is not a string, it will be automatically converted
 // to the proper type.
@@ -701,9 +748,6 @@ func ModelToMap(info *ModelInfo, model Model, forBackend, marshal bool) (map[str
 			name = field.BackendName
 		} else if marshal {
 			name = field.MarshalName
-			if name == "" {
-				name = strings.ToLower(string(fieldName[0])) + fieldName[1:]
-			}
 		}
 
 		data[name] = val
@@ -805,11 +849,6 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	if valKind == fieldKind {
 		field.Set(val)
 		return
-	}
-
-	// Rather annoying fix for sqlite3 driver.
-	if info.Name == "IntVal" {
-		fmt.Printf("val: %v - len %v\n", val, val.Len())
 	}
 
 	switch fieldKind {
@@ -1150,6 +1189,17 @@ func (m ModelInfo) MapFieldName(name string) string {
 	return ""
 }
 
+// Given a the field.MarshalName, return the struct field name.
+func (m ModelInfo) MapMarshalName(name string) string {
+	for key := range m.FieldInfo {
+		if m.FieldInfo[key].MarshalName == name {
+			return key
+		}
+	}
+
+	return ""
+}
+
 // Return the field info for a given name.
 func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 	for key := range m.FieldInfo {
@@ -1328,6 +1378,11 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 
 		if fieldInfo.BackendName == "" {
 			fieldInfo.BackendName = CamelCaseToUnderscore(fieldType.Name)
+		}
+
+		// Default marshal name.
+		if fieldInfo.MarshalName == "" {
+			fieldInfo.MarshalName = LowerCaseFirst(fieldInfo.Name)
 		}
 
 		// Find relationship type for structs and slices.
