@@ -78,19 +78,7 @@ func FilterToSqlCondition(filter string) (string, DbError) {
  */
 
 func IsZero(val interface{}) bool {
-	switch reflect.TypeOf(val).Kind() {
-	case reflect.String:
-		strval := val.(string)
-		return strval == "" || strval == "0"
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-		num, err := NumericToInt64(val)
-		if err != nil {
-			return false
-		}
-		return num == 0
-	}
-
-	return false
+	return val == reflect.Zero(reflect.TypeOf(val)).Interface()
 }
 
 // Convert a string value to the specified type if possible.
@@ -600,6 +588,15 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string, val string
 	return nil
 }
 
+func GetModelID(info *ModelInfo, m Model) interface{} {
+	val, err := GetStructFieldValue(m, info.PkField)
+	if err != nil {
+		return nil
+	}
+
+	return val
+}
+
 func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, DbError) {
 	vals := make([]interface{}, 0)
 
@@ -668,7 +665,7 @@ func SetStructModelField(obj interface{}, fieldName string, models []Model) erro
 	return nil
 }
 
-func ModelToMap(info *ModelInfo, model Model, withAutoValues bool) (map[string]interface{}, DbError) {
+func ModelToMap(info *ModelInfo, model Model, forBackend, marshal bool) (map[string]interface{}, DbError) {
 	data := make(map[string]interface{})
 
 	for fieldName := range info.FieldInfo {
@@ -688,7 +685,28 @@ func ModelToMap(info *ModelInfo, model Model, withAutoValues bool) (map[string]i
 			continue
 		}
 
-		data[field.BackendName] = val
+		if (forBackend || marshal) && field.Marshal {
+			js, err := json.Marshal(val)
+			if err != nil {
+				return nil, Error{
+					Code:    "marshal_error",
+					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.ItemName, fieldName, err),
+				}
+			}
+			val = js
+		}
+
+		name := fieldName
+		if forBackend {
+			name = field.BackendName
+		} else if marshal {
+			name = field.MarshalName
+			if name == "" {
+				name = strings.ToLower(string(fieldName[0])) + fieldName[1:]
+			}
+		}
+
+		data[name] = val
 	}
 
 	return data, nil
@@ -703,17 +721,12 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
 		}
 	}
 
-	data, err := ModelToMap(info, model, false)
+	data, err := ModelToMap(info, model, false, true)
 	if err != nil {
 		return nil, err
 	}
 
-	jsData := make(map[string]interface{})
-	for key := range data {
-		jsData[strings.ToLower(string(key[0]))+key[1:]] = data[key]
-	}
-
-	js, err2 := json.Marshal(jsData)
+	js, err2 := json.Marshal(data)
 	if err2 != nil {
 		return nil, Error{
 			Code:    "json_marshal_error",
@@ -987,6 +1000,13 @@ type FieldInfo struct {
 	Type       reflect.Kind
 	StructType string
 
+	// Specifies whether the field should be of type string and the raw value should
+	// be marshalled before persisting to backend.
+	Marshal bool
+
+	// The field name to use for marshalling to json.
+	MarshalName string
+
 	// Specifies the name of the embedded struct that holds the field.
 	// "" if not embedded.
 	Embedded string
@@ -1106,6 +1126,11 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	return &info, nil
 }
 
+func (m ModelInfo) HasField(name string) bool {
+	_, ok := m.FieldInfo[name]
+	return ok
+}
+
 func (m ModelInfo) GetPkField() *FieldInfo {
 	return m.FieldInfo[m.PkField]
 }
@@ -1140,8 +1165,9 @@ func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 	info := FieldInfo{}
 
-	parts := strings.Split(tag, ";")
+	parts := strings.Split(strings.TrimSpace(tag), ";")
 	for _, part := range parts {
+		part = strings.TrimSpace(part)
 		itemParts := strings.Split(part, ":")
 
 		specifier := part
@@ -1152,7 +1178,6 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 		}
 
 		switch specifier {
-
 		case "name":
 			if value == "" {
 				return nil, Error{
@@ -1162,6 +1187,18 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 			}
 
 			info.BackendName = value
+
+		case "marshal-name":
+			if value == "" {
+				return nil, Error{
+					Code:    "invalid_name",
+					Message: "name specifier must be in format marshal-name:the_name",
+				}
+			}
+			info.MarshalName = value
+
+		case "marshal":
+			info.Marshal = true
 
 		case "primary-key":
 			info.PrimaryKey = true
@@ -1177,6 +1214,10 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 
 		case "unique":
 			info.Unique = true
+
+		case "not-null":
+			info.NotNull = true
+			info.IgnoreIfZero = true
 
 		case "min":
 			x, err := strconv.ParseFloat(value, 64)
@@ -1196,7 +1237,11 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 					Message: "max:xx must be a valid number",
 				}
 			}
-			info.Max = x
+			if x == -1 {
+				info.Max = 1000000000000
+			} else {
+				info.Max = x
+			}
 
 		case "unique-with":
 			parts := strings.Split(value, ",")
@@ -1253,6 +1298,11 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 		field := modelVal.Field(i)
 		fieldType := modelType.Field(i)
 		fieldKind := fieldType.Type.Kind()
+
+		// Skip fields that  were already defined in parent model.
+		if embeddedName != "" && info.HasField(fieldType.Name) {
+			continue
+		}
 
 		// Ignore private fields.
 		firstChar := fieldType.Name[0:1]
