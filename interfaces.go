@@ -155,6 +155,9 @@ type RelationQuery interface {
 type Backend interface {
 	GetName() string
 
+	// Returns true if the backend uses string IDs like MongoDB.
+	HasStringIDs() bool
+
 	GetDebug() bool
 	SetDebug(bool)
 

@@ -35,6 +35,10 @@ func New() *Backend {
 	return &b
 }
 
+func (b Backend) HasStringIDs() bool {
+	return false
+}
+
 func (b *Backend) GetName() string {
 	return "memory"
 }

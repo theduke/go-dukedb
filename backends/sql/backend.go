@@ -61,6 +61,10 @@ func New(driver, driverOptions string) (*Backend, db.DbError) {
 	return &b, nil
 }
 
+func (b Backend) HasStringIDs() bool {
+	return false
+}
+
 func (b Backend) GetName() string {
 	return "sql"
 }
