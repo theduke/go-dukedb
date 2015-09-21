@@ -167,18 +167,20 @@ type Backend interface {
 	// Duplicate the backend.
 	Copy() Backend
 
-	RegisterModel(Model) error
+	RegisterModel(Model)
 	GetModelInfo(string) *ModelInfo
 	GetAllModelInfo() map[string]*ModelInfo
 	// Determine if a model type is registered with the backend.
 	HasModel(string) bool
+
+	ModelToMap(m Model, marshal bool) (map[string]interface{}, DbError)
 
 	// After all models have been registered, build the relationship
 	// info.
 	BuildRelationshipInfo()
 
 	// Get a new struct instance to a model struct.
-	NewModel(string) (interface{}, DbError)
+	NewModel(string) (Model, DbError)
 	// Build a slice of a model.
 	NewModelSlice(string) (interface{}, DbError)
 
