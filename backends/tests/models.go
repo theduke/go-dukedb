@@ -7,19 +7,6 @@ import (
 	. "github.com/theduke/go-dukedb"
 )
 
-type BaseModel struct {
-}
-
-func (i BaseModel) GetID() string {
-	return ""
-}
-func (i BaseModel) SetID(x string) error {
-	return nil
-}
-func (i BaseModel) Collection() string {
-	return "base_model"
-}
-
 type TestModel struct {
 	ID uint64
 
@@ -33,6 +20,9 @@ type TestModel struct {
 	StrVal string
 	IntVal int64
 }
+
+// Ensure TestModel implements Model interface.
+var _ Model = (*TestModel)(nil)
 
 func (t TestModel) Collection() string {
 	return "test_models"
@@ -59,6 +49,9 @@ type HooksModel struct {
 	CalledHooks []string `db:"-"`
 	HookError   bool     `db:"-"`
 }
+
+// Ensure HooksModel implements Model interface.
+var _ Model = (*HooksModel)(nil)
 
 func (h HooksModel) Collection() string {
 	return "hooks_models"
@@ -122,12 +115,16 @@ type TestParent struct {
 	ChildSlicePtr []*TestModel `db:"m2m"`
 }
 
+// Ensure TestParent implements Model interface.
+var _ Model = (*TestParent)(nil)
+
 func (t TestParent) Collection() string {
 	return "test_parents"
 }
 
 func NewTestModel(index int) TestModel {
 	return TestModel{
+		ID:     uint64(index),
 		StrVal: fmt.Sprintf("str%v", index),
 		IntVal: int64(index),
 	}

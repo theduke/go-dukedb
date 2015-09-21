@@ -89,7 +89,7 @@ func (b BaseBackend) HasModel(name string) bool {
 	return ok
 }
 
-func (b BaseBackend) NewModel(name string) (interface{}, DbError) {
+func (b BaseBackend) NewModel(name string) (Model, DbError) {
 	info, ok := b.ModelInfo[name]
 	if !ok {
 		return nil, Error{
@@ -103,7 +103,7 @@ func (b BaseBackend) NewModel(name string) (interface{}, DbError) {
 		return nil, Error{Code: err.Error(), Message: "Could not build new struct"}
 	}
 
-	return item, nil
+	return item.(Model), nil
 }
 
 func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {

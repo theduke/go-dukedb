@@ -61,11 +61,11 @@ func New(driver, driverOptions string) (*Backend, db.DbError) {
 	return &b, nil
 }
 
-func (b Backend) HasStringIDs() bool {
+func (b *Backend) HasStringIDs() bool {
 	return false
 }
 
-func (b Backend) GetName() string {
+func (b *Backend) GetName() string {
 	return "sql"
 }
 
@@ -73,7 +73,7 @@ func (b *Backend) SetDebug(d bool) {
 	b.Debug = d
 }
 
-func (b Backend) Copy() db.Backend {
+func (b *Backend) Copy() db.Backend {
 	copied := Backend{
 		Db:               b.Db,
 		dialect:          b.dialect,
@@ -85,17 +85,29 @@ func (b Backend) Copy() db.Backend {
 	return &copied
 }
 
-func (b *Backend) RegisterModel(m db.Model) error {
-	b.BaseBackend.RegisterModel(m)
+func (b *Backend) RegisterModel(m db.Model) {
+	if err := b.BaseBackend.RegisterModel(m); err != nil {
+		panic(fmt.Sprintf("Could not register model %v: %v", m.Collection(), err))
+	}
 
 	info := b.ModelInfo[m.Collection()]
 	tableInfo := b.dialect.BuildTableInfo(info)
 	b.TableInfo[info.BackendName] = tableInfo
-
-	return nil
 }
 
-func (b Backend) BuildRelationshipInfo() {
+func (b *Backend) ModelToMap(m db.Model, marshal bool) (map[string]interface{}, db.DbError) {
+	info := b.GetModelInfo(m.Collection())
+	if info == nil {
+		return nil, db.Error{
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("The collection %v was not registered with backend", m.Collection()),
+		}
+	}
+
+	return db.ModelToMap(info, m, false, marshal)
+}
+
+func (b *Backend) BuildRelationshipInfo() {
 	db.BuildAllRelationInfo(b.ModelInfo)
 
 	// Build m2m tables.
@@ -145,7 +157,7 @@ func (b Backend) BuildRelationshipInfo() {
 	}
 }
 
-func (b Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
+func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
 	if b.Debug && b.Logger != nil {
 		b.Logger.Debugf("%v | %+v", query, args)
 	}
@@ -157,7 +169,7 @@ func (b Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) 
 	}
 }
 
-func (b Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) {
+func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) {
 	if b.Debug && b.Logger != nil {
 		b.Logger.Debugf("%v | %+v", query, args)
 	}
@@ -169,7 +181,7 @@ func (b Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) 
 	}
 }
 
-func (b Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) db.DbError {
+func (b *Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) db.DbError {
 	rows, err := b.SqlQuery(query, args...)
 	if err != nil {
 		return db.Error{
@@ -192,7 +204,7 @@ func (b Backend) sqlScanRow(query string, args []interface{}, vars ...interface{
 	return nil
 }
 
-func (b Backend) CreateCollection(name string) db.DbError {
+func (b *Backend) CreateCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -241,7 +253,7 @@ func (b *Backend) CreateCollections(names ...string) db.DbError {
 	return nil
 }
 
-func (b Backend) DropTable(name string, ifExists bool) db.DbError {
+func (b *Backend) DropTable(name string, ifExists bool) db.DbError {
 	stmt := b.dialect.DropTableStatement(name, ifExists)
 	if _, err := b.SqlExec(stmt); err != nil {
 		return db.Error{
@@ -253,7 +265,7 @@ func (b Backend) DropTable(name string, ifExists bool) db.DbError {
 	return nil
 }
 
-func (b Backend) DropCollection(name string) db.DbError {
+func (b *Backend) DropCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -273,7 +285,7 @@ func (b Backend) DropCollection(name string) db.DbError {
 	return b.DropTable(info.BackendName, true)
 }
 
-func (b Backend) DropAllCollections() db.DbError {
+func (b *Backend) DropAllCollections() db.DbError {
 	for name := range b.ModelInfo {
 		info := b.ModelInfo[name]
 
@@ -323,7 +335,7 @@ func (b *Backend) Q(model string) db.Query {
 	return q
 }
 
-func (b Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connector string) (string, []interface{}) {
+func (b *Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connector string) (string, []interface{}) {
 	sql := "("
 	args := make([]interface{}, 0)
 
@@ -344,7 +356,7 @@ func (b Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connec
 	return sql, args
 }
 
-func (b Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []interface{}) {
+func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []interface{}) {
 	filterType := reflect.TypeOf(filter).Elem().Name()
 	filterName := filter.Type()
 
@@ -392,7 +404,7 @@ func (b Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []in
 	return sql, args
 }
 
-func (b Backend) selectByQuery(q db.Query) (*SelectSpec, db.DbError) {
+func (b *Backend) selectByQuery(q db.Query) (*SelectSpec, db.DbError) {
 	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
@@ -479,7 +491,7 @@ func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) 
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interface{}, db.DbError) {
+func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interface{}, db.DbError) {
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
 		return nil, db.Error{
@@ -528,7 +540,7 @@ func (b Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfac
 	return result, nil
 }
 
-func (b Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface{}) ([]db.Model, db.DbError) {
+func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface{}) ([]db.Model, db.DbError) {
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
 		return nil, db.Error{
@@ -634,11 +646,11 @@ func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
 	return models, nil
 }
 
-func (b Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
+func (b *Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
 	return db.BackendQueryOne(&b, q)
 }
 
-func (b Backend) Count(q db.Query) (int, db.DbError) {
+func (b *Backend) Count(q db.Query) (int, db.DbError) {
 	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return -1, db.Error{
@@ -663,20 +675,20 @@ func (b Backend) Count(q db.Query) (int, db.DbError) {
 	return count, nil
 }
 
-func (b Backend) Last(q db.Query) (db.Model, db.DbError) {
+func (b *Backend) Last(q db.Query) (db.Model, db.DbError) {
 	return db.BackendLast(&b, q)
 }
 
 // Find first model with primary key ID.
-func (b Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
+func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
 	return db.BackendFindOne(&b, modelType, id)
 }
 
-func (b Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
+func (b *Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
 	return b.Q(modelType).Filter(field, value).Find()
 }
 
-func (b Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
 	return b.Q(modelType).Filter(field, value).First()
 }
 
@@ -748,7 +760,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) selectForModel(info *db.ModelInfo, m db.Model) (*SelectSpec, db.DbError) {
+func (b *Backend) selectForModel(info *db.ModelInfo, m db.Model) (*SelectSpec, db.DbError) {
 	q := b.Q(m.Collection())
 
 	and := db.And()
@@ -808,7 +820,7 @@ func (b *Backend) Update(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbError {
+func (b *Backend) UpdateByMap(m db.Model, rawData map[string]interface{}) db.DbError {
 	info := b.GetModelInfo(m.Collection())
 	if info == nil {
 		return db.Error{
@@ -876,7 +888,7 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 	return nil
 }
 
-func (b Backend) DeleteMany(q db.Query) db.DbError {
+func (b *Backend) DeleteMany(q db.Query) db.DbError {
 	spec, err := b.selectByQuery(q)
 	if err != nil {
 		return err
@@ -899,7 +911,7 @@ func (b Backend) DeleteMany(q db.Query) db.DbError {
  * M2M
  */
 
-func (b Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
+func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
 	info := b.GetModelInfo(obj.Collection())
 	fieldInfo, hasField := info.FieldInfo[name]
 

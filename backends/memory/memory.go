@@ -35,7 +35,7 @@ func New() *Backend {
 	return &b
 }
 
-func (b Backend) HasStringIDs() bool {
+func (b *Backend) HasStringIDs() bool {
 	return false
 }
 
@@ -56,14 +56,24 @@ func (b *Backend) Copy() db.Backend {
 	return &copied
 }
 
-func (b *Backend) RegisterModel(m db.Model) error {
+func (b *Backend) RegisterModel(m db.Model) {
 	if err := b.BaseBackend.RegisterModel(m); err != nil {
-		return err
+		panic(fmt.Sprintf("Could not register model %v: %v", m.Collection(), err))
 	}
 
 	b.data[m.Collection()] = make(map[string]interface{})
+}
 
-	return nil
+func (b *Backend) ModelToMap(m db.Model, marshal bool) (map[string]interface{}, db.DbError) {
+	info := b.GetModelInfo(m.Collection())
+	if info == nil {
+		return nil, db.Error{
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("The collection %v was not registered with backend", m.Collection()),
+		}
+	}
+
+	return db.ModelToMap(info, m, false, marshal)
 }
 
 func (b *Backend) CreateCollection(name string) db.DbError {
@@ -363,8 +373,8 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		return err
 	}
 
-	id := db.GetModelID(b.GetModelInfo(m.Collection()), m)
-	if !db.IsZero(id) {
+	id := m.GetID()
+	if id != "" {
 		if _, ok := b.data[modelName][m.GetID()]; ok {
 			return db.Error{
 				Code:    "pk_exists",
