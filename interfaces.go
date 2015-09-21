@@ -182,6 +182,7 @@ type Backend interface {
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)
 	CreateCollection(name string) DbError
+	CreateCollections(name ...string) DbError
 	DropCollection(name string) DbError
 	DropAllCollections() DbError
 

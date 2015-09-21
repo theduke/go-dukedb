@@ -224,6 +224,19 @@ func (b Backend) CreateCollection(name string) db.DbError {
 	return nil
 }
 
+func (b *Backend) CreateCollections(names ...string) db.DbError {
+	for _, name := range names {
+		if err := b.CreateCollection(name); err != nil {
+			return db.Error{
+				Code:    "create_collection_error",
+				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
+			}
+		}
+	}
+
+	return nil
+}
+
 func (b Backend) DropTable(name string, ifExists bool) db.DbError {
 	stmt := b.dialect.DropTableStatement(name, ifExists)
 	if _, err := b.SqlExec(stmt); err != nil {
@@ -687,7 +700,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		return err
 	}
 
-	data, err := db.ModelToMap(info, m, false)
+	data, err := db.ModelToMap(info, m, true, false)
 	if err != nil {
 		return err
 	}
@@ -764,7 +777,7 @@ func (b *Backend) Update(m db.Model) db.DbError {
 		return err
 	}
 
-	data, err := db.ModelToMap(info, m, false)
+	data, err := db.ModelToMap(info, m, true, false)
 	if err != nil {
 		return err
 	}

@@ -76,6 +76,19 @@ func (b *Backend) CreateCollection(name string) db.DbError {
 	return nil
 }
 
+func (b *Backend) CreateCollections(names ...string) db.DbError {
+	for _, name := range names {
+		if err := b.CreateCollection(name); err != nil {
+			return db.Error{
+				Code:    "create_collection_error",
+				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
+			}
+		}
+	}
+
+	return nil
+}
+
 func (b *Backend) DropCollection(name string) db.DbError {
 	info := b.GetModelInfo(name)
 	if info == nil {
@@ -346,9 +359,9 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		return err
 	}
 
-	id := m.GetID()
-	if id != "" {
-		if _, ok := b.data[modelName][id]; ok {
+	id := db.GetModelID(b.GetModelInfo(m.Collection()), m)
+	if !db.IsZero(id) {
+		if _, ok := b.data[modelName][m.GetID()]; ok {
 			return db.Error{
 				Code:    "pk_exists",
 				Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
