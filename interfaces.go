@@ -21,8 +21,8 @@ type BackendQueryMixin interface {
 	SetBackend(Backend)
 
 	Find(targetSlice ...interface{}) ([]interface{}, DbError)
-	First(targetModel ...interface{}) (Model, DbError)
-	Last(targetModel ...interface{}) (Model, DbError)
+	First(targetModel ...interface{}) (interface{}, DbError)
+	Last(targetModel ...interface{}) (interface{}, DbError)
 	Count() (int, DbError)
 	Delete() DbError
 }
@@ -153,7 +153,8 @@ type RelationQuery interface {
 }
 
 type Backend interface {
-	GetName() string
+	// Returns the name of the backend.
+	Name() string
 
 	// Returns true if the backend uses string IDs like MongoDB.
 	HasStringIDs() bool
@@ -167,45 +168,86 @@ type Backend interface {
 	// Duplicate the backend.
 	Copy() Backend
 
-	RegisterModel(Model)
-	GetModelInfo(string) *ModelInfo
-	GetAllModelInfo() map[string]*ModelInfo
-	// Determine if a model type is registered with the backend.
-	HasModel(string) bool
+	// Register a model type.
+	RegisterModel(model interface{})
 
-	ModelToMap(m Model, marshal bool) (map[string]interface{}, DbError)
+	// Get the model info for a collection.
+	ModelInfo(collection string) *ModelInfo
+
+	SetModelInfo(collection string, info *ModelInfo)
+
+	// Get model info for all registered collections.
+	AllModelInfo() map[string]*ModelInfo
+	SetAllModelInfo(map[string]*ModelInfo)
+
+	// Determine if a model collection is registered with the backend.
+	HasCollection(collection string) bool
+
+	ModelToMap(model interface{}, marshal bool) (map[string]interface{}, DbError)
 
 	// After all models have been registered, build the relationship
 	// info.
 	BuildRelationshipInfo()
 
-	// Get a new struct instance to a model struct.
-	NewModel(string) (Model, DbError)
-	// Build a slice of a model.
-	NewModelSlice(string) (interface{}, DbError)
+	// Get a new struct instance to a model struct based on model Collection.
+	NewModel(collection string) (interface{}, DbError)
+
+	// Build a slice of a model for model Collection.
+	NewModelSlice(collection string) (interface{}, DbError)
+
+	// Determine the ID for a model.
+	ModelID(model interface{}) (interface{}, DbError)
+
+	// Determine the ID for a model, and panic on error.
+	MustModelID(model interface{}) interface{}
+
+	// Set the id field on a model.
+	SetModelID(model interface{}, id interface{}) DbError
+
+	// Set the id  field on a model and panic on error.
+	MustSetModelID(model interface{}, id interface{})
+
+	// Set the id by converting a string id.
+	SetModelStrID(model interface{}, id string) DbError
+
+	// Set the id by converting a string id. Panics on error.
+	MustSetModelStrID(model interface{}, id string)
+
+	// Determine the  ID for a model and convert it to string.
+	ModelStrID(model interface{}) (string, DbError)
+
+	// Determine the  ID for a model and convert it to string. Panics on error.
+	MustModelStrID(model interface{}) string
 
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)
-	CreateCollection(name string) DbError
-	CreateCollections(name ...string) DbError
-	DropCollection(name string) DbError
+	CreateCollection(collection string) DbError
+	CreateCollections(collection ...string) DbError
+	DropCollection(collection string) DbError
 	DropAllCollections() DbError
 
-	// Return a new query connected to the backend.
-	Q(modelType string) Query
+	// Create a new query for a collection.
+	Q(collection string) Query
 
 	// Perform a query.
 	Query(q Query, targetSlice ...interface{}) ([]interface{}, DbError)
-	QueryOne(q Query, targetModel ...interface{}) (Model, DbError)
 
-	Last(q Query, targetModel ...interface{}) (Model, DbError)
+	// Perform a query and get the first result.
+	QueryOne(q Query, targetModel ...interface{}) (interface{}, DbError)
+
+	// Perform a query and get the last result.
+	Last(q Query, targetModel ...interface{}) (interface{}, DbError)
 
 	// Find first model with primary key ID.
-	FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, DbError)
+	FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, DbError)
 
-	FindOne(modelType string, id interface{}, targetModel ...interface{}) (Model, DbError)
-	FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (Model, DbError)
+	// Find a model in a collection by ID.
+	FindOne(collection string, id interface{}, targetModel ...interface{}) (interface{}, DbError)
 
+	// Find a model  in a collection based on a field value.
+	FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, DbError)
+
+	// Count by a query.
 	Count(Query) (int, DbError)
 
 	// Based on a RelationQuery, return a query for the specified
@@ -214,27 +256,27 @@ type Backend interface {
 
 	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
-	M2M(obj Model, name string) (M2MCollection, DbError)
+	M2M(model interface{}, name string) (M2MCollection, DbError)
 
 	// Convenience methods.
 
-	Create(Model) DbError
-	Update(Model) DbError
-	UpdateByMap(Model, map[string]interface{}) DbError
-	Delete(Model) DbError
+	Create(model interface{}) DbError
+	Update(model interface{}) DbError
+	UpdateByMap(model interface{}, data map[string]interface{}) DbError
+	Delete(model interface{}) DbError
 	DeleteMany(Query) DbError
 }
 
 type M2MCollection interface {
-	Add(...interface{}) DbError
-	Delete(...Model) DbError
+	Add(models ...interface{}) DbError
+	Delete(models ...interface{}) DbError
 	Clear() DbError
-	Replace([]interface{}) DbError
+	Replace(models []interface{}) DbError
 
 	Count() int
-	Contains(Model) bool
-	ContainsID(string) bool
-	GetByID(string) Model
+	Contains(model interface{}) bool
+	ContainsID(id interface{}) bool
+	GetByID(id interface{}) interface{}
 	All() []interface{}
 }
 
@@ -250,7 +292,6 @@ type TransactionBackend interface {
 }
 
 type MigrationAttempt interface {
-	Model
 	GetVersion() int
 	SetVersion(int)
 
@@ -277,9 +318,46 @@ type MigrationBackend interface {
 }
 
 type Model interface {
+	ModelCollectionHook
+	ModelBackendNameHook
+	ModelIDGetterHook
+	ModelIDSetterHook
+	ModelStrIDGetterHook
+	ModelStrIDSetterHook
+
+	Info() *ModelInfo
+	SetInfo(info *ModelInfo)
+
+	Backend() Backend
+	SetBackend(backend Backend)
+
+	Create() DbError
+	Update() DbError
+	Delete() DbError
+}
+
+type ModelCollectionHook interface {
 	Collection() string
-	GetID() string
-	SetID(string) error
+}
+
+type ModelBackendNameHook interface {
+	BackendName() string
+}
+
+type ModelIDGetterHook interface {
+	GetID() interface{}
+}
+
+type ModelIDSetterHook interface {
+	SetID(id interface{}) error
+}
+
+type ModelStrIDGetterHook interface {
+	GetStrID() string
+}
+
+type ModelStrIDSetterHook interface {
+	SetStrID(id string) error
 }
 
 type ModelValidateHook interface {

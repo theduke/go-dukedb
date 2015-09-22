@@ -8,19 +8,20 @@ import (
 )
 
 type BaseM2MCollection struct {
-	Name  string
-	Items []interface{}
+	Backend Backend
+	Name    string
+	Items   []interface{}
 }
 
 func (c BaseM2MCollection) Count() int {
 	return len(c.Items)
 }
 
-func (c BaseM2MCollection) Contains(m Model) bool {
-	return c.GetByID(m.GetID()) != nil
+func (c BaseM2MCollection) Contains(model interface{}) bool {
+	return c.GetByID(c.Backend.MustModelID(model)) != nil
 }
 
-func (c BaseM2MCollection) ContainsID(id string) bool {
+func (c BaseM2MCollection) ContainsID(id interface{}) bool {
 	return c.GetByID(id) != nil
 }
 
@@ -28,10 +29,10 @@ func (c BaseM2MCollection) All() []interface{} {
 	return c.Items
 }
 
-func (c BaseM2MCollection) GetByID(id string) Model {
+func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
 	for _, item := range c.Items {
-		if item.(Model).GetID() == id {
-			return item.(Model)
+		if c.Backend.MustModelID(item) == id {
+			return item
 		}
 	}
 
@@ -41,7 +42,7 @@ func (c BaseM2MCollection) GetByID(id string) Model {
 type BaseBackend struct {
 	Debug     bool
 	Logger    *logrus.Logger
-	ModelInfo map[string]*ModelInfo
+	modelInfo map[string]*ModelInfo
 }
 
 func (b *BaseBackend) GetDebug() bool {
@@ -60,40 +61,47 @@ func (b *BaseBackend) SetLogger(x *logrus.Logger) {
 	b.Logger = x
 }
 
-func (b *BaseBackend) RegisterModel(m Model) error {
-	info, err := NewModelInfo(m)
+func (b *BaseBackend) RegisterModel(model interface{}) {
+	info, err := NewModelInfo(model)
 	if err != nil {
-		panic(fmt.Sprintf("Could not register model '%v': %v\n", m.Collection(), err))
+		panic(fmt.Sprintf("Could not register model '%v': %v\n", reflect.TypeOf(model).Name(), err))
 	}
 
-	b.ModelInfo[m.Collection()] = info
-	return nil
+	b.modelInfo[info.Collection] = info
 }
 
-func (b BaseBackend) GetModelInfo(name string) *ModelInfo {
-	info, _ := b.ModelInfo[name]
+func (b *BaseBackend) ModelInfo(collection string) *ModelInfo {
+	info, _ := b.modelInfo[collection]
 	return info
 }
 
-func (b BaseBackend) GetAllModelInfo() map[string]*ModelInfo {
-	return b.ModelInfo
+func (b *BaseBackend) SetModelInfo(collection string, info *ModelInfo) {
+	b.modelInfo[collection] = info
 }
 
-func (b BaseBackend) BuildRelationshipInfo() {
-	BuildAllRelationInfo(b.ModelInfo)
+func (b *BaseBackend) AllModelInfo() map[string]*ModelInfo {
+	return b.modelInfo
 }
 
-func (b BaseBackend) HasModel(name string) bool {
-	_, ok := b.ModelInfo[name]
+func (b *BaseBackend) SetAllModelInfo(info map[string]*ModelInfo) {
+	b.modelInfo = info
+}
+
+func (b *BaseBackend) BuildRelationshipInfo() {
+	BuildAllRelationInfo(b.modelInfo)
+}
+
+func (b *BaseBackend) HasCollection(collection string) bool {
+	_, ok := b.modelInfo[collection]
 	return ok
 }
 
-func (b BaseBackend) NewModel(name string) (Model, DbError) {
-	info, ok := b.ModelInfo[name]
+func (b *BaseBackend) NewModel(collection string) (interface{}, DbError) {
+	info, ok := b.modelInfo[collection]
 	if !ok {
 		return nil, Error{
-			Code:    "model_type_not_found",
-			Message: fmt.Sprintf("Model type '%v' not registered with backend GORM", name),
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("Collection '%v' not registered with backend", collection),
 		}
 	}
 
@@ -102,25 +110,156 @@ func (b BaseBackend) NewModel(name string) (Model, DbError) {
 		return nil, Error{Code: err.Error(), Message: "Could not build new struct"}
 	}
 
-	return item.(Model), nil
+	return item, nil
 }
 
-func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
-	info, ok := b.ModelInfo[name]
+func (b *BaseBackend) NewModelSlice(collection string) (interface{}, DbError) {
+	info, ok := b.modelInfo[collection]
 	if !ok {
 		return nil, Error{
-			Code:    "model_type_not_found",
-			Message: fmt.Sprintf("Model type '%v' not registered with backend GORM", name),
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("Collection '%v' not registered with backend", collection),
 		}
 	}
 
 	return NewSlice(info.Item), nil
 }
 
+// Determine the ID for a model.
+func (b *BaseBackend) ModelID(model interface{}) (interface{}, DbError) {
+	if hook, ok := model.(ModelIDGetterHook); ok {
+		return hook.GetID(), nil
+	}
+
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		return nil, err
+	}
+
+	info := b.ModelInfo(collection)
+	id, err := GetModelID(info, model)
+	if err != nil {
+		return nil, err
+	}
+
+	return id, nil
+}
+
+// Determine the ID for a model, and panic on error.
+func (b *BaseBackend) MustModelID(model interface{}) interface{} {
+	id, err := b.ModelID(model)
+	if err != nil {
+		panic(fmt.Sprintf("Could not determine ID for model: %v", err))
+	}
+
+	return id
+}
+
+// Determine the  ID for a model and convert it to string.
+func (b *BaseBackend) ModelStrID(model interface{}) (string, DbError) {
+	if hook, ok := model.(ModelStrIDGetterHook); ok {
+		return hook.GetStrID(), nil
+	}
+
+	id, err := b.ModelID(model)
+	if err != nil {
+		return "", err
+	}
+
+	if IsZero(id) {
+		return "", nil
+	}
+
+	return fmt.Sprint(id), nil
+}
+
+// Determine the  ID for a model and convert it to string. Panics on error.
+func (b *BaseBackend) MustModelStrID(model interface{}) string {
+	id, err := b.ModelStrID(model)
+	if err != nil {
+		panic(fmt.Sprintf("Could not determine id for model: %v", err))
+	}
+
+	return id
+}
+
+// Set the id field on a model.
+func (b *BaseBackend) SetModelID(model interface{}, id interface{}) DbError {
+	if hook, ok := model.(ModelIDSetterHook); ok {
+		err := hook.SetID(id)
+		if err != nil {
+			return Error{
+				Code:    "model_set_id_error",
+				Message: err.Error(),
+			}
+		}
+	}
+
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		return err
+	}
+
+	info := b.ModelInfo(collection)
+	if err := SetStructField(model, info.PkField, id); err != nil {
+		return Error{
+			Code:    err.Error(),
+			Message: fmt.Sprintf("Could not set %v.%v to value %v: %v", collection, info.PkField, id),
+		}
+	}
+
+	return nil
+}
+
+// Set the id  field on a model and panic on error.
+func (b *BaseBackend) MustSetModelID(model interface{}, id interface{}) {
+	if err := b.SetModelID(model, id); err != nil {
+		panic(err.GetMessage())
+	}
+}
+
+// Set the id field on a model by converting a string id.
+func (b *BaseBackend) SetModelStrID(model interface{}, id string) DbError {
+	if hook, ok := model.(ModelStrIDSetterHook); ok {
+		err := hook.SetStrID(id)
+		if err != nil {
+			return Error{
+				Code:    "model_set_id_error",
+				Message: err.Error(),
+			}
+		}
+	}
+
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		return err
+	}
+
+	info := b.ModelInfo(collection)
+	pkField := info.GetField(info.PkField)
+
+	convertedId, err2 := Convert(id, pkField.Type)
+	if err2 != nil {
+		return Error{
+			Code:    "id_conversion_error",
+			Message: err2.Error(),
+		}
+	}
+
+	return b.SetModelID(model, convertedId)
+}
+
+// Set the id  field on a model by converting a string id. Panics on error.
+func (b *BaseBackend) MustSetModelStrID(model interface{}, id string) {
+	if err := b.SetModelStrID(model, id); err != nil {
+		panic(err.GetMessage())
+	}
+}
+
 // Relationship stuff.
 func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Query, DbError) {
 	baseQ := q.GetBaseQuery()
-	baseInfo := b.GetModelInfo(baseQ.GetCollection())
+	baseInfo := b.ModelInfo(baseQ.GetCollection())
 	if baseInfo == nil {
 		panic(fmt.Sprintf("Model %v not registered with backend", baseQ.GetCollection()))
 	}
@@ -159,7 +298,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 
 		if foreignFieldName == "" {
 			// No foreign key specified, use primary key.
-			relatedInfo := b.GetModelInfo(targetModelName)
+			relatedInfo := b.ModelInfo(targetModelName)
 			foreignFieldName = relatedInfo.PkField
 		}
 	} else if q.GetRelationName() != "" {
@@ -169,8 +308,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.GetCollection(), q.GetRelationName()))
 		}
 
-		targetModelName = relInfo.RelationItem.Collection()
-		relatedInfo := b.GetModelInfo(targetModelName)
+		relatedInfo := b.ModelInfo(relInfo.RelationCollection)
 		newQuery = b.Q(targetModelName)
 
 		if relInfo.HasOne {
@@ -223,7 +361,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
  * Convenience functions.
  */
 
-func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
+func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) DbError {
 	modelVal := reflect.ValueOf(m)
 	if modelVal.Type().Kind() == reflect.Ptr {
 		modelVal = modelVal.Elem()
@@ -245,14 +383,14 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				relationVal = relationVal.Elem()
 			}
 
-			relation := relationVal.Addr().Interface().(Model)
+			relation := relationVal.Addr().Interface()
 
 			if IsZero(relation) {
 				continue
 			}
 
 			// Auto-persist related model if neccessary.
-			if IsZero(relation.GetID()) {
+			if IsZero(b.MustModelID(relation)) {
 				err := b.Create(relation)
 				if err != nil {
 					return err
@@ -274,7 +412,8 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				continue
 			}
 
-			foreignFieldName := b.GetModelInfo(fieldInfo.RelationItem.Collection()).FieldInfo[fieldInfo.BelongsToForeignField].BackendName
+			relationCollection := fieldInfo.RelationCollection
+			foreignFieldName := b.ModelInfo(relationCollection).GetField(fieldInfo.BelongsToForeignField).BackendName
 
 			items := make([]reflect.Value, 0)
 
@@ -302,10 +441,11 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 					relationVal = relationVal.Elem()
 				}
 
-				relation := relationVal.Addr().Interface().(Model)
+				relation := relationVal.Addr().Interface()
+				relationId := b.MustModelID(relation)
 
 				foreignField := relationVal.FieldByName(fieldInfo.BelongsToForeignField)
-				if reflect.DeepEqual(foreignField.Interface(), belongsToKey) && !IsZero(relation.GetID()) {
+				if reflect.DeepEqual(foreignField.Interface(), belongsToKey) && !IsZero(relationId) {
 					// Relation is persisted and has the right id, so nothing to do.
 					continue
 				}
@@ -314,7 +454,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				foreignField.Set(reflect.ValueOf(belongsToKey))
 
 				// Auto-persist related model if neccessary.
-				if IsZero(relation.GetID()) {
+				if IsZero(relationId) {
 					err := b.Create(relation)
 					if err != nil {
 						return err
@@ -332,7 +472,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 		} else if fieldInfo.M2M {
 			// m2m relationships can only be handled if the model itself has an id
 			// already. So skip if otherwise.
-			if IsZero(m.GetID()) {
+			if IsZero(b.MustModelID(m)) {
 				continue
 			}
 
@@ -350,9 +490,9 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 			}
 
 			// First, persist all unpersisted m2m models.
-			for _, rawModel := range models {
-				model := rawModel.(Model)
-				if IsZero(model.GetID()) {
+			for _, model := range models {
+				id := b.MustModelID(model)
+				if IsZero(id) {
 					if err := b.Create(model); err != nil {
 						return err
 					}
@@ -396,7 +536,7 @@ func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []in
 	return models, nil
 }
 
-func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (Model, DbError) {
+func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (interface{}, DbError) {
 	res, err := b.Query(q)
 	if err != nil {
 		return nil, err
@@ -412,10 +552,10 @@ func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (Model, DbE
 		SetPointer(targetModels[0], m)
 	}
 
-	return m.(Model), nil
+	return m, nil
 }
 
-func BackendLast(b Backend, q Query, targetModels []interface{}) (Model, DbError) {
+func BackendLast(b Backend, q Query, targetModels []interface{}) (interface{}, DbError) {
 	orders := q.GetOrders()
 	orderLen := len(q.GetOrders())
 	if orderLen > 0 {
@@ -423,7 +563,7 @@ func BackendLast(b Backend, q Query, targetModels []interface{}) (Model, DbError
 			orders[i].Ascending = !orders[i].Ascending
 		}
 	} else {
-		info := b.GetModelInfo(q.GetCollection())
+		info := b.ModelInfo(q.GetCollection())
 		q = q.Order(info.GetPkName(), false)
 	}
 
@@ -439,8 +579,8 @@ func BackendLast(b Backend, q Query, targetModels []interface{}) (Model, DbError
 	return model, nil
 }
 
-func BackendFindOne(b Backend, modelType string, id interface{}, targetModel []interface{}) (Model, DbError) {
-	info := b.GetModelInfo(modelType)
+func BackendFindOne(b Backend, modelType string, id interface{}, targetModel []interface{}) (interface{}, DbError) {
+	info := b.ModelInfo(modelType)
 	if info == nil {
 		return nil, Error{
 			Code:    "model_type_not_found",
@@ -450,10 +590,8 @@ func BackendFindOne(b Backend, modelType string, id interface{}, targetModel []i
 
 	pkField := info.FieldInfo[info.PkField]
 
-	if reflect.TypeOf(id).Kind() != pkField.Type {
-		fieldType, _ := reflect.TypeOf(info.Item).Elem().FieldByName(info.PkField)
-
-		converted, err := Convert(id, fieldType.Type)
+	if reflect.TypeOf(id) != pkField.Type {
+		converted, err := Convert(id, pkField.Type)
 		if err != nil {
 			return nil, Error{
 				Code:    "id_conversion_error",
@@ -479,7 +617,7 @@ func BackendFindBy(b Backend, modelType, field string, value interface{}, target
 	return b.Q(modelType).Filter(field, value).Find(targetSlice...)
 }
 
-func BackendFindOneBy(b Backend, modelType, field string, value interface{}, targetModel []interface{}) (Model, DbError) {
+func BackendFindOneBy(b Backend, modelType, field string, value interface{}, targetModel []interface{}) (interface{}, DbError) {
 	res, err := b.Q(modelType).Filter(field, value).First()
 	if err != nil {
 		return nil, err

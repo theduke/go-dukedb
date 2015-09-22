@@ -119,9 +119,9 @@ func SaveConvert(val interface{}, typ reflect.Type) interface{} {
 }
 
 func Convert(value interface{}, typ reflect.Type) (interface{}, error) {
-	valType := reflect.TypeOf(value)
-
 	kind := typ.Kind()
+
+	valType := reflect.TypeOf(value)
 
 	if valType.Kind() == kind {
 		// Same kind, nothing to convert.
@@ -758,13 +758,50 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string, val string
 	return nil
 }
 
-func GetModelID(info *ModelInfo, m Model) interface{} {
-	val, err := GetStructFieldValue(m, info.PkField)
-	if err != nil {
-		return nil
+func GetModelCollection(model interface{}) (string, DbError) {
+	if hook, ok := model.(ModelCollectionHook); ok {
+		return hook.Collection(), nil
 	}
 
-	return val
+	typ := reflect.TypeOf(model)
+
+	// Dereference pointer.
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	// Check if it is a struct.
+	if typ.Kind() != reflect.Struct {
+		return "", Error{
+			Code:    "invalid_model",
+			Message: fmt.Sprintf("Expected model struct or pointer to struct, got %v", typ),
+		}
+	}
+
+	collection := CamelCaseToUnderscore(typ.Name())
+	if collection[len(collection)-1] != 's' {
+		collection += "s"
+	}
+
+	return collection, nil
+}
+
+func MustGetModelCollection(model interface{}) string {
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		panic("Could not determine collection: " + err.Error())
+	}
+
+	return collection
+}
+
+func GetModelID(info *ModelInfo, m interface{}) (interface{}, DbError) {
+	val, err := GetStructFieldValue(m, info.PkField)
+	if err != nil {
+		return nil, err
+	}
+
+	return val, nil
 }
 
 func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, DbError) {
@@ -779,6 +816,35 @@ func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, 
 	}
 
 	return vals, nil
+}
+
+// Set a struct field.
+// Returns an error if the object is not a struct or a pointer to a struct, or if
+// the field does not exist.
+func SetStructField(obj interface{}, fieldName string, value interface{}) error {
+	val := reflect.ValueOf(obj)
+
+	// Make sure obj is a pointer.
+	if val.Type().Kind() != reflect.Ptr {
+		return errors.New("pointer_to_struct_expected")
+	}
+
+	// Dereference pointer.
+	val = val.Elem()
+
+	// Make surre obj points to a struct.
+	if val.Type().Kind() != reflect.Struct {
+		return errors.New("struct_expected")
+	}
+
+	field := val.FieldByName(fieldName)
+	if !field.IsValid() {
+		return errors.New("unknown_field")
+	}
+
+	field.Set(reflect.ValueOf(value))
+
+	return nil
 }
 
 // Given a struct, set the specified field that contains either a single Model
@@ -835,7 +901,7 @@ func SetStructModelField(obj interface{}, fieldName string, models []interface{}
 	return nil
 }
 
-func ModelToMap(info *ModelInfo, model Model, forBackend, marshal bool) (map[string]interface{}, DbError) {
+func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (map[string]interface{}, DbError) {
 	data := make(map[string]interface{})
 
 	for fieldName := range info.FieldInfo {
@@ -860,7 +926,7 @@ func ModelToMap(info *ModelInfo, model Model, forBackend, marshal bool) (map[str
 			if err != nil {
 				return nil, Error{
 					Code:    "marshal_error",
-					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.ItemName, fieldName, err),
+					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.Name, fieldName, err),
 				}
 			}
 			val = js
@@ -960,13 +1026,13 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	val := reflect.ValueOf(rawValue)
 
-	// Skip zero values.
+	// Skip invalid.
 	if !val.IsValid() {
 		return
 	}
 
 	valKind := val.Type().Kind()
-	fieldKind := info.Type
+	fieldKind := info.Type.Kind()
 
 	// For the same type, skip complicated comparison/casting.
 	if valKind == fieldKind {
@@ -1159,7 +1225,7 @@ func CallModelHook(b Backend, m interface{}, hook string) DbError {
 // Contains information about a single field of a Model.
 type FieldInfo struct {
 	Name       string
-	Type       reflect.Kind
+	Type       reflect.Type
 	StructType string
 
 	// Specifies whether the field should be of type string and the raw value should
@@ -1206,8 +1272,9 @@ type FieldInfo struct {
 	BelongsToField        string
 	BelongsToForeignField string
 
-	RelationItem   Model
-	RelationIsMany bool
+	RelationItem       interface{}
+	RelationCollection string
+	RelationIsMany     bool
 }
 
 func (f FieldInfo) IsRelation() bool {
@@ -1219,8 +1286,9 @@ type ModelInfo struct {
 	// Name of the struct field.
 	PkField string
 
-	Item       Model
-	ItemName   string
+	Item       interface{}
+	FullName   string
+	Name       string
 	Collection string
 
 	BackendName string
@@ -1230,21 +1298,51 @@ type ModelInfo struct {
 
 // Builds the ModelInfo for a model and returns it.
 // Returns an error for all failures.
-func NewModelInfo(model Model) (*ModelInfo, DbError) {
+func NewModelInfo(model interface{}) (*ModelInfo, DbError) {
+	typ := reflect.TypeOf(model)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	if typ.Kind() != reflect.Struct {
+		return nil, Error{
+			Code:    "invalid_model_argument",
+			Message: fmt.Sprintf("Must use pointer to struct or struct, got %v", typ),
+		}
+	}
+
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		return nil, err
+	}
+
 	info := ModelInfo{
-		Item:       model,
-		ItemName:   reflect.ValueOf(model).Elem().Type().Name(),
-		Collection: model.Collection(),
+		Item:       reflect.New(typ).Interface(),
+		FullName:   typ.PkgPath() + "." + typ.Name(),
+		Name:       typ.Name(),
+		Collection: collection,
 		FieldInfo:  make(map[string]*FieldInfo),
 	}
 
-	info.BackendName = CamelCaseToUnderscore(info.Collection)
+	info.BackendName = info.Collection
 
-	err := info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")
+	// If model implements .BackendName() call it to determine backend name.
+	if nameHook, ok := model.(ModelBackendNameHook); ok {
+		name := nameHook.BackendName()
+		if name == "" {
+			return nil, Error{
+				Code:    "invalid_backend_name_result",
+				Message: fmt.Sprintf("Model %v.BackendName() returned empty string", info.FullName),
+			}
+		}
+		info.BackendName = name
+	}
+
+	err = info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")
 	if err != nil {
 		return nil, Error{
-			Code:    "build_field_info_failed",
-			Message: fmt.Sprintf("Could not build field info for %v: %v", info.ItemName, err.GetMessage()),
+			Code:    "build_field_info_error",
+			Message: fmt.Sprintf("Could not build field info for %v: %v", info.Name, err.GetMessage()),
 			Data:    err,
 		}
 	}
@@ -1267,7 +1365,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 
 			// On numeric fields, activate autoincrement.
 			// TODO: allow a way to disable autoincrement with a tag.
-			switch fieldInfo.Type {
+			switch fieldInfo.Type.Kind() {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				fieldInfo.AutoIncrement = true
 			}
@@ -1281,7 +1379,7 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 	if info.PkField == "" {
 		return nil, Error{
 			Code:    "primary_key_not_found",
-			Message: fmt.Sprintf("Primary key could not be determined for model %v", info.ItemName),
+			Message: fmt.Sprintf("Primary key could not be determined for model %v", info.Name),
 		}
 	}
 
@@ -1291,6 +1389,10 @@ func NewModelInfo(model Model) (*ModelInfo, DbError) {
 func (m ModelInfo) HasField(name string) bool {
 	_, ok := m.FieldInfo[name]
 	return ok
+}
+
+func (m ModelInfo) GetField(name string) *FieldInfo {
+	return m.FieldInfo[name]
 }
 
 func (m ModelInfo) GetPkField() *FieldInfo {
@@ -1497,6 +1599,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 		}
 
 		fieldInfo.Name = fieldType.Name
+		fieldInfo.Type = fieldType.Type
 		fieldInfo.Embedded = embeddedName
 
 		if fieldInfo.BackendName == "" {
@@ -1515,9 +1618,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 
 			// Field is a direct struct.
 			// RelationItem type is the struct.
-			if relItem, ok := reflect.New(fieldType.Type).Interface().(Model); ok {
-				fieldInfo.RelationItem = relItem
-			}
+			fieldInfo.RelationItem = reflect.New(fieldType.Type).Interface()
 		} else if fieldKind == reflect.Ptr {
 			// Field is a pointer.
 			ptrType := fieldType.Type.Elem()
@@ -1526,11 +1627,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 				fieldInfo.StructType = ptrType.PkgPath() + "." + ptrType.Name()
 			}
 
-			// Check if it points to a Model.
-			if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
-				// Points to a model.
-				fieldInfo.RelationItem = relItem
-			}
+			fieldInfo.RelationItem = reflect.New(ptrType).Interface()
 		} else if fieldKind == reflect.Slice {
 			// Field is slice.
 			// Check if slice items are models or pointers to models.
@@ -1541,24 +1638,23 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 				// Slice contains structs.
 				fieldInfo.StructType = sliceKind.String()
 
-				// Same as above code for plain structs.
-				if relItem, ok := reflect.New(sliceType).Interface().(Model); ok {
-					fieldInfo.RelationItem = relItem
-					fieldInfo.RelationIsMany = true
-				}
+				fieldInfo.RelationItem = reflect.New(sliceType).Interface()
+				fieldInfo.RelationIsMany = true
 			} else if sliceKind == reflect.Ptr {
 				// Slice contains pointers.
 				// Check if it points to a model. Same as above for pointers.
 				ptrType := sliceType.Elem()
-				if relItem, ok := reflect.New(ptrType).Interface().(Model); ok {
-					// Points to a model.
-					fieldInfo.RelationItem = relItem
-					fieldInfo.RelationIsMany = true
-				}
+
+				fieldInfo.RelationItem = reflect.New(ptrType).Interface()
+				fieldInfo.RelationIsMany = true
 			}
+
 		}
 
-		fieldInfo.Type = fieldType.Type.Kind()
+		if fieldInfo.RelationItem != nil {
+			fieldInfo.RelationCollection = MustGetModelCollection(fieldInfo.RelationItem)
+		}
+
 		info.FieldInfo[fieldType.Name] = fieldInfo
 	}
 
@@ -1599,7 +1695,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 		modelName := reflect.ValueOf(model.Item).Elem().Type().Name()
 		relatedItem := fieldInfo.RelationItem
 		relatedName := reflect.ValueOf(relatedItem).Elem().Type().Name()
-		relatedCollection := relatedItem.Collection()
+		relatedCollection := fieldInfo.RelationCollection
 
 		// Check that related model is contained in models info.
 		if _, ok := models[relatedCollection]; !ok {
@@ -1611,7 +1707,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 			}
 		}
 
-		relatedInfo := models[relatedItem.Collection()]
+		relatedInfo := models[relatedCollection]
 		relatedFields := relatedInfo.FieldInfo
 
 		if !(fieldInfo.BelongsTo || fieldInfo.HasOne || fieldInfo.M2M) {

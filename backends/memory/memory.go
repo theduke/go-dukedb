@@ -24,7 +24,7 @@ var _ db.MigrationBackend = (*Backend)(nil)
 func New() *Backend {
 	b := Backend{}
 
-	b.ModelInfo = make(map[string]*db.ModelInfo)
+	b.SetAllModelInfo(make(map[string]*db.ModelInfo))
 	b.data = make(map[string]map[string]interface{})
 
 	b.MigrationHandler = db.NewMigrationHandler(&b)
@@ -39,7 +39,7 @@ func (b *Backend) HasStringIDs() bool {
 	return false
 }
 
-func (b *Backend) GetName() string {
+func (b *Backend) Name() string {
 	return "memory"
 }
 
@@ -50,26 +50,29 @@ func (b *Backend) SetDebug(d bool) {
 func (b *Backend) Copy() db.Backend {
 	copied := Backend{}
 
-	copied.ModelInfo = b.ModelInfo
+	copied.SetAllModelInfo(b.AllModelInfo())
 	copied.data = b.data
 	copied.SetDebug(b.GetDebug())
 	return &copied
 }
 
-func (b *Backend) RegisterModel(m db.Model) {
-	if err := b.BaseBackend.RegisterModel(m); err != nil {
-		panic(fmt.Sprintf("Could not register model %v: %v", m.Collection(), err))
-	}
-
-	b.data[m.Collection()] = make(map[string]interface{})
+func (b *Backend) RegisterModel(m interface{}) {
+	b.BaseBackend.RegisterModel(m)
+	collection := db.MustGetModelCollection(m)
+	b.data[collection] = make(map[string]interface{})
 }
 
-func (b *Backend) ModelToMap(m db.Model, marshal bool) (map[string]interface{}, db.DbError) {
-	info := b.GetModelInfo(m.Collection())
+func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.DbError) {
+	collection, err := db.GetModelCollection(m)
+	if err != nil {
+		return nil, err
+	}
+
+	info := b.ModelInfo(collection)
 	if info == nil {
 		return nil, db.Error{
 			Code:    "unknown_collection",
-			Message: fmt.Sprintf("The collection %v was not registered with backend", m.Collection()),
+			Message: fmt.Sprintf("The collection %v was not registered with backend", collection),
 		}
 	}
 
@@ -77,7 +80,7 @@ func (b *Backend) ModelToMap(m db.Model, marshal bool) (map[string]interface{}, 
 }
 
 func (b *Backend) CreateCollection(name string) db.DbError {
-	info := b.GetModelInfo(name)
+	info := b.ModelInfo(name)
 	if info == nil {
 		return db.Error{
 			Code:    "unknown_model",
@@ -104,7 +107,7 @@ func (b *Backend) CreateCollections(names ...string) db.DbError {
 }
 
 func (b *Backend) DropCollection(name string) db.DbError {
-	info := b.GetModelInfo(name)
+	info := b.ModelInfo(name)
 	if info == nil {
 		return db.Error{
 			Code:    "unknown_model",
@@ -120,7 +123,8 @@ func (b *Backend) DropCollection(name string) db.DbError {
 }
 
 func (b *Backend) DropAllCollections() db.DbError {
-	for name := range b.ModelInfo {
+	info := b.AllModelInfo()
+	for name := range info {
 		if err := b.DropCollection(name); err != nil {
 			return err
 		}
@@ -220,7 +224,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 }
 
 func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
-	info := b.GetModelInfo(q.GetCollection())
+	info := b.ModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
 			Code:    "unknown_model",
@@ -321,12 +325,12 @@ func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{},
 	return db.BackendQuery(b, q, targetSlices, res, err)
 }
 
-func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, db.DbError) {
 	return db.BackendQueryOne(b, q, targetModel)
 }
 
 func (b *Backend) Count(q db.Query) (int, db.DbError) {
-	info := b.GetModelInfo(q.GetCollection())
+	info := b.ModelInfo(q.GetCollection())
 	if info == nil {
 		return 0, db.Error{
 			Code:    "unknown_model",
@@ -345,12 +349,12 @@ func (b *Backend) Count(q db.Query) (int, db.DbError) {
 	return len(result), nil
 }
 
-func (b *Backend) Last(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, db.DbError) {
 	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, db.DbError) {
 	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
@@ -358,7 +362,7 @@ func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice
 	return db.BackendFindBy(b, modelType, field, value, targetSlice)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, db.DbError) {
 	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
@@ -367,14 +371,17 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 // Store the model.
 // Fails if the model type was not registered, or if the primary key already
 // exists.
-func (b *Backend) Create(m db.Model) db.DbError {
-	modelName := m.Collection()
+func (b *Backend) Create(m interface{}) db.DbError {
+	collection, err := db.GetModelCollection(m)
+	if err != nil {
+		return err
+	}
 
-	info := b.GetModelInfo(modelName)
+	info := b.ModelInfo(collection)
 	if info == nil {
 		return db.Error{
 			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
+			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
 		}
 	}
 
@@ -386,31 +393,31 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	}
 
 	// Persist relationships before create.
-	err := db.BackendPersistRelations(b, info, m)
+	err = db.BackendPersistRelations(b, info, m)
 	if err != nil {
 		return err
 	}
 
-	id := m.GetID()
-	if id != "" {
-		if _, ok := b.data[modelName][m.GetID()]; ok {
+	id := b.MustModelStrID(m)
+	if !db.IsZero(id) {
+		if _, ok := b.data[collection][id]; ok {
 			return db.Error{
 				Code:    "pk_exists",
-				Message: fmt.Sprintf("A model of type %v with id %v already exists", modelName, id),
+				Message: fmt.Sprintf("A model of type %v with id %v already exists", collection, id),
 			}
 		}
 	} else {
 		// Generate new id.
-		newId := strconv.Itoa(len(b.data[modelName]) + 1)
-		if err := m.SetID(newId); err != nil {
+		id = strconv.Itoa(len(b.data[collection]) + 1)
+		if err := b.SetModelStrID(m, id); err != nil {
 			return db.Error{
 				Code:    "set_id_error",
-				Message: fmt.Sprintf("Error while setting the id %v on model %v", newId, modelName),
+				Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
 			}
 		}
 	}
 
-	b.data[modelName][m.GetID()] = m
+	b.data[collection][id] = m
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.
 	err = db.BackendPersistRelations(b, info, m)
@@ -423,12 +430,16 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	return nil
 }
 
-func (b *Backend) Update(m db.Model) db.DbError {
-	modelName := m.Collection()
-	if !b.HasModel(modelName) {
+func (b *Backend) Update(m interface{}) db.DbError {
+	collection, err := db.GetModelCollection(m)
+	if err != nil {
+		return err
+	}
+
+	if !b.HasCollection(collection) {
 		return db.Error{
 			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
+			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
 		}
 	}
 
@@ -439,21 +450,24 @@ func (b *Backend) Update(m db.Model) db.DbError {
 		return err
 	}
 
-	b.data[modelName][m.GetID()] = m
+	b.data[collection][b.MustModelStrID(m)] = m
 
 	db.CallModelHook(b, m, "AfterUpdate")
 
 	return nil
 }
 
-func (b *Backend) UpdateByMap(m db.Model, data map[string]interface{}) db.DbError {
-	modelName := m.Collection()
-	info := b.GetModelInfo(modelName)
+func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.DbError {
+	collection, err := db.GetModelCollection(m)
+	if err != nil {
+		return err
+	}
 
+	info := b.ModelInfo(collection)
 	if info == nil {
 		return db.Error{
 			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with backend", modelName),
+			Message: fmt.Sprintf("The model %v was not registered with backend", collection),
 		}
 	}
 
@@ -461,16 +475,20 @@ func (b *Backend) UpdateByMap(m db.Model, data map[string]interface{}) db.DbErro
 		return err
 	}
 
-	b.data[modelName][m.GetID()] = m
+	b.data[collection][b.MustModelStrID(m)] = m
 	return nil
 }
 
-func (b *Backend) Delete(m db.Model) db.DbError {
-	modelName := m.Collection()
-	if !b.HasModel(modelName) {
+func (b *Backend) Delete(m interface{}) db.DbError {
+	collection, err := db.GetModelCollection(m)
+	if err != nil {
+		return err
+	}
+
+	if !b.HasCollection(collection) {
 		return db.Error{
 			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
+			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
 		}
 	}
 
@@ -478,15 +496,15 @@ func (b *Backend) Delete(m db.Model) db.DbError {
 		return err
 	}
 
-	id := m.GetID()
-	if _, ok := b.data[modelName][id]; !ok {
+	id := b.MustModelStrID(m)
+	if _, ok := b.data[collection][id]; !ok {
 		return db.Error{
 			Code:    "not_found",
-			Message: fmt.Sprintf("A model of type %v with id %v does not exists", modelName, id),
+			Message: fmt.Sprintf("A model of type %v with id %v does not exists", collection, id),
 		}
 	}
 
-	delete(b.data[modelName], id)
+	delete(b.data[collection], id)
 
 	db.CallModelHook(b, m, "AfterDelete")
 
@@ -500,7 +518,7 @@ func (b *Backend) DeleteMany(q db.Query) db.DbError {
 	}
 
 	for _, item := range result {
-		if err := b.Delete(item.(db.Model)); err != nil {
+		if err := b.Delete(item); err != nil {
 			return err
 		}
 	}
@@ -512,36 +530,43 @@ func (b *Backend) DeleteMany(q db.Query) db.DbError {
  * M2M
  */
 
-func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) {
-	info := b.GetModelInfo(obj.Collection())
+func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.DbError) {
+	collection, err := db.GetModelCollection(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	info := b.ModelInfo(collection)
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
 		return nil, db.Error{
 			Code:    "unknown_field",
-			Message: fmt.Sprintf("The model %v has no field %v", obj.Collection(), name),
+			Message: fmt.Sprintf("The model %v has no field %v", collection, name),
 		}
 	}
 
 	if !fieldInfo.M2M {
 		return nil, db.Error{
 			Code:    "no_m2m_field",
-			Message: fmt.Sprintf("The %v on model %v is not m2m", name, obj.Collection()),
+			Message: fmt.Sprintf("The %v on model %v is not m2m", name, collection),
 		}
 	}
 
 	items, _ := db.GetStructFieldValue(obj, name)
 
 	col := M2MCollection{
-		items: reflect.ValueOf(items),
+		Backend: b,
+		items:   reflect.ValueOf(items),
 	}
 
 	return &col, nil
 }
 
 type M2MCollection struct {
-	Name  string
-	items reflect.Value
+	Backend db.Backend
+	Name    string
+	items   reflect.Value
 }
 
 // Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
@@ -551,11 +576,11 @@ func (c M2MCollection) Count() int {
 	return c.items.Len()
 }
 
-func (c M2MCollection) Contains(m db.Model) bool {
-	return c.GetByID(m.GetID()) != nil
+func (c M2MCollection) Contains(m interface{}) bool {
+	return c.GetByID(c.Backend.MustModelID(m)) != nil
 }
 
-func (c M2MCollection) ContainsID(id string) bool {
+func (c M2MCollection) ContainsID(id interface{}) bool {
 	return c.GetByID(id) != nil
 }
 
@@ -564,10 +589,10 @@ func (c M2MCollection) All() []interface{} {
 	return slice
 }
 
-func (c M2MCollection) GetByID(id string) db.Model {
+func (c M2MCollection) GetByID(id interface{}) interface{} {
 	for i := 0; i < c.items.Len(); i++ {
-		model := c.items.Index(i).Interface().(db.Model)
-		if model.GetID() == id {
+		model := c.items.Index(i).Interface()
+		if c.Backend.MustModelID(model) == id {
 			return model
 		}
 	}
@@ -577,7 +602,7 @@ func (c M2MCollection) GetByID(id string) db.Model {
 
 func (c *M2MCollection) Add(items ...interface{}) db.DbError {
 	for _, item := range items {
-		if !c.Contains(item.(db.Model)) {
+		if !c.Contains(item) {
 			reflect.Append(c.items, reflect.ValueOf(item))
 		}
 	}
@@ -585,12 +610,15 @@ func (c *M2MCollection) Add(items ...interface{}) db.DbError {
 	return nil
 }
 
-func (c *M2MCollection) Delete(items ...db.Model) db.DbError {
+func (c *M2MCollection) Delete(items ...interface{}) db.DbError {
 	for _, item := range items {
-		for i := 0; i < c.items.Len(); i++ {
-			curItem := c.items.Index(i).Elem().Interface().(db.Model)
+		itemId := c.Backend.MustModelID(item)
 
-			if curItem.GetID() == item.GetID() {
+		for i := 0; i < c.items.Len(); i++ {
+			curItem := c.items.Index(i).Elem().Interface()
+			curItemId := c.Backend.MustModelID(curItem)
+
+			if curItemId == itemId {
 				// Replace all items after the one to delete.
 				for j := i + 1; j < c.items.Len(); j++ {
 					c.items.Index(j - 1).Set(c.items.Index(j).Elem())

@@ -2,7 +2,6 @@ package tests
 
 import (
 	"fmt"
-	"strconv"
 
 	. "github.com/theduke/go-dukedb"
 )
@@ -21,40 +20,10 @@ type TestModel struct {
 	IntVal int64
 }
 
-// Ensure TestModel implements Model interface.
-var _ Model = (*TestModel)(nil)
-
-func (t TestModel) Collection() string {
-	return "test_models"
-}
-
-func (t TestModel) GetID() string {
-	if t.ID == 0 {
-		return ""
-	}
-	return strconv.FormatUint(t.ID, 10)
-}
-
-func (t *TestModel) SetID(x string) error {
-	id, err := strconv.ParseUint(x, 10, 64)
-	if err != nil {
-		return err
-	}
-	t.ID = id
-	return nil
-}
-
 type HooksModel struct {
 	TestModel
 	CalledHooks []string `db:"-"`
 	HookError   bool     `db:"-"`
-}
-
-// Ensure HooksModel implements Model interface.
-var _ Model = (*HooksModel)(nil)
-
-func (h HooksModel) Collection() string {
-	return "hooks_models"
 }
 
 func (h *HooksModel) Validate() DbError {
@@ -115,13 +84,6 @@ type TestParent struct {
 	ChildSlicePtr []*TestModel `db:"m2m"`
 }
 
-// Ensure TestParent implements Model interface.
-var _ Model = (*TestParent)(nil)
-
-func (t TestParent) Collection() string {
-	return "test_parents"
-}
-
 func NewTestModel(index int) TestModel {
 	return TestModel{
 		//ID:     uint64(index),
@@ -177,8 +139,8 @@ func NewTestModelPtrSlice(startIndex int, count int) []*TestModel {
 	return slice
 }
 
-func NewTestModelInterfaceSlice(startIndex int, count int) []Model {
-	slice := make([]Model, 0)
+func NewTestModelInterfaceSlice(startIndex int, count int) []interface{} {
+	slice := make([]interface{}, 0)
 	for i := startIndex; i < startIndex+count; i++ {
 		model := NewTestModel(i)
 		slice = append(slice, &model)
@@ -206,8 +168,8 @@ func NewTestParentPtrSlice(startIndex int, count int, withChildren bool) []*Test
 	return slice
 }
 
-func NewTestParentInterfaceSlice(startIndex int, count int, withChildren bool) []Model {
-	slice := make([]Model, 0)
+func NewTestParentInterfaceSlice(startIndex int, count int, withChildren bool) []interface{} {
+	slice := make([]interface{}, 0)
 	for i := startIndex; i < startIndex+count; i++ {
 		model := NewTestParent(i, withChildren)
 		slice = append(slice, &model)
