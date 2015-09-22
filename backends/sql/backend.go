@@ -607,8 +607,7 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 	return modelSlice, nil
 }
 
-// Perform a query.
-func (b *Backend) Query(q db.Query) ([]interface{}, db.DbError) {
+func (b *Backend) doQuery(q db.Query) ([]interface{}, db.DbError) {
 	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
@@ -651,15 +650,17 @@ func (b *Backend) Query(q db.Query) ([]interface{}, db.DbError) {
 		}
 	}
 
-	for _, m := range models {
-		db.CallModelHook(b, m, "AfterQuery")
-	}
-
 	return models, nil
 }
 
-func (b *Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
-	return db.BackendQueryOne(b, q)
+// Perform a query.
+func (b *Backend) Query(q db.Query, targetSlice ...interface{}) ([]interface{}, db.DbError) {
+	res, err := b.doQuery(q)
+	return db.BackendQuery(b, q, targetSlice, res, err)
+}
+
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendQueryOne(b, q, targetModel)
 }
 
 func (b *Backend) Count(q db.Query) (int, db.DbError) {
@@ -687,21 +688,21 @@ func (b *Backend) Count(q db.Query) (int, db.DbError) {
 	return count, nil
 }
 
-func (b *Backend) Last(q db.Query) (db.Model, db.DbError) {
-	return db.BackendLast(b, q)
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(b, modelType, id)
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}) ([]interface{}, db.DbError) {
-	return b.Q(modelType).Filter(field, value).Find()
+func (b *Backend) FindBy(modelType, field string, value interface{}, targetModel ...interface{}) ([]interface{}, db.DbError) {
+	return db.BackendFindBy(b, modelType, field, value, targetModel)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
-	return b.Q(modelType).Filter(field, value).First()
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
 // Auto-persist related models.
