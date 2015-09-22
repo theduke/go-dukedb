@@ -2,8 +2,16 @@ package dukedb
 
 import (
 	"fmt"
+	"strconv"
 )
 
+/**
+ * Base model.
+ */
+
+// Base model that can be embedded into your own models.
+// Embedding improves performance, and enables to call .Create(),
+// .Update() and .Delete() directly on the model.
 type BaseModel struct {
 	backend Backend
 	info    *ModelInfo
@@ -29,20 +37,39 @@ func (m *BaseModel) SetBackend(backend Backend) {
 }
 
 func (m *BaseModel) Collection() string {
-	return m.info.Collection
+	if m.info != nil {
+		return m.info.Collection
+	}
+	return ""
 }
 
 func (m *BaseModel) BackendName() string {
-	return m.info.BackendName
+	if m.info != nil {
+		return m.info.BackendName
+	}
+	return ""
 }
 
 func (m *BaseModel) GetID() interface{} {
+	if m.info == nil {
+		panic("Model.info is not set")
+	}
+
 	id, _ := GetModelID(m.info, m)
 	return id
 }
 
 func (m *BaseModel) SetID(id interface{}) error {
-	return SetStructField(m, m.info.PkField, id)
+	if m.info == nil {
+		panic("Model.info is not set")
+	}
+
+	convertedId, err := Convert(id, m.info.GetField(m.info.PkField).Type)
+	if err != nil {
+		return err
+	}
+
+	return SetStructField(m, m.info.PkField, convertedId)
 }
 
 func (m *BaseModel) GetStrID() string {
@@ -50,56 +77,75 @@ func (m *BaseModel) GetStrID() string {
 }
 
 func (m *BaseModel) SetStrID(id string) error {
-	convertedId, err := Convert(id, m.info.GetField(m.info.PkField).Type)
-	if err != nil {
-		return err
+	if m.info == nil {
+		panic("Model.info is not set")
 	}
-	return m.SetID(convertedId)
+	return m.SetID(id)
 }
 
-func (m *BaseModel) Create() DbError {
-	return m.backend.Create(m)
-}
+/**
+ * BaseStrModel.
+ */
 
-func (m *BaseModel) Update() DbError {
-	return m.backend.Update(m)
-}
-
-func (m *BaseModel) Delete() DbError {
-	return m.backend.Delete(m)
-}
-
-type ModelWrap struct {
+// Base model with a string ID.
+type BaseStrModel struct {
 	BaseModel
-
-	model interface{}
+	ID string
 }
 
-func (m *ModelWrap) Model() interface{} {
-	return m.model
+func (m *BaseStrModel) GetID() interface{} {
+	return m.ID
 }
 
-func (m *ModelWrap) SetModel(model interface{}) {
-	m.model = model
+func (m *BaseStrModel) SetID(id interface{}) error {
+	if strId, ok := id.(string); ok {
+		m.ID = strId
+		return nil
+	}
+	return m.BaseModel.SetID(id)
 }
 
-func (m *ModelWrap) GetID() interface{} {
-	id, _ := GetModelID(m.info, m.model)
-	return id
+func (m *BaseStrModel) GetStrID() string {
+	return m.ID
 }
 
-func (m *ModelWrap) SetID(id interface{}) error {
-	return SetStructField(m.model, m.info.PkField, id)
+func (m *BaseStrModel) SetStrID(rawId string) error {
+	m.ID = rawId
+	return nil
 }
 
-func (m *ModelWrap) GetStrID() string {
-	return fmt.Sprint(m.GetID())
+/**
+ * BaseIntModel.
+ */
+
+// Base model with a integer ID.
+type BaseIntModel struct {
+	BaseModel
+	ID uint64
 }
 
-func (m *ModelWrap) SetStrID(id string) error {
-	convertedId, err := Convert(id, m.info.GetField(m.info.PkField).Type)
+func (m *BaseIntModel) GetID() interface{} {
+	return m.ID
+}
+
+func (m *BaseIntModel) SetID(id interface{}) error {
+	if intId, ok := id.(uint64); ok {
+		m.ID = intId
+		return nil
+	}
+	return m.BaseModel.SetID(id)
+}
+
+func (m *BaseIntModel) GetStrID() string {
+	return strconv.FormatUint(m.ID, 10)
+}
+
+func (m *BaseIntModel) SetStrID(rawId string) error {
+	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err
 	}
-	return m.SetID(convertedId)
+
+	m.ID = id
+	return nil
 }

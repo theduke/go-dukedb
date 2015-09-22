@@ -174,6 +174,7 @@ type Backend interface {
 	// Get the model info for a collection.
 	ModelInfo(collection string) *ModelInfo
 
+	// Retrieve the ModelInfo for a model.
 	InfoForModel(model interface{}) (*ModelInfo, DbError)
 
 	SetModelInfo(collection string, info *ModelInfo)
@@ -192,10 +193,16 @@ type Backend interface {
 	BuildRelationshipInfo()
 
 	// Get a new struct instance to a model struct based on model Collection.
-	NewModel(collection string) (interface{}, DbError)
+	CreateModel(collection string) (interface{}, DbError)
+
+	// Same as CreateModel(), but panics on error.
+	MustCreateModel(collection string) interface{}
+
+	// "Merge" a model that implements Model interface by setting backend and info data.
+	MergeModel(model Model)
 
 	// Build a slice of a model for model Collection.
-	NewModelSlice(collection string) (interface{}, DbError)
+	CreateModelSlice(collection string) (interface{}, DbError)
 
 	// Determine the ID for a model.
 	ModelID(model interface{}) (interface{}, DbError)
@@ -326,10 +333,6 @@ type Model interface {
 
 	Backend() Backend
 	SetBackend(backend Backend)
-
-	Create() DbError
-	Update() DbError
-	Delete() DbError
 }
 
 type ModelCollectionHook interface {

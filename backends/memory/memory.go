@@ -62,6 +62,18 @@ func (b *Backend) RegisterModel(m interface{}) {
 	b.data[collection] = make(map[string]interface{})
 }
 
+func (b *Backend) CreateModel(collection string) (interface{}, db.DbError) {
+	return db.BackendCreateModel(b, collection)
+}
+
+func (b *Backend) MustCreateModel(collection string) interface{} {
+	return db.BackendMustCreateModel(b, collection)
+}
+
+func (b *Backend) MergeModel(model db.Model) {
+	db.BackendMergeModel(b, model)
+}
+
 func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.DbError) {
 	collection, err := db.GetModelCollection(m)
 	if err != nil {

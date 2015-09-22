@@ -689,7 +689,7 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	if !field.IsValid() {
 		return nil, Error{
 			Code:    "field_not_found",
-			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
+			Message: fmt.Sprintf("struct %v does not have field '%v'", v.Type(), fieldName),
 		}
 	}
 
@@ -759,8 +759,13 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string, val string
 }
 
 func GetModelCollection(model interface{}) (string, DbError) {
+
+	// If the model  implements .Collection(), call it.
 	if hook, ok := model.(ModelCollectionHook); ok {
-		return hook.Collection(), nil
+		collection := hook.Collection()
+		if collection != "" {
+			return collection, nil
+		}
 	}
 
 	typ := reflect.TypeOf(model)
@@ -948,7 +953,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
 	if info == nil {
 		var err DbError
-		info, err = NewModelInfo(model)
+		info, err = CreateModelInfo(model)
 		if err != nil {
 			return nil, err
 		}
@@ -1298,7 +1303,7 @@ type ModelInfo struct {
 
 // Builds the ModelInfo for a model and returns it.
 // Returns an error for all failures.
-func NewModelInfo(model interface{}) (*ModelInfo, DbError) {
+func CreateModelInfo(model interface{}) (*ModelInfo, DbError) {
 	typ := reflect.TypeOf(model)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
@@ -1310,6 +1315,8 @@ func NewModelInfo(model interface{}) (*ModelInfo, DbError) {
 			Message: fmt.Sprintf("Must use pointer to struct or struct, got %v", typ),
 		}
 	}
+
+	//backendModel, isBackendModel := model.(Model)
 
 	collection, err := GetModelCollection(model)
 	if err != nil {
@@ -1325,17 +1332,12 @@ func NewModelInfo(model interface{}) (*ModelInfo, DbError) {
 	}
 
 	info.BackendName = info.Collection
-
 	// If model implements .BackendName() call it to determine backend name.
 	if nameHook, ok := model.(ModelBackendNameHook); ok {
 		name := nameHook.BackendName()
-		if name == "" {
-			return nil, Error{
-				Code:    "invalid_backend_name_result",
-				Message: fmt.Sprintf("Model %v.BackendName() returned empty string", info.FullName),
-			}
+		if name != "" {
+			info.BackendName = name
 		}
-		info.BackendName = name
 	}
 
 	err = info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")

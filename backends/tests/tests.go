@@ -539,5 +539,4 @@ func TestBackend(backend db.Backend) {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(m2.(*HooksModel).CalledHooks).To(Equal([]string{"after_query"}))
 	})
-
 }

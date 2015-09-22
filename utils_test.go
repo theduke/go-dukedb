@@ -556,7 +556,7 @@ var _ = Describe("Utils", func() {
 
 	Describe("ModelInfo", func() {
 
-		Describe("NewModelInfo", func() {
+		Describe("CreateModelInfo", func() {
 
 			It("Should fail on invalid tags", func() {
 				type InvalidTagModel struct {
@@ -564,7 +564,7 @@ var _ = Describe("Utils", func() {
 					InvalidField string `db:"has-one:xxx"`
 				}
 
-				_, err := NewModelInfo(&InvalidTagModel{})
+				_, err := CreateModelInfo(&InvalidTagModel{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.GetCode()).To(Equal("build_field_info_failed"))
 			})
@@ -574,13 +574,13 @@ var _ = Describe("Utils", func() {
 					BaseModel
 					SomeField string
 				}
-				_, err := NewModelInfo(&NoPKModel{})
+				_, err := CreateModelInfo(&NoPKModel{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.GetCode()).To(Equal("primary_key_not_found"))
 			})
 
 			It("Should determine ID field as primary key", func() {
-				info, err := NewModelInfo(&TestModel{})
+				info, err := CreateModelInfo(&TestModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.PkField).To(Equal("ID"))
 			})
@@ -591,18 +591,18 @@ var _ = Describe("Utils", func() {
 					Name string `db:"primary-key"`
 				}
 
-				info, err := NewModelInfo(&PKModel{})
+				info, err := CreateModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.PkField).To(Equal("Name"))
 			})
 
 			It("Should build info for test model successfully", func() {
-				_, err := NewModelInfo(&TestModel{})
+				_, err := CreateModelInfo(&TestModel{})
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("Should build info for test parent model successfully", func() {
-				_, err := NewModelInfo(&TestParent{})
+				_, err := CreateModelInfo(&TestParent{})
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -615,7 +615,7 @@ var _ = Describe("Utils", func() {
 					Name string `db:"primary-key;name:custom_name"`
 				}
 
-				info, err := NewModelInfo(&PKModel{})
+				info, err := CreateModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.FieldInfo[info.PkField].BackendName).To(Equal("custom_name"))
 			})
@@ -626,7 +626,7 @@ var _ = Describe("Utils", func() {
 					Name string `db:"primary-key;name:custom_name"`
 				}
 
-				info, err := NewModelInfo(&PKModel{})
+				info, err := CreateModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.MapFieldName("custom_name")).To(Equal("Name"))
 			})
@@ -636,8 +636,8 @@ var _ = Describe("Utils", func() {
 
 	Describe("Building of relationship info", func() {
 		It("Builds relationship info without errors", func() {
-			parent, _ := NewModelInfo(&TestParent{})
-			model, _ := NewModelInfo(&TestModel{})
+			parent, _ := CreateModelInfo(&TestParent{})
+			model, _ := CreateModelInfo(&TestModel{})
 
 			modelInfo := map[string]*ModelInfo{
 				"test_parents": parent,
@@ -651,8 +651,8 @@ var _ = Describe("Utils", func() {
 		var modelInfo map[string]*ModelInfo
 
 		BeforeEach(func() {
-			parent, _ := NewModelInfo(&TestParent{})
-			model, _ := NewModelInfo(&TestModel{})
+			parent, _ := CreateModelInfo(&TestParent{})
+			model, _ := CreateModelInfo(&TestModel{})
 
 			modelInfo = map[string]*ModelInfo{
 				"test_parents": parent,

@@ -84,6 +84,18 @@ func (b *Backend) Copy() db.Backend {
 	return &copied
 }
 
+func (b *Backend) CreateModel(collection string) (interface{}, db.DbError) {
+	return db.BackendCreateModel(b, collection)
+}
+
+func (b *Backend) MustCreateModel(collection string) interface{} {
+	return db.BackendMustCreateModel(b, collection)
+}
+
+func (b *Backend) MergeModel(model db.Model) {
+	db.BackendMergeModel(b, model)
+}
+
 func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.DbError) {
 	info, err := b.InfoForModel(m)
 	if err != nil {
@@ -568,7 +580,7 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 	models := make([]interface{}, 0)
 
 	for rows.Next() {
-		model, _ := b.NewModel(info.Collection)
+		model, _ := b.CreateModel(info.Collection)
 		modelVal := reflect.ValueOf(model).Elem()
 
 		vals := make([]interface{}, 0)

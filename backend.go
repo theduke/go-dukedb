@@ -62,7 +62,7 @@ func (b *BaseBackend) SetLogger(x *logrus.Logger) {
 }
 
 func (b *BaseBackend) RegisterModel(model interface{}) {
-	info, err := NewModelInfo(model)
+	info, err := CreateModelInfo(model)
 	if err != nil {
 		panic(fmt.Sprintf("Could not register model '%v': %v\n", reflect.TypeOf(model).Name(), err))
 	}
@@ -115,24 +115,7 @@ func (b *BaseBackend) HasCollection(collection string) bool {
 	return ok
 }
 
-func (b *BaseBackend) NewModel(collection string) (interface{}, DbError) {
-	info, ok := b.modelInfo[collection]
-	if !ok {
-		return nil, Error{
-			Code:    "unknown_collection",
-			Message: fmt.Sprintf("Collection '%v' not registered with backend", collection),
-		}
-	}
-
-	item, err := NewStruct(info.Item)
-	if err != nil {
-		return nil, Error{Code: err.Error(), Message: "Could not build new struct"}
-	}
-
-	return item, nil
-}
-
-func (b *BaseBackend) NewModelSlice(collection string) (interface{}, DbError) {
+func (b *BaseBackend) CreateModelSlice(collection string) (interface{}, DbError) {
 	info, ok := b.modelInfo[collection]
 	if !ok {
 		return nil, Error{
@@ -520,6 +503,48 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) DbError 
 	return nil
 }
 
+func BackendCreateModel(b Backend, collection string) (interface{}, DbError) {
+	info := b.ModelInfo(collection)
+	if info == nil {
+		return nil, Error{
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("Collection '%v' not registered with backend", collection),
+		}
+	}
+
+	item, err := NewStruct(info.Item)
+	if err != nil {
+		return nil, Error{Code: err.Error(), Message: "Could not build new struct"}
+	}
+
+	// If model implements Model interface, set backend and info.
+	if backendModel, ok := item.(Model); ok {
+		b.MergeModel(backendModel)
+		return backendModel, nil
+	}
+
+	return item, nil
+}
+
+func BackendMustCreateModel(b Backend, collection string) interface{} {
+	model, err := b.CreateModel(collection)
+	if err != nil {
+		panic("Could not create model: " + err.Error())
+	}
+
+	return model
+}
+
+func BackendMergeModel(b Backend, model Model) {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		panic("Could notmerge model: " + err.Error())
+	}
+
+	model.SetBackend(b)
+	model.SetInfo(info)
+}
+
 func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []interface{}, err DbError) ([]interface{}, DbError) {
 	if err != nil {
 		return nil, err
@@ -529,8 +554,16 @@ func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []in
 		return nil, nil
 	}
 
-	// Call AfterQuery hook.
+	info := b.ModelInfo(query.GetCollection())
+
 	for _, m := range models {
+		// If model implements Model interface, set backend and info.
+		if backendModel, ok := m.(Model); ok {
+			backendModel.SetBackend(b)
+			backendModel.SetInfo(info)
+		}
+
+		// Call AfterQuery hook.
 		CallModelHook(b, m, "AfterQuery")
 	}
 
