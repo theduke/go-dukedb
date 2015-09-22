@@ -296,13 +296,11 @@ func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) 
 }
 
 // Perform a query.
-func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
-	result, err := b.executeQuery(q)
+func (b *Backend) Query(q db.Query) ([]interface{}, db.DbError) {
+	models, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
 	}
-
-	models, _ := db.InterfaceToModelSlice(result)
 
 	for _, m := range models {
 		db.CallModelHook(b, m, "AfterQuery")
@@ -344,7 +342,7 @@ func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
 	return db.BackendFindOne(b, modelType, id)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
+func (b *Backend) FindBy(modelType, field string, value interface{}) ([]interface{}, db.DbError) {
 	return b.Q(modelType).Filter(field, value).Find()
 }
 
@@ -359,7 +357,9 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Mode
 // exists.
 func (b *Backend) Create(m db.Model) db.DbError {
 	modelName := m.Collection()
-	if !b.HasModel(modelName) {
+
+	info := b.GetModelInfo(modelName)
+	if info == nil {
 		return db.Error{
 			Code:    "unknown_model",
 			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", modelName),
@@ -370,6 +370,12 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		return err
 	}
 	if err := db.CallModelHook(b, m, "Validate"); err != nil {
+		return err
+	}
+
+	// Persist relationships before create.
+	err := db.BackendPersistRelations(b, info, m)
+	if err != nil {
 		return err
 	}
 
@@ -393,6 +399,12 @@ func (b *Backend) Create(m db.Model) db.DbError {
 	}
 
 	b.data[modelName][m.GetID()] = m
+
+	// Persist relationships again since m2m can only be handled  when an ID is set.
+	err = db.BackendPersistRelations(b, info, m)
+	if err != nil {
+		return err
+	}
 
 	db.CallModelHook(b, m, "AfterCreate")
 
@@ -536,13 +548,13 @@ func (c M2MCollection) ContainsID(id string) bool {
 }
 
 func (c M2MCollection) All() []db.Model {
-	items, _ := db.InterfaceToModelSlice(c.items)
+	items, _ := db.InterfaceToModelSlice(c.items.Interface())
 	return items
 }
 
 func (c M2MCollection) GetByID(id string) db.Model {
 	for i := 0; i < c.items.Len(); i++ {
-		model := c.items.Index(i).Elem().Interface().(db.Model)
+		model := c.items.Index(i).Interface().(db.Model)
 		if model.GetID() == id {
 			return model
 		}
