@@ -75,6 +75,23 @@ func (b *BaseBackend) ModelInfo(collection string) *ModelInfo {
 	return info
 }
 
+func (b *BaseBackend) ModelInfoForModel(model interface{}) (*ModelInfo, DbError) {
+	collection, err := GetModelCollection(model)
+	if err != nil {
+		return nil, err
+	}
+
+	info := b.ModelInfo(collection)
+	if info == nil {
+		return nil, Error{
+			Code:    "unknown_model",
+			Message: fmt.Sprintf("Collection '%v' of type %v was not registered with backend", collection, reflect.TypeOf(model)),
+		}
+	}
+
+	return info, nil
+}
+
 func (b *BaseBackend) SetModelInfo(collection string, info *ModelInfo) {
 	b.modelInfo[collection] = info
 }
@@ -88,7 +105,9 @@ func (b *BaseBackend) SetAllModelInfo(info map[string]*ModelInfo) {
 }
 
 func (b *BaseBackend) BuildRelationshipInfo() {
-	BuildAllRelationInfo(b.modelInfo)
+	if err := BuildAllRelationInfo(b.modelInfo); err != nil {
+		panic(fmt.Sprintf("Building relationship info failed: %v", err))
+	}
 }
 
 func (b *BaseBackend) HasCollection(collection string) bool {
@@ -309,6 +328,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 		}
 
 		relatedInfo := b.ModelInfo(relInfo.RelationCollection)
+		targetModelName = relatedInfo.Collection
 		newQuery = b.Q(targetModelName)
 
 		if relInfo.HasOne {

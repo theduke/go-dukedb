@@ -174,6 +174,8 @@ type Backend interface {
 	// Get the model info for a collection.
 	ModelInfo(collection string) *ModelInfo
 
+	ModelInfoForModel(model interface{}) (*ModelInfo, DbError)
+
 	SetModelInfo(collection string, info *ModelInfo)
 
 	// Get model info for all registered collections.

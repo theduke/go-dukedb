@@ -32,7 +32,7 @@ func (d MysqlDialect) ReplacementCharacter() string {
 }
 
 func (d MysqlDialect) ColumnType(info *db.FieldInfo) string {
-	switch info.Type {
+	switch info.Type.Kind() {
 	case reflect.Bool:
 		return "boolean"
 
@@ -58,7 +58,8 @@ func (d MysqlDialect) ColumnType(info *db.FieldInfo) string {
 		return "longtext"
 
 	case reflect.Struct:
-		if info.StructType == "time.Time" {
+		typ := info.Type.PkgPath() + "." + info.Type.Name()
+		if typ == "time.Time" {
 			return "DATETIME"
 		}
 

@@ -19,6 +19,10 @@ func TestBackend(backend db.Backend) {
 		backend.RegisterModel(&HooksModel{})
 		backend.BuildRelationshipInfo()
 
+		for key := range backend.AllModelInfo() {
+			fmt.Printf("\nmodelinfo: %v: %+v\n\n", key, backend.AllModelInfo()[key])
+		}
+
 		Expect(backend.GetDebug()).To(Equal(true))
 	})
 
@@ -28,13 +32,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should create collections", func() {
-		err := backend.CreateCollection("test_models")
-		Expect(err).ToNot(HaveOccurred())
-
-		err = backend.CreateCollection("test_parents")
-		Expect(err).ToNot(HaveOccurred())
-
-		err = backend.CreateCollection("hooks_models")
+		err := backend.CreateCollections("test_models", "test_parents", "hooks_models")
 		Expect(err).ToNot(HaveOccurred())
 	})
 

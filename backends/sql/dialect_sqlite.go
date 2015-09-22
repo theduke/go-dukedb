@@ -32,7 +32,7 @@ func (d Sqlite3Dialect) ReplacementCharacter() string {
 }
 
 func (d Sqlite3Dialect) ColumnType(info *db.FieldInfo) string {
-	switch info.Type {
+	switch info.Type.Kind() {
 	case reflect.Bool:
 		return "integer"
 
@@ -46,7 +46,8 @@ func (d Sqlite3Dialect) ColumnType(info *db.FieldInfo) string {
 		return "text"
 
 	case reflect.Struct:
-		if info.StructType == "time.Time" {
+		typ := info.Type.PkgPath() + "." + info.Type.Name()
+		if typ == "time.Time" {
 			return "datetime"
 		}
 

@@ -44,7 +44,7 @@ func (d PostgresDialect) FixReplacementChar(query string) string {
 }
 
 func (d PostgresDialect) ColumnType(info *db.FieldInfo) string {
-	switch info.Type {
+	switch info.Type.Kind() {
 	case reflect.Bool:
 		return "boolean"
 
@@ -70,7 +70,8 @@ func (d PostgresDialect) ColumnType(info *db.FieldInfo) string {
 		return "text"
 
 	case reflect.Struct:
-		if info.StructType == "time.Time" {
+		typ := info.Type.PkgPath() + "." + info.Type.Name()
+		if typ == "time.Time" {
 			return "timestamp with time zone"
 		}
 

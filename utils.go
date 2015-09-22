@@ -1611,50 +1611,6 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 			fieldInfo.MarshalName = LowerCaseFirst(fieldInfo.Name)
 		}
 
-		// Find relationship type for structs and slices.
-
-		if fieldKind == reflect.Struct {
-			fieldInfo.StructType = fieldType.Type.PkgPath() + "." + fieldType.Type.Name()
-
-			// Field is a direct struct.
-			// RelationItem type is the struct.
-			fieldInfo.RelationItem = reflect.New(fieldType.Type).Interface()
-		} else if fieldKind == reflect.Ptr {
-			// Field is a pointer.
-			ptrType := fieldType.Type.Elem()
-
-			if ptrType.Kind() == reflect.Struct {
-				fieldInfo.StructType = ptrType.PkgPath() + "." + ptrType.Name()
-			}
-
-			fieldInfo.RelationItem = reflect.New(ptrType).Interface()
-		} else if fieldKind == reflect.Slice {
-			// Field is slice.
-			// Check if slice items are models or pointers to models.
-			sliceType := fieldType.Type.Elem()
-			sliceKind := sliceType.Kind()
-
-			if sliceKind == reflect.Struct {
-				// Slice contains structs.
-				fieldInfo.StructType = sliceKind.String()
-
-				fieldInfo.RelationItem = reflect.New(sliceType).Interface()
-				fieldInfo.RelationIsMany = true
-			} else if sliceKind == reflect.Ptr {
-				// Slice contains pointers.
-				// Check if it points to a model. Same as above for pointers.
-				ptrType := sliceType.Elem()
-
-				fieldInfo.RelationItem = reflect.New(ptrType).Interface()
-				fieldInfo.RelationIsMany = true
-			}
-
-		}
-
-		if fieldInfo.RelationItem != nil {
-			fieldInfo.RelationCollection = MustGetModelCollection(fieldInfo.RelationItem)
-		}
-
 		info.FieldInfo[fieldType.Name] = fieldInfo
 	}
 
@@ -1680,34 +1636,88 @@ func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 // Will properly analyze all embedded structs as well.
 // WARNING: will panic on errors.
 func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
+	fmt.Printf("Building relationship info for %v\n", model.Collection)
+
 	for name := range model.FieldInfo {
 		fieldInfo := model.FieldInfo[name]
 
-		if fieldInfo.RelationItem == nil {
-			// Only process fields with a relation.
-			continue
-		}
 		if fieldInfo.Ignore {
 			// Ignored field.
 			continue
 		}
 
-		modelName := reflect.ValueOf(model.Item).Elem().Type().Name()
-		relatedItem := fieldInfo.RelationItem
-		relatedName := reflect.ValueOf(relatedItem).Elem().Type().Name()
-		relatedCollection := fieldInfo.RelationCollection
+		fieldType := fieldInfo.Type
+		fieldKind := fieldInfo.Type.Kind()
 
-		// Check that related model is contained in models info.
-		if _, ok := models[relatedCollection]; !ok {
-			return Error{
-				Code: "missing_model_info",
-				Message: fmt.Sprintf(
-					"Model %v contains relationship %v, but relationship target %v was not registred with backend",
-					modelName, name, relatedName),
+		// Find relationship items for structs and slices.
+
+		var relatedItem interface{}
+		relationStructType := ""
+		relationIsMany := false
+
+		if fieldKind == reflect.Struct {
+			// Field is a direct struct.
+			// RelationItem type is the struct.
+			relationStructType = fieldType.PkgPath() + "." + fieldType.Name()
+			relatedItem = reflect.New(fieldType).Interface()
+		} else if fieldKind == reflect.Ptr {
+			// Field is a pointer.
+			ptrType := fieldType.Elem()
+
+			if ptrType.Kind() == reflect.Struct {
+				relationStructType = ptrType.PkgPath() + "." + ptrType.Name()
+			}
+
+			relatedItem = reflect.New(ptrType).Interface()
+		} else if fieldKind == reflect.Slice {
+			// Field is slice.
+			// Check if slice items are models or pointers to models.
+			sliceType := fieldType.Elem()
+			sliceKind := sliceType.Kind()
+
+			if sliceKind == reflect.Struct {
+				// Slice contains structs.
+				relationStructType = sliceType.PkgPath() + "." + sliceType.Name()
+				relatedItem = reflect.New(sliceType).Interface()
+				relationIsMany = true
+			} else if sliceKind == reflect.Ptr {
+				// Slice contains pointers.
+				ptrType := sliceType.Elem()
+
+				relationStructType = ptrType.PkgPath() + "." + ptrType.Name()
+				relatedItem = reflect.New(ptrType).Interface()
+				relationIsMany = true
 			}
 		}
 
-		relatedInfo := models[relatedCollection]
+		if relatedItem == nil {
+			// Only process fields with a relation.
+			continue
+		}
+
+		// Set struct type even if it is not a processed relation.
+		// Some backends need this information.
+		fieldInfo.StructType = relationStructType
+
+		relatedCollection := MustGetModelCollection(relatedItem)
+		if relatedCollection == "" {
+			panic("Empty collection")
+		}
+
+		relatedInfo, ok := models[relatedCollection]
+		if !ok {
+			// Related struct type was not registered, so ignore  it.
+			continue
+		}
+
+		// Update field info.
+		fieldInfo.RelationItem = relatedItem
+		fieldInfo.RelationCollection = relatedCollection
+		fieldInfo.RelationIsMany = relationIsMany
+
+		modelName := model.Name
+		relatedName := relatedInfo.Name
+
 		relatedFields := relatedInfo.FieldInfo
 
 		if !(fieldInfo.BelongsTo || fieldInfo.HasOne || fieldInfo.M2M) {
@@ -1801,6 +1811,7 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 			if fieldInfo.M2MCollection == "" {
 				fieldInfo.M2MCollection = model.BackendName + "_" + relatedInfo.BackendName
 			}
+			fmt.Printf("\n m2m %v info: %+v\n", fieldInfo.M2MCollection, fieldInfo)
 		}
 
 		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {
