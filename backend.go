@@ -204,6 +204,22 @@ func (b *BaseBackend) MustModelStrID(model interface{}) string {
 
 // Set the id field on a model.
 func (b *BaseBackend) SetModelID(model interface{}, id interface{}) DbError {
+	// Check if model implements SetStrID.
+	// If so, use it.
+	if strId, ok := id.(string); ok {
+		if hook, ok := model.(ModelStrIDSetterHook); ok {
+			err := hook.SetStrID(strId)
+			if err != nil {
+				return Error{
+					Code:    "model_set_id_error",
+					Message: err.Error(),
+				}
+			}
+		}
+	}
+
+	// Check if model  implements SetID.
+	// If so, use it.
 	if hook, ok := model.(ModelIDSetterHook); ok {
 		err := hook.SetID(id)
 		if err != nil {
@@ -220,7 +236,16 @@ func (b *BaseBackend) SetModelID(model interface{}, id interface{}) DbError {
 	}
 
 	info := b.ModelInfo(collection)
-	if err := SetStructField(model, info.PkField, id); err != nil {
+
+	convertedId, err2 := Convert(id, info.GetField(info.PkField).Type)
+	if err2 != nil {
+		return Error{
+			Code:    "id_conversion_error",
+			Message: err.Error(),
+		}
+	}
+
+	if err := SetStructField(model, info.PkField, convertedId); err != nil {
 		return Error{
 			Code:    err.Error(),
 			Message: fmt.Sprintf("Could not set %v.%v to value %v: %v", collection, info.PkField, id),
@@ -233,44 +258,6 @@ func (b *BaseBackend) SetModelID(model interface{}, id interface{}) DbError {
 // Set the id  field on a model and panic on error.
 func (b *BaseBackend) MustSetModelID(model interface{}, id interface{}) {
 	if err := b.SetModelID(model, id); err != nil {
-		panic(err.GetMessage())
-	}
-}
-
-// Set the id field on a model by converting a string id.
-func (b *BaseBackend) SetModelStrID(model interface{}, id string) DbError {
-	if hook, ok := model.(ModelStrIDSetterHook); ok {
-		err := hook.SetStrID(id)
-		if err != nil {
-			return Error{
-				Code:    "model_set_id_error",
-				Message: err.Error(),
-			}
-		}
-	}
-
-	collection, err := GetModelCollection(model)
-	if err != nil {
-		return err
-	}
-
-	info := b.ModelInfo(collection)
-	pkField := info.GetField(info.PkField)
-
-	convertedId, err2 := Convert(id, pkField.Type)
-	if err2 != nil {
-		return Error{
-			Code:    "id_conversion_error",
-			Message: err2.Error(),
-		}
-	}
-
-	return b.SetModelID(model, convertedId)
-}
-
-// Set the id  field on a model by converting a string id. Panics on error.
-func (b *BaseBackend) MustSetModelStrID(model interface{}, id string) {
-	if err := b.SetModelStrID(model, id); err != nil {
 		panic(err.GetMessage())
 	}
 }

@@ -209,12 +209,6 @@ type Backend interface {
 	// Set the id  field on a model and panic on error.
 	MustSetModelID(model interface{}, id interface{})
 
-	// Set the id by converting a string id.
-	SetModelStrID(model interface{}, id string) DbError
-
-	// Set the id by converting a string id. Panics on error.
-	MustSetModelStrID(model interface{}, id string)
-
 	// Determine the  ID for a model and convert it to string.
 	ModelStrID(model interface{}) (string, DbError)
 
