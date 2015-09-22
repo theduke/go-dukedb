@@ -19,10 +19,6 @@ func TestBackend(backend db.Backend) {
 		backend.RegisterModel(&HooksModel{})
 		backend.BuildRelationshipInfo()
 
-		for key := range backend.AllModelInfo() {
-			fmt.Printf("\nmodelinfo: %v: %+v\n\n", key, backend.AllModelInfo()[key])
-		}
-
 		Expect(backend.GetDebug()).To(Equal(true))
 	})
 

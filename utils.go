@@ -1636,8 +1636,6 @@ func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 // Will properly analyze all embedded structs as well.
 // WARNING: will panic on errors.
 func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
-	fmt.Printf("Building relationship info for %v\n", model.Collection)
-
 	for name := range model.FieldInfo {
 		fieldInfo := model.FieldInfo[name]
 
@@ -1811,7 +1809,6 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 			if fieldInfo.M2MCollection == "" {
 				fieldInfo.M2MCollection = model.BackendName + "_" + relatedInfo.BackendName
 			}
-			fmt.Printf("\n m2m %v info: %+v\n", fieldInfo.M2MCollection, fieldInfo)
 		}
 
 		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {

@@ -152,10 +152,6 @@ func (b *Backend) BuildRelationshipInfo() {
 			}
 		}
 	}
-
-	for key, table := range b.TableInfo {
-		fmt.Printf("\ntable %v: %+v\n", key, table)
-	}
 }
 
 func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
