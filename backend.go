@@ -75,7 +75,7 @@ func (b *BaseBackend) ModelInfo(collection string) *ModelInfo {
 	return info
 }
 
-func (b *BaseBackend) ModelInfoForModel(model interface{}) (*ModelInfo, DbError) {
+func (b *BaseBackend) InfoForModel(model interface{}) (*ModelInfo, DbError) {
 	collection, err := GetModelCollection(model)
 	if err != nil {
 		return nil, err
@@ -635,6 +635,89 @@ func BackendFindOneBy(b Backend, modelType, field string, value interface{}, tar
 	}
 
 	return res, nil
+}
+
+func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interface{}) DbError) DbError {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return err
+	}
+
+	if err := CallModelHook(b, model, "BeforeCreate"); err != nil {
+		return err
+	}
+	if err := CallModelHook(b, model, "Validate"); err != nil {
+		return err
+	}
+
+	// Persist relationships before create.
+	if err := BackendPersistRelations(b, info, model); err != nil {
+		return err
+	}
+
+	if err := handler(info, model); err != nil {
+		return err
+	}
+
+	// Persist relationships again since m2m can only be handled  when an ID is set.
+	if err := BackendPersistRelations(b, info, model); err != nil {
+		return err
+	}
+
+	CallModelHook(b, model, "AfterCreate")
+
+	return nil
+}
+
+func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interface{}) DbError) DbError {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return err
+	}
+
+	if err := CallModelHook(b, model, "BeforeUpdate"); err != nil {
+		return err
+	}
+	if err := CallModelHook(b, model, "Validate"); err != nil {
+		return err
+	}
+
+	// Persist relationships before create.
+	if err := BackendPersistRelations(b, info, model); err != nil {
+		return err
+	}
+
+	if err := handler(info, model); err != nil {
+		return err
+	}
+
+	// Persist relationships again since m2m can only be handled  when an ID is set.
+	if err := BackendPersistRelations(b, info, model); err != nil {
+		return err
+	}
+
+	CallModelHook(b, model, "AfterUpdate")
+
+	return nil
+}
+
+func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interface{}) DbError) DbError {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return err
+	}
+
+	if err := CallModelHook(b, model, "BeforeDelete"); err != nil {
+		return err
+	}
+
+	if err := handler(info, model); err != nil {
+		return err
+	}
+
+	CallModelHook(b, model, "AfterDelete")
+
+	return nil
 }
 
 /**

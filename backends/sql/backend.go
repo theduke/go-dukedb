@@ -85,7 +85,7 @@ func (b *Backend) Copy() db.Backend {
 }
 
 func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.DbError) {
-	info, err := b.ModelInfoForModel(m)
+	info, err := b.InfoForModel(m)
 	if err != nil {
 		return nil, err
 	}
@@ -710,67 +710,43 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 // Auto-persist related models.
 
 func (b *Backend) Create(m interface{}) db.DbError {
-	info, err := b.ModelInfoForModel(m)
-	if err != nil {
-		return err
-	}
-
-	if err = db.CallModelHook(b, m, "BeforeCreate"); err != nil {
-		return err
-	}
-	if err := db.CallModelHook(b, m, "Validate"); err != nil {
-		return err
-	}
-
-	// Persist relationships before create.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	data, err := db.ModelToMap(info, m, true, false)
-	if err != nil {
-		return err
-	}
-
-	tableInfo := b.TableInfo[info.BackendName]
-	sql, args := b.dialect.InsertMapStatement(tableInfo, data)
-
-	if b.dialect.HasLastInsertID() {
-		result, err2 := b.SqlExec(sql, args...)
-		if err2 != nil {
-			return db.Error{
-				Code:    "sql_insert_error",
-				Message: err2.Error(),
-			}
-		}
-
-		id, err2 := result.LastInsertId()
-		if err2 == nil && id != 0 {
-			if err := b.SetModelID(m, id); err != nil {
-				return err
-			}
-		}
-	} else {
-		rows, err := b.QuerySql(sql, args)
+	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		data, err := db.ModelToMap(info, m, true, false)
 		if err != nil {
 			return err
 		}
-		if len(rows) == 1 {
-			data := rows[0]
-			db.UpdateModelFromData(info, m, data)
+
+		tableInfo := b.TableInfo[info.BackendName]
+		sql, args := b.dialect.InsertMapStatement(tableInfo, data)
+
+		if b.dialect.HasLastInsertID() {
+			result, err2 := b.SqlExec(sql, args...)
+			if err2 != nil {
+				return db.Error{
+					Code:    "sql_insert_error",
+					Message: err2.Error(),
+				}
+			}
+
+			id, err2 := result.LastInsertId()
+			if err2 == nil && id != 0 {
+				if err := b.SetModelID(m, id); err != nil {
+					return err
+				}
+			}
+		} else {
+			rows, err := b.QuerySql(sql, args)
+			if err != nil {
+				return err
+			}
+			if len(rows) == 1 {
+				data := rows[0]
+				db.UpdateModelFromData(info, m, data)
+			}
 		}
-	}
 
-	// Persist relations again since m2m can only be handled when the primary key is set.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	db.CallModelHook(b, m, "AfterCreate")
-
-	return nil
+		return nil
+	})
 }
 
 func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec, db.DbError) {
@@ -796,47 +772,23 @@ func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec
 }
 
 func (b *Backend) Update(m interface{}) db.DbError {
-	info, err := b.ModelInfoForModel(m)
-	if err != nil {
-		return err
-	}
+	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		data, err := db.ModelToMap(info, m, true, false)
+		if err != nil {
+			return err
+		}
 
-	if err = db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
-		return err
-	}
-	if err := db.CallModelHook(b, m, "Validate"); err != nil {
-		return err
-	}
+		err = b.UpdateByMap(m, data)
+		if err != nil {
+			return err
+		}
 
-	data, err := db.ModelToMap(info, m, true, false)
-	if err != nil {
-		return err
-	}
-
-	// Persist relations.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	err = b.UpdateByMap(m, data)
-	if err != nil {
-		return err
-	}
-
-	// Persist relations again.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	db.CallModelHook(b, m, "AfterUpdate")
-
-	return nil
+		return nil
+	})
 }
 
 func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) db.DbError {
-	info, err := b.ModelInfoForModel(m)
+	info, err := b.InfoForModel(m)
 	if err != nil {
 		return err
 	}
@@ -869,32 +821,23 @@ func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) db.
 }
 
 func (b *Backend) Delete(m interface{}) db.DbError {
-	info, err := b.ModelInfoForModel(m)
-	if err != nil {
-		return err
-	}
-
-	if err := db.CallModelHook(b, m, "BeforeDelete"); err != nil {
-		return err
-	}
-
-	spec, err := b.selectForModel(info, m)
-	if err != nil {
-		return err
-	}
-	stmt, args := b.dialect.DeleteStatement(spec)
-
-	_, err2 := b.SqlExec(stmt, args...)
-	if err2 != nil {
-		return db.Error{
-			Code:    "sql_delete_error",
-			Message: err2.Error(),
+	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		spec, err := b.selectForModel(info, m)
+		if err != nil {
+			return err
 		}
-	}
+		stmt, args := b.dialect.DeleteStatement(spec)
 
-	db.CallModelHook(b, m, "AfterDelete")
+		_, err2 := b.SqlExec(stmt, args...)
+		if err2 != nil {
+			return db.Error{
+				Code:    "sql_delete_error",
+				Message: err2.Error(),
+			}
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (b *Backend) DeleteMany(q db.Query) db.DbError {
@@ -921,7 +864,7 @@ func (b *Backend) DeleteMany(q db.Query) db.DbError {
  */
 
 func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.DbError) {
-	info, err := b.ModelInfoForModel(obj)
+	info, err := b.InfoForModel(obj)
 	if err != nil {
 		return nil, err
 	}

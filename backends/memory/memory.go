@@ -372,89 +372,38 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 // Fails if the model type was not registered, or if the primary key already
 // exists.
 func (b *Backend) Create(m interface{}) db.DbError {
-	collection, err := db.GetModelCollection(m)
-	if err != nil {
-		return err
-	}
+	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		collection := info.Collection
 
-	info := b.ModelInfo(collection)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
-		}
-	}
-
-	if err := db.CallModelHook(b, m, "BeforeCreate"); err != nil {
-		return err
-	}
-	if err := db.CallModelHook(b, m, "Validate"); err != nil {
-		return err
-	}
-
-	// Persist relationships before create.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	id := b.MustModelStrID(m)
-	if !db.IsZero(id) {
-		if _, ok := b.data[collection][id]; ok {
-			return db.Error{
-				Code:    "pk_exists",
-				Message: fmt.Sprintf("A model of type %v with id %v already exists", collection, id),
+		id := b.MustModelStrID(m)
+		if !db.IsZero(id) {
+			if _, ok := b.data[collection][id]; ok {
+				return db.Error{
+					Code:    "pk_exists",
+					Message: fmt.Sprintf("A model of type %v with id %v already exists", collection, id),
+				}
+			}
+		} else {
+			// Generate new id.
+			id = strconv.Itoa(len(b.data[collection]) + 1)
+			if err := b.SetModelID(m, id); err != nil {
+				return db.Error{
+					Code:    "set_id_error",
+					Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
+				}
 			}
 		}
-	} else {
-		// Generate new id.
-		id = strconv.Itoa(len(b.data[collection]) + 1)
-		if err := b.SetModelStrID(m, id); err != nil {
-			return db.Error{
-				Code:    "set_id_error",
-				Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
-			}
-		}
-	}
 
-	b.data[collection][id] = m
-
-	// Persist relationships again since m2m can only be handled  when an ID is set.
-	err = db.BackendPersistRelations(b, info, m)
-	if err != nil {
-		return err
-	}
-
-	db.CallModelHook(b, m, "AfterCreate")
-
-	return nil
+		b.data[collection][id] = m
+		return nil
+	})
 }
 
 func (b *Backend) Update(m interface{}) db.DbError {
-	collection, err := db.GetModelCollection(m)
-	if err != nil {
-		return err
-	}
-
-	if !b.HasCollection(collection) {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
-		}
-	}
-
-	if err := db.CallModelHook(b, m, "BeforeUpdate"); err != nil {
-		return err
-	}
-	if err := db.CallModelHook(b, m, "Validate"); err != nil {
-		return err
-	}
-
-	b.data[collection][b.MustModelStrID(m)] = m
-
-	db.CallModelHook(b, m, "AfterUpdate")
-
-	return nil
+	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		b.data[info.Collection][b.MustModelStrID(m)] = m
+		return nil
+	})
 }
 
 func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.DbError {
@@ -480,35 +429,20 @@ func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.DbE
 }
 
 func (b *Backend) Delete(m interface{}) db.DbError {
-	collection, err := db.GetModelCollection(m)
-	if err != nil {
-		return err
-	}
+	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+		id := b.MustModelStrID(m)
+		collection := info.Collection
 
-	if !b.HasCollection(collection) {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with MEMORY backend", collection),
+		if _, ok := b.data[collection][id]; !ok {
+			return db.Error{
+				Code:    "not_found",
+				Message: fmt.Sprintf("A model of type %v with id %v does not exists", collection, id),
+			}
 		}
-	}
 
-	if err := db.CallModelHook(b, m, "BeforeDelete"); err != nil {
-		return err
-	}
-
-	id := b.MustModelStrID(m)
-	if _, ok := b.data[collection][id]; !ok {
-		return db.Error{
-			Code:    "not_found",
-			Message: fmt.Sprintf("A model of type %v with id %v does not exists", collection, id),
-		}
-	}
-
-	delete(b.data[collection], id)
-
-	db.CallModelHook(b, m, "AfterDelete")
-
-	return nil
+		delete(b.data[collection], id)
+		return nil
+	})
 }
 
 func (b *Backend) DeleteMany(q db.Query) db.DbError {
