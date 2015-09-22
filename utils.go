@@ -90,6 +90,15 @@ func FilterToSqlCondition(filter string) (string, DbError) {
  * Generic interface variable handling/comparison functions.
  */
 
+func IsNumericKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
 func IsZero(val interface{}) bool {
 	reflVal := reflect.ValueOf(val)
 	reflType := reflVal.Type()
@@ -99,6 +108,49 @@ func IsZero(val interface{}) bool {
 	}
 
 	return val == reflect.Zero(reflType).Interface()
+}
+
+func SaveConvert(val interface{}, typ reflect.Type) interface{} {
+	defer func() {
+		recover()
+	}()
+
+	return reflect.ValueOf(val).Convert(typ).Interface()
+}
+
+func Convert(value interface{}, typ reflect.Type) (interface{}, error) {
+	valType := reflect.TypeOf(value)
+
+	kind := typ.Kind()
+
+	if valType.Kind() == kind {
+		// Same kind, nothing to convert.
+		return value, nil
+	}
+
+	// If target is string, just use fmt.
+	if kind == reflect.String {
+		return fmt.Sprintf("%v", value), nil
+	}
+
+	// If value is string, and target type is numeric,
+	// parse to float and then convert with reflect.
+	if valType.Kind() == reflect.String && IsNumericKind(kind) {
+		num, err := strconv.ParseFloat(value.(string), 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(num).Convert(typ).Interface(), nil
+	}
+
+	// No custom handling worked, so try to convert with reflect.
+	// We have to accept the panic.
+	converted := SaveConvert(value, typ)
+	if converted == nil {
+		return nil, errors.New(fmt.Sprintf("Cannot convert %v to %v", valType.String(), kind))
+	}
+
+	return converted, nil
 }
 
 // Convert a string value to the specified type if possible.
@@ -414,6 +466,54 @@ func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
 /**
  * Helpers for creating and converting structs and slices.
  */
+
+// Set a pointer to a value with reflect.
+// If the value is a pointer to a type, and the the pointer target is not,
+// the value is automatically dereferenced.
+func SetPointer(ptr, val interface{}) {
+	ptrVal := reflect.ValueOf(ptr)
+	ptrType := ptrVal.Type()
+	if ptrType.Kind() != reflect.Ptr {
+		panic("Pointer expected")
+	}
+
+	target := ptrVal.Elem()
+	targetType := target.Type()
+
+	value := reflect.ValueOf(val)
+	valueType := value.Type()
+
+	if valueType.Kind() == reflect.Ptr && targetType.Kind() != reflect.Ptr {
+		value = value.Elem()
+	}
+
+	target.Set(value)
+}
+
+func SetSlicePointer(ptr interface{}, values []interface{}) {
+	target := reflect.ValueOf(ptr)
+	if target.Type().Kind() != reflect.Ptr {
+		panic("Must  supply pointer to slice")
+	}
+
+	slice := target.Elem()
+	sliceType := slice.Type()
+	if sliceType.Kind() != reflect.Slice {
+		panic("Must supply pointer to slice")
+	}
+
+	usePtr := sliceType.Elem().Kind() == reflect.Ptr
+
+	for _, val := range values {
+		if usePtr {
+			slice = reflect.Append(slice, reflect.ValueOf(val))
+		} else {
+			slice = reflect.Append(slice, reflect.ValueOf(val).Elem())
+		}
+	}
+
+	target.Elem().Set(slice)
+}
 
 // Returns pointer to a new struct with the same type as the given struct.
 func NewStruct(typ interface{}) (interface{}, error) {

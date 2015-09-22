@@ -129,7 +129,212 @@ func TestBackend(backend db.Backend) {
 		Expect(m.GetID()).To(Equal(model.GetID()))
 	})
 
+	It("Should .Query() with target slice", func() {
+		model := NewTestModel(64)
+		Expect(backend.Create(&model)).ToNot(HaveOccurred())
+
+		var models []TestModel
+
+		_, err := backend.Query(db.Q("test_models").Filter("id", model.ID), &models)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(models)).To(Equal(1))
+	})
+
+	It("Should .Query() with target pointer slice", func() {
+		model := NewTestModel(65)
+		Expect(backend.Create(&model)).ToNot(HaveOccurred())
+
+		var models []*TestModel
+
+		_, err := backend.Query(db.Q("test_models").Filter("id", model.ID), &models)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(models[0]).To(Equal(&model))
+	})
+
+	It("Should .QueryOne()", func() {
+		m := NewTestModel(1)
+		m2 := NewTestModel(1)
+
+		m.IntVal = 70
+		m2.IntVal = 70
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+
+		res, err := backend.QueryOne(db.Q("test_models").Filter("int_val", 70))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal(&m))
+	})
+
+	It("Should .QueryOne() with target", func() {
+		m := NewTestModel(66)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model TestModel
+
+		_, err := backend.QueryOne(db.Q("test_models").Filter("id", m.ID), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(m))
+	})
+
+	It("Should .QueryOne() with target pointer", func() {
+		m := NewTestModel(67)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model *TestModel
+
+		_, err := backend.QueryOne(db.Q("test_models").Filter("id", m.ID), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
+	It("Should .Last()", func() {
+		m := NewTestModel(1)
+		m2 := NewTestModel(1)
+
+		m.IntVal = 71
+		m2.IntVal = 71
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+
+		res, err := backend.Last(db.Q("test_models").Filter("int_val", 71))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res).To(Equal(&m2))
+	})
+
+	It("Should .Last() with target model", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model TestModel
+		_, err := backend.Last(db.Q("test_models").Filter("id", m.ID), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(m))
+	})
+
+	It("Should .Last() with target pointer", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model *TestModel
+		_, err := backend.Last(db.Q("test_models").Filter("id", m.ID), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
+	It("Should .FindBy()", func() {
+		m := NewTestModel(1)
+		m2 := NewTestModel(1)
+
+		m.IntVal = 72
+		m2.IntVal = 72
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+
+		res, err := backend.FindBy("test_models", "int_val", 72)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(res)).To(Equal(2))
+		Expect(res[0]).To(Equal(&m))
+		Expect(res[1]).To(Equal(&m2))
+	})
+
+	It("Should .FindBy() with target slice", func() {
+		m := NewTestModel(1)
+		m2 := NewTestModel(1)
+
+		m.IntVal = 73
+		m2.IntVal = 73
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+
+		var res []TestModel
+
+		_, err := backend.FindBy("test_models", "int_val", 73, &res)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(res)).To(Equal(2))
+
+		Expect(res[0]).To(Equal(m))
+		Expect(res[1]).To(Equal(m2))
+	})
+
+	It("Should .FindBy() with target slice pointer", func() {
+		m := NewTestModel(1)
+		m2 := NewTestModel(1)
+
+		m.IntVal = 74
+		m2.IntVal = 74
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
+
+		var res []*TestModel
+
+		_, err := backend.FindBy("test_models", "int_val", 74, &res)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(res)).To(Equal(2))
+
+		Expect(res[0]).To(Equal(&m))
+		Expect(res[1]).To(Equal(&m2))
+	})
+
+	It("Should .FindOne()", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		model, err := backend.FindOne("test_models", m.ID)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
+	It("Should .FindOne() with target model", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model TestModel
+		_, err := backend.FindOne("test_models", m.ID, &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(m))
+	})
+
+	It("Should .FindOne() with target model pointer", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model *TestModel
+		_, err := backend.FindOne("test_models", m.GetID(), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
+	It("Should .FindOneBy()", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		model, err := backend.FindOneBy("test_models", "id", m.ID)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
+	It("Should .FindOneBy() with target model", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model TestModel
+		_, err := backend.FindOneBy("test_models", "id", m.ID, &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(m))
+	})
+
+	It("Should .FindOneBy() with target model pointer", func() {
+		m := NewTestModel(1)
+		Expect(backend.Create(&m)).ToNot(HaveOccurred())
+
+		var model *TestModel
+		_, err := backend.FindOneBy("test_models", "id", m.GetID(), &model)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(model).To(Equal(&m))
+	})
+
 	// Relationships.
+
 	It("Should auto-persist has-one", func() {
 		model := NewTestParent(1, true)
 		model.ChildPtr = nil

@@ -576,27 +576,27 @@ func (q *DbQuery) SetBackend(x Backend) {
 	q.backend = x
 }
 
-func (q *DbQuery) Find() ([]interface{}, DbError) {
+func (q *DbQuery) Find(targetSlice ...interface{}) ([]interface{}, DbError) {
 	if q.backend == nil {
 		panic("Calling .Find() on query without backend")
 	}
 
-	return q.backend.Query(q)
+	return q.backend.Query(q, targetSlice...)
 }
 
-func (q *DbQuery) First() (Model, DbError) {
+func (q *DbQuery) First(targetModel ...interface{}) (Model, DbError) {
 	if q.backend == nil {
 		panic("Calling .First() on query without backend")
 	}
 
-	return q.backend.QueryOne(q)
+	return q.backend.QueryOne(q, targetModel...)
 }
 
-func (q *DbQuery) Last() (Model, DbError) {
+func (q *DbQuery) Last(targetModel ...interface{}) (Model, DbError) {
 	if q.backend == nil {
 		panic("Calling .Last() on query without backend")
 	}
-	return q.backend.Last(q)
+	return q.backend.Last(q, targetModel...)
 }
 
 func (q *DbQuery) Count() (int, DbError) {
@@ -706,7 +706,7 @@ func (q *DbRelationQuery) Build() (Query, DbError) {
 
 // Backend methods.
 
-func (q *DbRelationQuery) Find() ([]interface{}, DbError) {
+func (q *DbRelationQuery) Find(targetSlice ...interface{}) ([]interface{}, DbError) {
 	if q.backend == nil {
 		panic("Callind .Find() on a query without backend")
 	}
@@ -715,10 +715,10 @@ func (q *DbRelationQuery) Find() ([]interface{}, DbError) {
 	if err != nil {
 		return nil, err
 	}
-	return newQ.Find()
+	return newQ.Find(targetSlice...)
 }
 
-func (q *DbRelationQuery) First() (Model, DbError) {
+func (q *DbRelationQuery) First(targetModel ...interface{}) (Model, DbError) {
 	if q.backend == nil {
 		panic("Calling .First() on a query without backend")
 	}
@@ -727,10 +727,10 @@ func (q *DbRelationQuery) First() (Model, DbError) {
 	if err != nil {
 		return nil, err
 	}
-	return newQ.First()
+	return newQ.First(targetModel...)
 }
 
-func (q *DbRelationQuery) Last() (Model, DbError) {
+func (q *DbRelationQuery) Last(targetModel ...interface{}) (Model, DbError) {
 	if q.backend == nil {
 		panic("Calling .Last() on a query without backend")
 	}
@@ -739,7 +739,7 @@ func (q *DbRelationQuery) Last() (Model, DbError) {
 	if err != nil {
 		return nil, err
 	}
-	return newQ.Last()
+	return newQ.Last(targetModel...)
 }
 
 func (q *DbRelationQuery) Count() (int, DbError) {

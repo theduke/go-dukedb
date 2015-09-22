@@ -259,7 +259,12 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
 	}
 
 	// Ordering.
-	if q.GetOrders() != nil && len(q.GetOrders()) > 0 {
+	if len(q.GetOrders()) == 0 {
+		q.Order(info.PkField, true)
+	}
+
+	// Set default order.
+	if len(q.GetOrders()) > 0 {
 		if len(q.GetOrders()) > 1 {
 			return nil, db.Error{
 				Code:    "memory_backend_unsupported_feature_multiple_orders",
@@ -269,7 +274,10 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
 
 		// Ensure the field exists.
 		field := q.GetOrders()[0].Field
-		if _, ok := info.FieldInfo[info.MapFieldName(field)]; !ok {
+		if !info.HasField(field) {
+			field = info.MapFieldName(field)
+		}
+		if !info.HasField(field) {
 			return nil, db.Error{
 				Code:    "cant_sort_on_inexistant_field",
 				Message: fmt.Sprintf("Trying to sort on non-existant field %v", field),
@@ -295,22 +303,26 @@ func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) 
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-// Perform a query.
-func (b *Backend) Query(q db.Query) ([]interface{}, db.DbError) {
-	models, err := b.executeQuery(q)
+func (b *Backend) doQuery(q db.Query) ([]interface{}, db.DbError) {
+	res, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
 	}
-
-	for _, m := range models {
-		db.CallModelHook(b, m, "AfterQuery")
+	slice, err2 := db.ConvertInterfaceToSlice(res)
+	if err2 != nil {
+		return nil, db.Error{Code: "interface_conversion_error", Message: err2.Error()}
 	}
-
-	return models, nil
+	return slice, nil
 }
 
-func (b *Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
-	return db.BackendQueryOne(b, q)
+// Perform a query.
+func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, db.DbError) {
+	res, err := b.doQuery(q)
+	return db.BackendQuery(b, q, targetSlices, res, err)
+}
+
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendQueryOne(b, q, targetModel)
 }
 
 func (b *Backend) Count(q db.Query) (int, db.DbError) {
@@ -333,21 +345,21 @@ func (b *Backend) Count(q db.Query) (int, db.DbError) {
 	return len(result), nil
 }
 
-func (b *Backend) Last(q db.Query) (db.Model, db.DbError) {
-	return db.BackendLast(b, q)
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(b, modelType, id)
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}) ([]interface{}, db.DbError) {
-	return b.Q(modelType).Filter(field, value).Find()
+func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, db.DbError) {
+	return db.BackendFindBy(b, modelType, field, value, targetSlice)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}) (db.Model, db.DbError) {
-	return b.Q(modelType).Filter(field, value).First()
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (db.Model, db.DbError) {
+	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
 // Convenience methods.

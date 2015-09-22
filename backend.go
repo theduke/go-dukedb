@@ -373,7 +373,30 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 	return nil
 }
 
-func BackendQueryOne(b Backend, q Query) (Model, DbError) {
+func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []interface{}, err DbError) ([]interface{}, DbError) {
+	if err != nil {
+		return nil, err
+	}
+
+	if len(models) < 1 {
+		return nil, nil
+	}
+
+	// Call AfterQuery hook.
+	for _, m := range models {
+		CallModelHook(b, m, "AfterQuery")
+	}
+
+	// If a target slice was specified, build up a new slice
+	// with the correct type, fill it, and set the pointer.
+	if len(targetSlice) > 0 {
+		SetSlicePointer(targetSlice[0], models)
+	}
+
+	return models, nil
+}
+
+func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (Model, DbError) {
 	res, err := b.Query(q)
 	if err != nil {
 		return nil, err
@@ -384,10 +407,15 @@ func BackendQueryOne(b Backend, q Query) (Model, DbError) {
 	}
 
 	m := res[0]
+
+	if len(targetModels) > 0 {
+		SetPointer(targetModels[0], m)
+	}
+
 	return m.(Model), nil
 }
 
-func BackendLast(b Backend, q Query) (Model, DbError) {
+func BackendLast(b Backend, q Query, targetModels []interface{}) (Model, DbError) {
 	orders := q.GetOrders()
 	orderLen := len(q.GetOrders())
 	if orderLen > 0 {
@@ -399,10 +427,19 @@ func BackendLast(b Backend, q Query) (Model, DbError) {
 		q = q.Order(info.GetPkName(), false)
 	}
 
-	return b.QueryOne(q.Limit(1))
+	model, err := b.QueryOne(q.Limit(1))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targetModels) > 0 {
+		SetPointer(targetModels[0], model)
+	}
+
+	return model, nil
 }
 
-func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
+func BackendFindOne(b Backend, modelType string, id interface{}, targetModel []interface{}) (Model, DbError) {
 	info := b.GetModelInfo(modelType)
 	if info == nil {
 		return nil, Error{
@@ -411,12 +448,48 @@ func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
 		}
 	}
 
-	val, err := ConvertStringToType(id, info.FieldInfo[info.PkField].Type)
-	if err != nil {
-		return nil, Error{Code: err.Error()}
+	pkField := info.FieldInfo[info.PkField]
+
+	if reflect.TypeOf(id).Kind() != pkField.Type {
+		fieldType, _ := reflect.TypeOf(info.Item).Elem().FieldByName(info.PkField)
+
+		converted, err := Convert(id, fieldType.Type)
+		if err != nil {
+			return nil, Error{
+				Code:    "id_conversion_error",
+				Message: err.Error(),
+			}
+		}
+		id = converted
 	}
 
-	return b.Q(modelType).Filter(info.FieldInfo[info.PkField].BackendName, val).First()
+	model, err := b.Q(modelType).Filter(info.PkField, id).First()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targetModel) > 0 {
+		SetPointer(targetModel[0], model)
+	}
+
+	return model, nil
+}
+
+func BackendFindBy(b Backend, modelType, field string, value interface{}, targetSlice []interface{}) ([]interface{}, DbError) {
+	return b.Q(modelType).Filter(field, value).Find(targetSlice...)
+}
+
+func BackendFindOneBy(b Backend, modelType, field string, value interface{}, targetModel []interface{}) (Model, DbError) {
+	res, err := b.Q(modelType).Filter(field, value).First()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targetModel) > 0 {
+		SetPointer(targetModel[0], res)
+	}
+
+	return res, nil
 }
 
 /**

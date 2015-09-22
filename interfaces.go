@@ -20,9 +20,9 @@ type BackendQueryMixin interface {
 	GetBackend() Backend
 	SetBackend(Backend)
 
-	Find() ([]interface{}, DbError)
-	First() (Model, DbError)
-	Last() (Model, DbError)
+	Find(targetSlice ...interface{}) ([]interface{}, DbError)
+	First(targetModel ...interface{}) (Model, DbError)
+	Last(targetModel ...interface{}) (Model, DbError)
 	Count() (int, DbError)
 	Delete() DbError
 }
@@ -195,16 +195,16 @@ type Backend interface {
 	Q(modelType string) Query
 
 	// Perform a query.
-	Query(Query) ([]interface{}, DbError)
-	QueryOne(Query) (Model, DbError)
+	Query(q Query, targetSlice ...interface{}) ([]interface{}, DbError)
+	QueryOne(q Query, targetModel ...interface{}) (Model, DbError)
 
-	Last(Query) (Model, DbError)
+	Last(q Query, targetModel ...interface{}) (Model, DbError)
 
 	// Find first model with primary key ID.
-	FindBy(modelType, field string, value interface{}) ([]interface{}, DbError)
+	FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, DbError)
 
-	FindOne(modelType string, id string) (Model, DbError)
-	FindOneBy(modelType, field string, value interface{}) (Model, DbError)
+	FindOne(modelType string, id interface{}, targetModel ...interface{}) (Model, DbError)
+	FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (Model, DbError)
 
 	Count(Query) (int, DbError)
 
