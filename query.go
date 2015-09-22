@@ -576,7 +576,7 @@ func (q *DbQuery) SetBackend(x Backend) {
 	q.backend = x
 }
 
-func (q *DbQuery) Find() ([]Model, DbError) {
+func (q *DbQuery) Find() ([]interface{}, DbError) {
 	if q.backend == nil {
 		panic("Calling .Find() on query without backend")
 	}
@@ -706,7 +706,7 @@ func (q *DbRelationQuery) Build() (Query, DbError) {
 
 // Backend methods.
 
-func (q *DbRelationQuery) Find() ([]Model, DbError) {
+func (q *DbRelationQuery) Find() ([]interface{}, DbError) {
 	if q.backend == nil {
 		panic("Callind .Find() on a query without backend")
 	}

@@ -119,7 +119,7 @@ func (b BaseBackend) NewModelSlice(name string) (interface{}, DbError) {
 }
 
 // Relationship stuff.
-func BuildRelationQuery(b Backend, baseModels []Model, q RelationQuery) (Query, DbError) {
+func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Query, DbError) {
 	baseQ := q.GetBaseQuery()
 	baseInfo := b.GetModelInfo(baseQ.GetCollection())
 	if baseInfo == nil {
@@ -249,8 +249,10 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 			relation := relationVal.Addr().Interface().(Model)
 
 			// Auto-persist related model if neccessary.
+			fmt.Printf("\npersisting has-one %v\n", name)
 			if IsZero(relation.GetID()) {
 				err := b.Create(relation)
+				fmt.Printf("\n persisted  has-one %+v\n", relation)
 				if err != nil {
 					return err
 				}
@@ -377,7 +379,7 @@ func BackendQueryOne(b Backend, q Query) (Model, DbError) {
 	}
 
 	m := res[0]
-	return m, nil
+	return m.(Model), nil
 }
 
 func BackendLast(b Backend, q Query) (Model, DbError) {
@@ -416,7 +418,7 @@ func BackendFindOne(b Backend, modelType string, id string) (Model, DbError) {
  * Join logic.
  */
 
-func BackendDoJoins(b Backend, model string, objs []Model, joins []RelationQuery) DbError {
+func BackendDoJoins(b Backend, model string, objs []interface{}, joins []RelationQuery) DbError {
 	for _, joinQ := range joins {
 		// With a specific join type, joins should be handled by the backend itself.
 		if joinQ.GetJoinType() != "" {
@@ -432,7 +434,7 @@ func BackendDoJoins(b Backend, model string, objs []Model, joins []RelationQuery
 	return nil
 }
 
-func doJoin(b Backend, model string, objs []Model, joinQ RelationQuery) DbError {
+func doJoin(b Backend, model string, objs []interface{}, joinQ RelationQuery) DbError {
 	resultQuery, err := BuildRelationQuery(b, objs, joinQ)
 	if err != nil {
 		return err
@@ -450,8 +452,8 @@ func doJoin(b Backend, model string, objs []Model, joinQ RelationQuery) DbError 
 	return nil
 }
 
-func assignJoinModels(objs, joinedModels []Model, targetField, joinedField, joinField string) {
-	mapper := make(map[interface{}][]Model)
+func assignJoinModels(objs, joinedModels []interface{}, targetField, joinedField, joinField string) {
+	mapper := make(map[interface{}][]interface{})
 	for _, model := range joinedModels {
 		val, _ := GetStructFieldValue(model, joinField)
 		mapper[val] = append(mapper[val], model)

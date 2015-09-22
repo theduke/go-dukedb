@@ -20,7 +20,7 @@ type BackendQueryMixin interface {
 	GetBackend() Backend
 	SetBackend(Backend)
 
-	Find() ([]Model, DbError)
+	Find() ([]interface{}, DbError)
 	First() (Model, DbError)
 	Last() (Model, DbError)
 	Count() (int, DbError)
@@ -195,10 +195,17 @@ type Backend interface {
 	Q(modelType string) Query
 
 	// Perform a query.
-	Query(Query) ([]Model, DbError)
+	Query(Query) ([]interface{}, DbError)
 	QueryOne(Query) (Model, DbError)
 
 	Last(Query) (Model, DbError)
+
+	// Find first model with primary key ID.
+	FindBy(modelType, field string, value interface{}) ([]interface{}, DbError)
+
+	FindOne(modelType string, id string) (Model, DbError)
+	FindOneBy(modelType, field string, value interface{}) (Model, DbError)
+
 	Count(Query) (int, DbError)
 
 	// Based on a RelationQuery, return a query for the specified
@@ -210,12 +217,6 @@ type Backend interface {
 	M2M(obj Model, name string) (M2MCollection, DbError)
 
 	// Convenience methods.
-
-	// Find first model with primary key ID.
-	FindOne(modelType string, id string) (Model, DbError)
-
-	FindBy(modelType, field string, value interface{}) ([]Model, DbError)
-	FindOneBy(modelType, field string, value interface{}) (Model, DbError)
 
 	Create(Model) DbError
 	Update(Model) DbError

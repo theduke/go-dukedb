@@ -663,7 +663,7 @@ func GetModelSliceFieldValues(models []Model, fieldName string) ([]interface{}, 
 // If the target field type is struct or pointer to struct, it will be set to
 // the first model in []models.
 // If it is a slice, it will be set to the models with the correct type.
-func SetStructModelField(obj interface{}, fieldName string, models []Model) error {
+func SetStructModelField(obj interface{}, fieldName string, models []interface{}) error {
 	objVal := reflect.ValueOf(obj)
 
 	if objVal.Type().Kind() != reflect.Ptr {
@@ -979,7 +979,7 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Model hooks.
  */
 
-func CallModelHook(b Backend, m Model, hook string) DbError {
+func CallModelHook(b Backend, m interface{}, hook string) DbError {
 	switch hook {
 	case "Validate":
 		if h, ok := m.(ModelValidateHook); ok {
