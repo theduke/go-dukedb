@@ -675,6 +675,18 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 		return err
 	}
 
+	// Verify that ID is not zero.
+	id, err := b.ModelID(model)
+	if err != nil {
+		return err
+	}
+	if IsZero(id) {
+		return Error{
+			Code:    "cant_update_model_without_id",
+			Message: fmt.Sprintf("Trying to update model %v with zero id", info.Collection),
+		}
+	}
+
 	if err := CallModelHook(b, model, "BeforeUpdate"); err != nil {
 		return err
 	}
@@ -705,6 +717,18 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
 	info, err := b.InfoForModel(model)
 	if err != nil {
 		return err
+	}
+
+	// Verify that ID is not zero.
+	id, err := b.ModelID(model)
+	if err != nil {
+		return err
+	}
+	if IsZero(id) {
+		return Error{
+			Code:    "cant_delete_model_without_id",
+			Message: fmt.Sprintf("Trying to delete model %v with zero id", info.Collection),
+		}
 	}
 
 	if err := CallModelHook(b, model, "BeforeDelete"); err != nil {

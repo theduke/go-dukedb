@@ -507,7 +507,9 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should stop on error in BeforeUpdate()", func() {
-		m := &HooksModel{HookError: true}
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+		m.HookError = true
 		Expect(backend.Update(m)).To(Equal(db.Error{Code: "before_update"}))
 	})
 
@@ -522,7 +524,9 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should stop on error in BeforeDelete()", func() {
-		m := &HooksModel{HookError: true}
+		m := &HooksModel{}
+		Expect(backend.Create(m)).ToNot(HaveOccurred())
+		m.HookError = true
 		Expect(backend.Delete(m)).To(Equal(db.Error{Code: "before_delete"}))
 	})
 
