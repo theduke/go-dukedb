@@ -547,9 +547,9 @@ func (c M2MCollection) ContainsID(id string) bool {
 	return c.GetByID(id) != nil
 }
 
-func (c M2MCollection) All() []db.Model {
-	items, _ := db.InterfaceToModelSlice(c.items.Interface())
-	return items
+func (c M2MCollection) All() []interface{} {
+	slice, _ := db.ConvertInterfaceToSlice(c.items.Interface())
+	return slice
 }
 
 func (c M2MCollection) GetByID(id string) db.Model {
@@ -563,9 +563,9 @@ func (c M2MCollection) GetByID(id string) db.Model {
 	return nil
 }
 
-func (c *M2MCollection) Add(items ...db.Model) db.DbError {
+func (c *M2MCollection) Add(items ...interface{}) db.DbError {
 	for _, item := range items {
-		if !c.Contains(item) {
+		if !c.Contains(item.(db.Model)) {
 			reflect.Append(c.items, reflect.ValueOf(item))
 		}
 	}
@@ -598,7 +598,7 @@ func (c *M2MCollection) Clear() db.DbError {
 	return nil
 }
 
-func (c *M2MCollection) Replace(items []db.Model) db.DbError {
+func (c *M2MCollection) Replace(items []interface{}) db.DbError {
 	for i, item := range items {
 		c.items.Index(i).Set(reflect.ValueOf(item))
 	}

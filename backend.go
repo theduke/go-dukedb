@@ -9,7 +9,7 @@ import (
 
 type BaseM2MCollection struct {
 	Name  string
-	Items []Model
+	Items []interface{}
 }
 
 func (c BaseM2MCollection) Count() int {
@@ -24,14 +24,14 @@ func (c BaseM2MCollection) ContainsID(id string) bool {
 	return c.GetByID(id) != nil
 }
 
-func (c BaseM2MCollection) All() []Model {
+func (c BaseM2MCollection) All() []interface{} {
 	return c.Items
 }
 
 func (c BaseM2MCollection) GetByID(id string) Model {
 	for _, item := range c.Items {
-		if item.GetID() == id {
-			return item
+		if item.(Model).GetID() == id {
+			return item.(Model)
 		}
 	}
 
@@ -49,7 +49,6 @@ func (b *BaseBackend) GetDebug() bool {
 }
 
 func (b *BaseBackend) SetDebug(x bool) {
-	fmt.Printf("setting debuguu in base to: %v\n", x)
 	b.Debug = x
 }
 
@@ -193,7 +192,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			// but join logic requires the field names so we abuse those
 			// RelatedQuery fields here.
 			q.SetJoinFieldName(joinField)
-			q.SetForeignFieldName(relInfo.BelongsToField)
+			q.SetForeignFieldName(relInfo.BelongsToForeignField)
 		} else if relInfo.M2M {
 			joinField = baseInfo.PkField
 			foreignFieldName = relInfo.M2MCollection + "." + baseInfo.BackendName + "_" + baseInfo.GetPkField().BackendName
@@ -248,11 +247,13 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 
 			relation := relationVal.Addr().Interface().(Model)
 
+			if IsZero(relation) {
+				continue
+			}
+
 			// Auto-persist related model if neccessary.
-			fmt.Printf("\npersisting has-one %v\n", name)
 			if IsZero(relation.GetID()) {
 				err := b.Create(relation)
-				fmt.Printf("\n persisted  has-one %+v\n", relation)
 				if err != nil {
 					return err
 				}
@@ -335,18 +336,22 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				continue
 			}
 
-			items, _ := GetStructFieldValue(m, fieldInfo.Name)
-			if items == nil {
+			val, _ := GetStructFieldValue(m, fieldInfo.Name)
+			if IsZero(val) {
 				continue
 			}
 
-			models, _ := InterfaceToModelSlice(items)
-			if len(models) == 0 {
-				continue
+			models, err := ConvertInterfaceToSlice(val)
+			if err != nil {
+				return Error{
+					Code:    "invalid_m2m_slice",
+					Message: err.Error(),
+				}
 			}
 
 			// First, persist all unpersisted m2m models.
-			for _, model := range models {
+			for _, rawModel := range models {
+				model := rawModel.(Model)
 				if IsZero(model.GetID()) {
 					if err := b.Create(model); err != nil {
 						return err
@@ -354,13 +359,13 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m Model) DbError {
 				}
 			}
 
-			m2m, err := b.M2M(m, fieldInfo.Name)
-			if err != nil {
-				return err
+			m2m, err2 := b.M2M(m, fieldInfo.Name)
+			if err2 != nil {
+				return err2
 			}
-			err = m2m.Add(models...)
-			if err != nil {
-				return err
+			err2 = m2m.Add(models...)
+			if err2 != nil {
+				return err2
 			}
 		}
 	}

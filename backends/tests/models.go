@@ -124,7 +124,7 @@ func (t TestParent) Collection() string {
 
 func NewTestModel(index int) TestModel {
 	return TestModel{
-		ID:     uint64(index),
+		//ID:     uint64(index),
 		StrVal: fmt.Sprintf("str%v", index),
 		IntVal: int64(index),
 	}

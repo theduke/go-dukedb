@@ -226,16 +226,16 @@ type Backend interface {
 }
 
 type M2MCollection interface {
-	Add(...Model) DbError
+	Add(...interface{}) DbError
 	Delete(...Model) DbError
 	Clear() DbError
-	Replace([]Model) DbError
+	Replace([]interface{}) DbError
 
 	Count() int
 	Contains(Model) bool
 	ContainsID(string) bool
 	GetByID(string) Model
-	All() []Model
+	All() []interface{}
 }
 
 type Transaction interface {

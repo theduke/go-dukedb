@@ -158,8 +158,12 @@ func (b *Backend) BuildRelationshipInfo() {
 }
 
 func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
-	if b.Debug && b.Logger != nil {
-		b.Logger.Debugf("%v | %+v", query, args)
+	if b.Debug {
+		if b.Logger != nil {
+			b.Logger.Debugf("%v | %+v", query, args)
+		} else {
+			fmt.Printf("%v | %v\n", query, args)
+		}
 	}
 
 	if b.Tx != nil {
@@ -170,8 +174,12 @@ func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error)
 }
 
 func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) {
-	if b.Debug && b.Logger != nil {
-		b.Logger.Debugf("%v | %+v", query, args)
+	if b.Debug {
+		if b.Logger != nil {
+			b.Logger.Debugf("%v | %+v", query, args)
+		} else {
+			fmt.Printf("%v | %v\n", query, args)
+		}
 	}
 
 	if b.Tx != nil {
@@ -568,7 +576,6 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 		for _, col := range cols {
 			fieldName := info.MapFieldName(col)
 			if fieldName == "" {
-				fmt.Printf("skipping column %v\n", col)
 				var x interface{}
 				vals = append(vals, &x)
 			} else {
@@ -601,7 +608,7 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 }
 
 // Perform a query.
-func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
+func (b *Backend) Query(q db.Query) ([]interface{}, db.DbError) {
 	info := b.GetModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
@@ -622,12 +629,17 @@ func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
 		return nil, err
 	}
 
-	slice, err := db.BuildModelSliceFromMap(info, result)
-	if err != nil {
-		return nil, err
+	models := make([]interface{}, 0)
+	for _, data := range result {
+		model, err := db.BuildModelFromMap(info, data)
+		if err != nil {
+			return nil, db.Error{
+				Code:    "map_to_model_error",
+				Message: fmt.Sprintf("Could not convert map to model: %v", err),
+			}
+		}
+		models = append(models, model)
 	}
-
-	models, _ := db.InterfaceToModelSlice(slice)
 
 	// Do joins.
 	if len(q.GetJoins()) > 0 {
@@ -647,7 +659,7 @@ func (b *Backend) Query(q db.Query) ([]db.Model, db.DbError) {
 }
 
 func (b *Backend) QueryOne(q db.Query) (db.Model, db.DbError) {
-	return db.BackendQueryOne(&b, q)
+	return db.BackendQueryOne(b, q)
 }
 
 func (b *Backend) Count(q db.Query) (int, db.DbError) {
@@ -676,15 +688,15 @@ func (b *Backend) Count(q db.Query) (int, db.DbError) {
 }
 
 func (b *Backend) Last(q db.Query) (db.Model, db.DbError) {
-	return db.BackendLast(&b, q)
+	return db.BackendLast(b, q)
 }
 
 // Find first model with primary key ID.
 func (b *Backend) FindOne(modelType string, id string) (db.Model, db.DbError) {
-	return db.BackendFindOne(&b, modelType, id)
+	return db.BackendFindOne(b, modelType, id)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}) ([]db.Model, db.DbError) {
+func (b *Backend) FindBy(modelType, field string, value interface{}) ([]interface{}, db.DbError) {
 	return b.Q(modelType).Filter(field, value).Find()
 }
 
@@ -749,7 +761,7 @@ func (b *Backend) Create(m db.Model) db.DbError {
 		}
 	}
 
-	// Persist relations again.
+	// Persist relations again since m2m can only be handled when the primary key is set.
 	err = db.BackendPersistRelations(b, info, m)
 	if err != nil {
 		return err
@@ -938,7 +950,7 @@ func (b *Backend) M2M(obj db.Model, name string) (db.M2MCollection, db.DbError) 
 	}
 
 	col := &M2MCollection{
-		Backend:      &b,
+		Backend:      b,
 		Model:        obj,
 		ModelInfo:    info,
 		RelationInfo: relationInfo,
@@ -1003,11 +1015,11 @@ func (c M2MCollection) BuildQuery() (db.Query, db.DbError) {
 	return c.Backend.Q(c.ModelInfo.Collection).Filter(c.modelField, pk).Related(c.Name).Build()
 }
 
-func (c *M2MCollection) Add(items ...db.Model) db.DbError {
+func (c *M2MCollection) Add(items ...interface{}) db.DbError {
 	modelId, _ := db.GetStructFieldValue(c.Model, c.modelField)
 
 	for _, item := range items {
-		if !c.Contains(item) {
+		if !c.Contains(item.(db.Model)) {
 			relationId, _ := db.GetStructFieldValue(item, c.relationField)
 
 			data := map[string]interface{}{
@@ -1060,7 +1072,7 @@ func (c *M2MCollection) Delete(items ...db.Model) db.DbError {
 
 	for _, item := range items {
 		for index, curItem := range c.Items {
-			if curItem.GetID() == item.GetID() {
+			if curItem.(db.Model).GetID() == item.GetID() {
 				c.Items = append(c.Items[:index], c.Items[index+1:]...)
 				break
 			}
@@ -1088,11 +1100,11 @@ func (c *M2MCollection) Clear() db.DbError {
 		}
 	}
 
-	c.Items = make([]db.Model, 0)
+	c.Items = make([]interface{}, 0)
 	return nil
 }
 
-func (c *M2MCollection) Replace(items []db.Model) db.DbError {
+func (c *M2MCollection) Replace(items []interface{}) db.DbError {
 	if err := c.Clear(); err != nil {
 		return err
 	}

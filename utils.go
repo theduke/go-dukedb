@@ -444,6 +444,29 @@ func NewSlice(typ interface{}) interface{} {
 	return x.Elem().Interface()
 }
 
+func ConvertInterfaceToSlice(slice interface{}) ([]interface{}, error) {
+	reflSlice := reflect.ValueOf(slice)
+
+	if reflSlice.Type().Kind() == reflect.Ptr {
+		reflSlice = reflSlice.Elem()
+	}
+	if reflSlice.Type().Kind() != reflect.Slice {
+		return nil, errors.New("slice_expected")
+	}
+
+	result := make([]interface{}, 0)
+
+	for i := 0; i < reflSlice.Len(); i++ {
+		itemVal := reflSlice.Index(i)
+		if itemVal.Type().Kind() == reflect.Struct {
+			itemVal = itemVal.Addr()
+		}
+		result = append(result, itemVal.Interface())
+	}
+
+	return result, nil
+}
+
 // Convert a slice of type interface{} to a []Model slice.
 func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 	reflSlice := reflect.ValueOf(slice)
@@ -463,10 +486,10 @@ func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 			itemVal = itemVal.Addr()
 		}
 		item := itemVal.Interface()
-		modelItem, ok := item.(Model)
 
 		// Check that slice items actually implement model interface.
 		// Only needed once.
+		modelItem, ok := item.(Model)
 		if i == 0 && !ok {
 			return nil, errors.New("slice_values_do_not_implement_model_if")
 		}

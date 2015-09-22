@@ -1,11 +1,15 @@
 package tests
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	db "github.com/theduke/go-dukedb"
 )
+
+var _ = fmt.Printf
 
 func TestBackend(backend db.Backend) {
 	It("Should configure backend", func() {
@@ -145,6 +149,8 @@ func TestBackend(backend db.Backend) {
 		model.ChildPtr = nil
 		model.ChildSlice = nil
 		model.ChildSlicePtr = nil
+
+		model.Child.ID = 0
 
 		err := backend.Create(&model)
 		Expect(err).ToNot(HaveOccurred())
