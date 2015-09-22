@@ -73,7 +73,7 @@ func TestBackend(backend db.Backend) {
 
 	It("Should delete", func() {
 		// Persist model to update.
-		testModel := NewTestModel(2)
+		testModel := NewTestModel(3)
 		err := backend.Create(&testModel)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -86,9 +86,9 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should delete many", func() {
-		m1 := NewTestModel(1)
-		m2 := NewTestModel(2)
-		m3 := NewTestModel(3)
+		m1 := NewTestModel(4)
+		m2 := NewTestModel(5)
+		m3 := NewTestModel(6)
 		Expect(backend.Create(&m1)).ToNot(HaveOccurred())
 		Expect(backend.Create(&m2)).ToNot(HaveOccurred())
 		Expect(backend.Create(&m3)).ToNot(HaveOccurred())
@@ -155,7 +155,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should auto-persist single belongs-to", func() {
-		model := NewTestParent(1, true)
+		model := NewTestParent(3, true)
 		model.ChildSlice = nil
 		model.ChildSlicePtr = nil
 
@@ -168,7 +168,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should join single belongs-to", func() {
-		model := NewTestParent(2, true)
+		model := NewTestParent(4, true)
 		model.ChildSlice = nil
 		model.ChildSlicePtr = nil
 
@@ -181,7 +181,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should auto-persist mutli belongs-to", func() {
-		model := NewTestParent(1, true)
+		model := NewTestParent(5, true)
 		model.ChildPtr = nil
 		model.ChildSlicePtr = nil
 
@@ -194,7 +194,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should join multi belongs-to", func() {
-		model := NewTestParent(2, true)
+		model := NewTestParent(6, true)
 		model.ChildPtr = nil
 		model.ChildSlicePtr = nil
 
@@ -210,13 +210,12 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should auto-persist m2m", func() {
-		model := NewTestParent(2, true)
+		model := NewTestParent(7, true)
 		model.ChildPtr = nil
 		model.ChildSlice = nil
-		model.ChildSlicePtr = model.ChildSlicePtr[0:1]
+		model.ChildSlicePtr = model.ChildSlicePtr[:1]
 
-		err := backend.Create(&model)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(backend.Create(&model)).ToNot(HaveOccurred())
 
 		m2m, err := backend.M2M(&model, "ChildSlicePtr")
 		Expect(err).ToNot(HaveOccurred())
@@ -225,7 +224,7 @@ func TestBackend(backend db.Backend) {
 	})
 
 	It("Should join m2m", func() {
-		model := NewTestParent(2, true)
+		model := NewTestParent(8, true)
 		model.ChildPtr = nil
 		model.ChildSlice = nil
 		model.ChildSlicePtr = model.ChildSlicePtr[0:1]
@@ -270,7 +269,7 @@ func TestBackend(backend db.Backend) {
 		tx := transactionBackend.Begin()
 		Expect(tx).ToNot(BeNil())
 
-		model := NewTestModel(100)
+		model := NewTestModel(101)
 		Expect(tx.Create(&model)).ToNot(HaveOccurred())
 
 		Expect(tx.Rollback()).ToNot(HaveOccurred())
