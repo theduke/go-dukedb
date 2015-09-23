@@ -15,7 +15,7 @@ import (
 func ParseJsonQuery(collection string, js []byte) (Query, apperror.Error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "invalid_json",
 			Message: "Query json could not be unmarshaled. Check for invalid json.",
 		}
@@ -37,7 +37,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 	if rawJoins, ok := data["joins"]; ok {
 		rawJoinSlice, ok := rawJoins.([]interface{})
 		if !ok {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "invalid_joins",
 				Message: "Joins must be an array of strings",
 			}
@@ -49,7 +49,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 		for _, rawJoin := range rawJoinSlice {
 			join, ok := rawJoin.(string)
 			if !ok {
-				return nil, &apperror.AppError{
+				return nil, &apperror.Err{
 					Code:    "invalid_joins",
 					Message: "Joins must be an array of strings",
 				}
@@ -75,7 +75,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 	if rawQuery, ok := data["filters"]; ok {
 		query, ok := rawQuery.(map[string]interface{})
 		if !ok {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "invalid_filters",
 				Message: "The filters key must contain a dict",
 			}
@@ -90,7 +90,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 	if rawFields, ok := data["fields"]; ok {
 		fields, ok := rawFields.([]interface{})
 		if !ok {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "invalid_fields",
 				Message: "Fields specification must be an array",
 			}
@@ -99,7 +99,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 		for _, rawField := range fields {
 			field, ok := rawField.(string)
 			if !ok {
-				return nil, &apperror.AppError{
+				return nil, &apperror.Err{
 					Code:    "invalid_fields",
 					Message: "Fields specification must be an array of strings",
 				}
@@ -126,7 +126,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 	// Handle limit.
 	if rawLimit, ok := data["limit"]; ok {
 		if limit, err := NumericToInt64(rawLimit); err != nil {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "limit_non_numeric",
 				Message: "Limit must be a number",
 			}
@@ -138,7 +138,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 	// Handle offset.
 	if rawOffset, ok := data["offset"]; ok {
 		if offset, err := NumericToInt64(rawOffset); err != nil {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "offset_non_numeric",
 				Message: "Offset must be a number",
 			}
@@ -163,7 +163,7 @@ func parseQueryJoins(q Query, joins []string, depth int) ([]string, apperror.Err
 				joinQ := q.GetJoin(strings.Join(parts[:joinDepth-1], "."))
 				if joinQ == nil {
 					// Parent join not found, obviosly an error.
-					return nil, &apperror.AppError{
+					return nil, &apperror.Err{
 						Code:    "invalid_nested_join",
 						Message: fmt.Sprintf("Tried to join %v, but the parent join was not found", name),
 					}
@@ -230,7 +230,7 @@ func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
 	}
 
 	if name == "$nor" {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "unsupported_nor_query",
 			Message: "$nor queryies are not supported",
 		}
@@ -240,14 +240,14 @@ func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
 	if name == "$or" {
 		orClauses, ok := data.([]interface{})
 		if !ok {
-			return nil, &apperror.AppError{Code: "invalid_or_data"}
+			return nil, &apperror.Err{Code: "invalid_or_data"}
 		}
 
 		or := Or()
 		for _, rawClause := range orClauses {
 			clause, ok := rawClause.(map[string]interface{})
 			if !ok {
-				return nil, &apperror.AppError{Code: "invalid_or_data"}
+				return nil, &apperror.Err{Code: "invalid_or_data"}
 			}
 
 			filter, err := parseQueryFilter("", clause)

@@ -99,7 +99,7 @@ func (b *Backend) CreateCollection(collection string) apperror.Error {
 func (b *Backend) CreateCollections(names ...string) apperror.Error {
 	for _, name := range names {
 		if err := b.CreateCollection(name); err != nil {
-			return &apperror.AppError{
+			return &apperror.Err{
 				Code:    "create_collection_error",
 				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
 			}
@@ -217,7 +217,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 	}
 
 	// If execution comes here, filter type is unsupported.
-	return false, &apperror.AppError{
+	return false, &apperror.Err{
 		Code:    "unsupported_filter",
 		Message: fmt.Sprintf("The filter %v is not supported by the memory backend", filter.Type()),
 	}
@@ -253,7 +253,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 
 	// Handle field specificiaton.
 	if len(q.GetFields()) > 0 {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "memory_backend_unsupported_feature_fieldspec",
 			Message: "The memory backend does not support limiting fields",
 		}
@@ -267,7 +267,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 	// Set default order.
 	if len(q.GetOrders()) > 0 {
 		if len(q.GetOrders()) > 1 {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "memory_backend_unsupported_feature_multiple_orders",
 				Message: "The memory backend does not support multiple orderings",
 			}
@@ -279,7 +279,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 			field = info.MapFieldName(field)
 		}
 		if !info.HasField(field) {
-			return nil, &apperror.AppError{
+			return nil, &apperror.Err{
 				Code:    "cant_sort_on_inexistant_field",
 				Message: fmt.Sprintf("Trying to sort on non-existant field %v", field),
 			}
@@ -364,7 +364,7 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 		id := b.MustModelStrID(m)
 		if !db.IsZero(id) {
 			if _, ok := b.data[collection][id]; ok {
-				return &apperror.AppError{
+				return &apperror.Err{
 					Code:    "pk_exists",
 					Message: fmt.Sprintf("A model of type %v with id %v already exists", collection, id),
 				}
@@ -373,7 +373,7 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 			// Generate new id.
 			id = strconv.Itoa(len(b.data[collection]) + 1)
 			if err := b.SetModelID(m, id); err != nil {
-				return &apperror.AppError{
+				return &apperror.Err{
 					Code:    "set_id_error",
 					Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
 				}
@@ -412,7 +412,7 @@ func (b *Backend) Delete(m interface{}) apperror.Error {
 		collection := info.Collection
 
 		if _, ok := b.data[collection][id]; !ok {
-			return &apperror.AppError{
+			return &apperror.Err{
 				Code:    "not_found",
 				Message: fmt.Sprintf("A model of type %v with id %v does not exists", collection, id),
 			}
@@ -452,14 +452,14 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", collection, name),
 		}
 	}
 
 	if !fieldInfo.M2M {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, collection),
 		}

@@ -495,7 +495,7 @@ func TestBackend(backend db.Backend) {
 
 	It("Should stop on error in BeforeCreate()", func() {
 		m := &HooksModel{HookError: true}
-		Expect(backend.Create(m)).To(Equal(&apperror.AppError{Code: "before_create"}))
+		Expect(backend.Create(m)).To(Equal(&apperror.Err{Code: "before_create"}))
 	})
 
 	It("Should call before/afterUpdate hooks", func() {
@@ -512,7 +512,7 @@ func TestBackend(backend db.Backend) {
 		m := &HooksModel{}
 		Expect(backend.Create(m)).ToNot(HaveOccurred())
 		m.HookError = true
-		Expect(backend.Update(m)).To(Equal(&apperror.AppError{Code: "before_update"}))
+		Expect(backend.Update(m)).To(Equal(&apperror.Err{Code: "before_update"}))
 	})
 
 	It("Should call before/afterDelete hooks", func() {
@@ -529,7 +529,7 @@ func TestBackend(backend db.Backend) {
 		m := &HooksModel{}
 		Expect(backend.Create(m)).ToNot(HaveOccurred())
 		m.HookError = true
-		Expect(backend.Delete(m)).To(Equal(&apperror.AppError{Code: "before_delete"}))
+		Expect(backend.Delete(m)).To(Equal(&apperror.Err{Code: "before_delete"}))
 	})
 
 	It("Should call AfterQuery hook", func() {

@@ -799,14 +799,14 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", info.Collection, name),
 		}
 	}
 
 	if !fieldInfo.M2M {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, info.Collection),
 		}
@@ -814,7 +814,7 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.
 
 	relationInfo := b.ModelInfo(fieldInfo.RelationCollection)
 	if relationInfo == nil {
-		return nil, &apperror.AppError{
+		return nil, &apperror.Err{
 			Code:    "unknown_relation_model",
 			Message: fmt.Sprintf("Model '%v' not registered with sql backend", fieldInfo.RelationCollection),
 		}
