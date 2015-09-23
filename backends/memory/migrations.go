@@ -12,15 +12,15 @@ func (b Backend) GetMigrationHandler() *db.MigrationHandler {
 	return b.MigrationHandler
 }
 
-func (b Backend) MigrationsSetup() db.DbError {
+func (b Backend) MigrationsSetup() db.apperror.Error {
 	return nil
 }
 
-func (b Backend) IsMigrationLocked() (bool, db.DbError) {
+func (b Backend) IsMigrationLocked() (bool, db.apperror.Error) {
 	return false, nil
 }
 
-func (b Backend) DetermineMigrationVersion() (int, db.DbError) {
+func (b Backend) DetermineMigrationVersion() (int, db.apperror.Error) {
 	return b.MigrationVersion, nil
 }
 

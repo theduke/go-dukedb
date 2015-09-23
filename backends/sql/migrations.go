@@ -13,7 +13,7 @@ func (b Backend) GetMigrationHandler() *db.MigrationHandler {
 	return b.MigrationHandler
 }
 
-func (b Backend) MigrationsSetup() db.DbError {
+func (b Backend) MigrationsSetup() db.apperror.Error {
 	count, err := b.Count(b.Q("migration_attempts"))
 	// Todo. determine right error string.
 	if err != nil {
@@ -59,7 +59,7 @@ func (b Backend) MigrationsSetup() db.DbError {
 	return nil
 }
 
-func (b Backend) IsMigrationLocked() (bool, db.DbError) {
+func (b Backend) IsMigrationLocked() (bool, db.apperror.Error) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Last(); err != nil {
 		return true, db.Error{
@@ -77,7 +77,7 @@ func (b Backend) IsMigrationLocked() (bool, db.DbError) {
 	return false, nil
 }
 
-func (b Backend) DetermineMigrationVersion() (int, db.DbError) {
+func (b Backend) DetermineMigrationVersion() (int, db.apperror.Error) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Filter("complete", true).Last(); err != nil {
 		return -1, db.Error{

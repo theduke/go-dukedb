@@ -3,6 +3,8 @@ package dukedb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 type Filter interface {
@@ -576,7 +578,7 @@ func (q *DbQuery) SetBackend(x Backend) {
 	q.backend = x
 }
 
-func (q *DbQuery) Find(targetSlice ...interface{}) ([]interface{}, DbError) {
+func (q *DbQuery) Find(targetSlice ...interface{}) ([]interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Find() on query without backend")
 	}
@@ -584,7 +586,7 @@ func (q *DbQuery) Find(targetSlice ...interface{}) ([]interface{}, DbError) {
 	return q.backend.Query(q, targetSlice...)
 }
 
-func (q *DbQuery) First(targetModel ...interface{}) (interface{}, DbError) {
+func (q *DbQuery) First(targetModel ...interface{}) (interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .First() on query without backend")
 	}
@@ -592,21 +594,21 @@ func (q *DbQuery) First(targetModel ...interface{}) (interface{}, DbError) {
 	return q.backend.QueryOne(q, targetModel...)
 }
 
-func (q *DbQuery) Last(targetModel ...interface{}) (interface{}, DbError) {
+func (q *DbQuery) Last(targetModel ...interface{}) (interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Last() on query without backend")
 	}
 	return q.backend.Last(q, targetModel...)
 }
 
-func (q *DbQuery) Count() (int, DbError) {
+func (q *DbQuery) Count() (int, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Count() on query without backend")
 	}
 	return q.backend.Count(q)
 }
 
-func (q *DbQuery) Delete() DbError {
+func (q *DbQuery) Delete() apperror.Error {
 	if q.backend == nil {
 		panic("Calling .Delete() on query without backend")
 	}
@@ -697,7 +699,7 @@ func (q *DbRelationQuery) SetForeignFieldName(x string) {
 	q.foreignFieldName = x
 }
 
-func (q *DbRelationQuery) Build() (Query, DbError) {
+func (q *DbRelationQuery) Build() (Query, apperror.Error) {
 	if q.backend == nil {
 		panic("Callind .Find() on a query without backend")
 	}
@@ -706,7 +708,7 @@ func (q *DbRelationQuery) Build() (Query, DbError) {
 
 // Backend methods.
 
-func (q *DbRelationQuery) Find(targetSlice ...interface{}) ([]interface{}, DbError) {
+func (q *DbRelationQuery) Find(targetSlice ...interface{}) ([]interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Callind .Find() on a query without backend")
 	}
@@ -718,7 +720,7 @@ func (q *DbRelationQuery) Find(targetSlice ...interface{}) ([]interface{}, DbErr
 	return newQ.Find(targetSlice...)
 }
 
-func (q *DbRelationQuery) First(targetModel ...interface{}) (interface{}, DbError) {
+func (q *DbRelationQuery) First(targetModel ...interface{}) (interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .First() on a query without backend")
 	}
@@ -730,7 +732,7 @@ func (q *DbRelationQuery) First(targetModel ...interface{}) (interface{}, DbErro
 	return newQ.First(targetModel...)
 }
 
-func (q *DbRelationQuery) Last(targetModel ...interface{}) (interface{}, DbError) {
+func (q *DbRelationQuery) Last(targetModel ...interface{}) (interface{}, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Last() on a query without backend")
 	}
@@ -742,7 +744,7 @@ func (q *DbRelationQuery) Last(targetModel ...interface{}) (interface{}, DbError
 	return newQ.Last(targetModel...)
 }
 
-func (q *DbRelationQuery) Count() (int, DbError) {
+func (q *DbRelationQuery) Count() (int, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Count() on a query without backend")
 	}
@@ -754,7 +756,7 @@ func (q *DbRelationQuery) Count() (int, DbError) {
 	return newQ.Count()
 }
 
-func (q *DbRelationQuery) Delete() DbError {
+func (q *DbRelationQuery) Delete() apperror.Error {
 	if q.backend == nil {
 		panic("Calling .Delete() on a query without backend")
 	}

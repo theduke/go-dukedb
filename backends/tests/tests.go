@@ -6,6 +6,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/theduke/go-apperror"
+
 	db "github.com/theduke/go-dukedb"
 )
 
@@ -493,7 +495,7 @@ func TestBackend(backend db.Backend) {
 
 	It("Should stop on error in BeforeCreate()", func() {
 		m := &HooksModel{HookError: true}
-		Expect(backend.Create(m)).To(Equal(db.Error{Code: "before_create"}))
+		Expect(backend.Create(m)).To(Equal(&apperror.AppError{Code: "before_create"}))
 	})
 
 	It("Should call before/afterUpdate hooks", func() {
@@ -510,7 +512,7 @@ func TestBackend(backend db.Backend) {
 		m := &HooksModel{}
 		Expect(backend.Create(m)).ToNot(HaveOccurred())
 		m.HookError = true
-		Expect(backend.Update(m)).To(Equal(db.Error{Code: "before_update"}))
+		Expect(backend.Update(m)).To(Equal(&apperror.AppError{Code: "before_update"}))
 	})
 
 	It("Should call before/afterDelete hooks", func() {
@@ -527,7 +529,7 @@ func TestBackend(backend db.Backend) {
 		m := &HooksModel{}
 		Expect(backend.Create(m)).ToNot(HaveOccurred())
 		m.HookError = true
-		Expect(backend.Delete(m)).To(Equal(db.Error{Code: "before_delete"}))
+		Expect(backend.Delete(m)).To(Equal(&apperror.AppError{Code: "before_delete"}))
 	})
 
 	It("Should call AfterQuery hook", func() {

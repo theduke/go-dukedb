@@ -4,16 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 /**
  * Query parser functions.
  */
 
-func ParseJsonQuery(collection string, js []byte) (Query, DbError) {
+func ParseJsonQuery(collection string, js []byte) (Query, apperror.Error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "invalid_json",
 			Message: "Query json could not be unmarshaled. Check for invalid json.",
 		}
@@ -27,7 +29,7 @@ func ParseJsonQuery(collection string, js []byte) (Query, DbError) {
 //
 // It returns a Query equal to the Mongo query, with unsupported features omitted.
 // An error is returned if the building of the query fails.
-func ParseQuery(collection string, data map[string]interface{}) (Query, DbError) {
+func ParseQuery(collection string, data map[string]interface{}) (Query, apperror.Error) {
 	q := Q(collection)
 
 	// First, Handle joins so query and field specification parsing can use
@@ -35,7 +37,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	if rawJoins, ok := data["joins"]; ok {
 		rawJoinSlice, ok := rawJoins.([]interface{})
 		if !ok {
-			return nil, Error{
+			return nil, &apperror.AppError{
 				Code:    "invalid_joins",
 				Message: "Joins must be an array of strings",
 			}
@@ -47,7 +49,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 		for _, rawJoin := range rawJoinSlice {
 			join, ok := rawJoin.(string)
 			if !ok {
-				return nil, Error{
+				return nil, &apperror.AppError{
 					Code:    "invalid_joins",
 					Message: "Joins must be an array of strings",
 				}
@@ -58,7 +60,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 		// To handle nested joins, parseQueryJoins has to be called repeatedly
 		// until no more joins are returned.
 		for depth := 1; true; depth++ {
-			var err DbError
+			var err apperror.Error
 			joins, err = parseQueryJoins(q, joins, depth)
 			if err != nil {
 				return nil, err
@@ -73,7 +75,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	if rawQuery, ok := data["filters"]; ok {
 		query, ok := rawQuery.(map[string]interface{})
 		if !ok {
-			return nil, Error{
+			return nil, &apperror.AppError{
 				Code:    "invalid_filters",
 				Message: "The filters key must contain a dict",
 			}
@@ -88,7 +90,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	if rawFields, ok := data["fields"]; ok {
 		fields, ok := rawFields.([]interface{})
 		if !ok {
-			return nil, Error{
+			return nil, &apperror.AppError{
 				Code:    "invalid_fields",
 				Message: "Fields specification must be an array",
 			}
@@ -97,7 +99,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 		for _, rawField := range fields {
 			field, ok := rawField.(string)
 			if !ok {
-				return nil, Error{
+				return nil, &apperror.AppError{
 					Code:    "invalid_fields",
 					Message: "Fields specification must be an array of strings",
 				}
@@ -124,7 +126,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	// Handle limit.
 	if rawLimit, ok := data["limit"]; ok {
 		if limit, err := NumericToInt64(rawLimit); err != nil {
-			return nil, Error{
+			return nil, &apperror.AppError{
 				Code:    "limit_non_numeric",
 				Message: "Limit must be a number",
 			}
@@ -136,7 +138,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	// Handle offset.
 	if rawOffset, ok := data["offset"]; ok {
 		if offset, err := NumericToInt64(rawOffset); err != nil {
-			return nil, Error{
+			return nil, &apperror.AppError{
 				Code:    "offset_non_numeric",
 				Message: "Offset must be a number",
 			}
@@ -148,7 +150,7 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, DbError)
 	return q, nil
 }
 
-func parseQueryJoins(q Query, joins []string, depth int) ([]string, DbError) {
+func parseQueryJoins(q Query, joins []string, depth int) ([]string, apperror.Error) {
 	remaining := make([]string, 0)
 
 	for _, name := range joins {
@@ -161,7 +163,7 @@ func parseQueryJoins(q Query, joins []string, depth int) ([]string, DbError) {
 				joinQ := q.GetJoin(strings.Join(parts[:joinDepth-1], "."))
 				if joinQ == nil {
 					// Parent join not found, obviosly an error.
-					return nil, Error{
+					return nil, &apperror.AppError{
 						Code:    "invalid_nested_join",
 						Message: fmt.Sprintf("Tried to join %v, but the parent join was not found", name),
 					}
@@ -182,7 +184,7 @@ func parseQueryJoins(q Query, joins []string, depth int) ([]string, DbError) {
 	return remaining, nil
 }
 
-func parseQueryFilters(q Query, filters map[string]interface{}) DbError {
+func parseQueryFilters(q Query, filters map[string]interface{}) apperror.Error {
 	filter, err := parseQueryFilter("", filters)
 	if err != nil {
 		return err
@@ -204,7 +206,7 @@ func parseQueryFilters(q Query, filters map[string]interface{}) DbError {
 // Parses a mongo query filter to a Filter.
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
-func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
+func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
 	// Handle
 	switch name {
 	case "$eq":
@@ -228,7 +230,7 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 	}
 
 	if name == "$nor" {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "unsupported_nor_query",
 			Message: "$nor queryies are not supported",
 		}
@@ -238,14 +240,14 @@ func parseQueryFilter(name string, data interface{}) (Filter, DbError) {
 	if name == "$or" {
 		orClauses, ok := data.([]interface{})
 		if !ok {
-			return nil, Error{Code: "invalid_or_data"}
+			return nil, &apperror.AppError{Code: "invalid_or_data"}
 		}
 
 		or := Or()
 		for _, rawClause := range orClauses {
 			clause, ok := rawClause.(map[string]interface{})
 			if !ok {
-				return nil, Error{Code: "invalid_or_data"}
+				return nil, &apperror.AppError{Code: "invalid_or_data"}
 			}
 
 			filter, err := parseQueryFilter("", clause)

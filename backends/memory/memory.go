@@ -62,7 +62,7 @@ func (b *Backend) RegisterModel(m interface{}) {
 	b.data[collection] = make(map[string]interface{})
 }
 
-func (b *Backend) CreateModel(collection string) (interface{}, db.DbError) {
+func (b *Backend) CreateModel(collection string) (interface{}, db.apperror.Error) {
 	return db.BackendCreateModel(b, collection)
 }
 
@@ -74,7 +74,7 @@ func (b *Backend) MergeModel(model db.Model) {
 	db.BackendMergeModel(b, model)
 }
 
-func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.DbError) {
+func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.apperror.Error) {
 	collection, err := db.GetModelCollection(m)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{
 	return db.ModelToMap(info, m, false, marshal)
 }
 
-func (b *Backend) CreateCollection(name string) db.DbError {
+func (b *Backend) CreateCollection(name string) db.apperror.Error {
 	info := b.ModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -105,7 +105,7 @@ func (b *Backend) CreateCollection(name string) db.DbError {
 	return nil
 }
 
-func (b *Backend) CreateCollections(names ...string) db.DbError {
+func (b *Backend) CreateCollections(names ...string) db.apperror.Error {
 	for _, name := range names {
 		if err := b.CreateCollection(name); err != nil {
 			return db.Error{
@@ -118,7 +118,7 @@ func (b *Backend) CreateCollections(names ...string) db.DbError {
 	return nil
 }
 
-func (b *Backend) DropCollection(name string) db.DbError {
+func (b *Backend) DropCollection(name string) db.apperror.Error {
 	info := b.ModelInfo(name)
 	if info == nil {
 		return db.Error{
@@ -134,7 +134,7 @@ func (b *Backend) DropCollection(name string) db.DbError {
 	return nil
 }
 
-func (b *Backend) DropAllCollections() db.DbError {
+func (b *Backend) DropAllCollections() db.apperror.Error {
 	info := b.AllModelInfo()
 	for name := range info {
 		if err := b.DropCollection(name); err != nil {
@@ -151,7 +151,7 @@ func (b *Backend) Q(model string) db.Query {
 	return q
 }
 
-func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, db.DbError) {
+func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, db.apperror.Error) {
 	filterType := filter.Type()
 
 	if filterType == "and" {
@@ -235,7 +235,7 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 	}
 }
 
-func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
+func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	info := b.ModelInfo(q.GetCollection())
 	if info == nil {
 		return nil, db.Error{
@@ -315,11 +315,11 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.DbError) {
 	return items, nil
 }
 
-func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.DbError) {
+func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.apperror.Error) {
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-func (b *Backend) doQuery(q db.Query) ([]interface{}, db.DbError) {
+func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	res, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
@@ -332,16 +332,16 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, db.DbError) {
 }
 
 // Perform a query.
-func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, db.DbError) {
+func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, db.apperror.Error) {
 	res, err := b.doQuery(q)
 	return db.BackendQuery(b, q, targetSlices, res, err)
 }
 
-func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, db.DbError) {
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
 	return db.BackendQueryOne(b, q, targetModel)
 }
 
-func (b *Backend) Count(q db.Query) (int, db.DbError) {
+func (b *Backend) Count(q db.Query) (int, db.apperror.Error) {
 	info := b.ModelInfo(q.GetCollection())
 	if info == nil {
 		return 0, db.Error{
@@ -361,20 +361,20 @@ func (b *Backend) Count(q db.Query) (int, db.DbError) {
 	return len(result), nil
 }
 
-func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, db.DbError) {
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
 	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, db.DbError) {
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
 	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, db.DbError) {
+func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, db.apperror.Error) {
 	return db.BackendFindBy(b, modelType, field, value, targetSlice)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, db.DbError) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
 	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
@@ -383,8 +383,8 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 // Store the model.
 // Fails if the model type was not registered, or if the primary key already
 // exists.
-func (b *Backend) Create(m interface{}) db.DbError {
-	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+func (b *Backend) Create(m interface{}) db.apperror.Error {
+	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
 		collection := info.Collection
 
 		id := b.MustModelStrID(m)
@@ -411,14 +411,14 @@ func (b *Backend) Create(m interface{}) db.DbError {
 	})
 }
 
-func (b *Backend) Update(m interface{}) db.DbError {
-	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+func (b *Backend) Update(m interface{}) db.apperror.Error {
+	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
 		b.data[info.Collection][b.MustModelStrID(m)] = m
 		return nil
 	})
 }
 
-func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.DbError {
+func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.apperror.Error {
 	collection, err := db.GetModelCollection(m)
 	if err != nil {
 		return err
@@ -440,8 +440,8 @@ func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.DbE
 	return nil
 }
 
-func (b *Backend) Delete(m interface{}) db.DbError {
-	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.DbError {
+func (b *Backend) Delete(m interface{}) db.apperror.Error {
+	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
 		id := b.MustModelStrID(m)
 		collection := info.Collection
 
@@ -457,7 +457,7 @@ func (b *Backend) Delete(m interface{}) db.DbError {
 	})
 }
 
-func (b *Backend) DeleteMany(q db.Query) db.DbError {
+func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return err
@@ -476,7 +476,7 @@ func (b *Backend) DeleteMany(q db.Query) db.DbError {
  * M2M
  */
 
-func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.DbError) {
+func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperror.Error) {
 	collection, err := db.GetModelCollection(obj)
 	if err != nil {
 		return nil, err
@@ -546,7 +546,7 @@ func (c M2MCollection) GetByID(id interface{}) interface{} {
 	return nil
 }
 
-func (c *M2MCollection) Add(items ...interface{}) db.DbError {
+func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
 	for _, item := range items {
 		if !c.Contains(item) {
 			reflect.Append(c.items, reflect.ValueOf(item))
@@ -556,7 +556,7 @@ func (c *M2MCollection) Add(items ...interface{}) db.DbError {
 	return nil
 }
 
-func (c *M2MCollection) Delete(items ...interface{}) db.DbError {
+func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
 	for _, item := range items {
 		itemId := c.Backend.MustModelID(item)
 
@@ -579,12 +579,12 @@ func (c *M2MCollection) Delete(items ...interface{}) db.DbError {
 	return nil
 }
 
-func (c *M2MCollection) Clear() db.DbError {
+func (c *M2MCollection) Clear() db.apperror.Error {
 	c.items.SetLen(0)
 	return nil
 }
 
-func (c *M2MCollection) Replace(items []interface{}) db.DbError {
+func (c *M2MCollection) Replace(items []interface{}) db.apperror.Error {
 	for i, item := range items {
 		c.items.Index(i).Set(reflect.ValueOf(item))
 	}

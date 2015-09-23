@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 /**
@@ -87,17 +89,15 @@ type ModelInfo struct {
 
 // Builds the ModelInfo for a model and returns it.
 // Returns an error for all failures.
-func CreateModelInfo(model interface{}) (*ModelInfo, DbError) {
+func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 	typ := reflect.TypeOf(model)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
-		return nil, Error{
-			Code:    "invalid_model_argument",
-			Message: fmt.Sprintf("Must use pointer to struct or struct, got %v", typ),
-		}
+		return nil, apperror.New("invalid_model_argument",
+			fmt.Sprintf("Must use pointer to struct or struct, got %v", typ))
 	}
 
 	//backendModel, isBackendModel := model.(Model)
@@ -126,11 +126,8 @@ func CreateModelInfo(model interface{}) (*ModelInfo, DbError) {
 
 	err = info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")
 	if err != nil {
-		return nil, Error{
-			Code:    "build_field_info_error",
-			Message: fmt.Sprintf("Could not build field info for %v: %v", info.Name, err.GetMessage()),
-			Data:    err,
-		}
+		return nil, apperror.Wrap(err, "build_field_info_error",
+			fmt.Sprintf("Could not build field info for %v", info.Name))
 	}
 
 	// Ensure primary key exists.
@@ -163,10 +160,8 @@ func CreateModelInfo(model interface{}) (*ModelInfo, DbError) {
 	}
 
 	if info.PkField == "" {
-		return nil, Error{
-			Code:    "primary_key_not_found",
-			Message: fmt.Sprintf("Primary key could not be determined for model %v", info.Name),
-		}
+		return nil, apperror.New("primary_key_not_found",
+			fmt.Sprintf("Primary key could not be determined for model %v", info.Name))
 	}
 
 	return &info, nil
@@ -223,7 +218,7 @@ func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 }
 
 // Parse the information contained in a 'db:"xxx"' field tag.
-func ParseFieldTag(tag string) (*FieldInfo, DbError) {
+func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 	info := FieldInfo{}
 
 	parts := strings.Split(strings.TrimSpace(tag), ";")
@@ -241,20 +236,14 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 		switch specifier {
 		case "name":
 			if value == "" {
-				return nil, Error{
-					Code:    "invalid_name",
-					Message: "name specifier must be in format name:the_name",
-				}
+				return nil, apperror.New("invalid_name", "name specifier must be in format name:the_name")
 			}
 
 			info.BackendName = value
 
 		case "marshal-name":
 			if value == "" {
-				return nil, Error{
-					Code:    "invalid_name",
-					Message: "name specifier must be in format marshal-name:the_name",
-				}
+				return nil, apperror.New("invalid_name", "name specifier must be in format marshal-name:the_name")
 			}
 			info.MarshalName = value
 
@@ -283,20 +272,14 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 		case "min":
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				return nil, Error{
-					Code:    "invalid_min",
-					Message: "min:xx must be a valid number",
-				}
+				return nil, apperror.New("invalid_min", "min:xx must be a valid number")
 			}
 			info.Min = x
 
 		case "max":
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				return nil, Error{
-					Code:    "invalid_max",
-					Message: "max:xx must be a valid number",
-				}
+				return nil, apperror.New("invalid_max", "max:xx must be a valid number")
 			}
 			if x == -1 {
 				info.Max = 1000000000000
@@ -307,10 +290,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 		case "unique-with":
 			parts := strings.Split(value, ",")
 			if parts[0] == "" {
-				return nil, Error{
-					Code:    "invalid_unique_with",
-					Message: "unique-with must be a comma-separated list of fields",
-				}
+				return nil, apperror.New("invalid_unique_with", "unique-with must be a comma-separated list of fields")
 			}
 			info.UniqueWith = parts
 
@@ -324,10 +304,8 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 			info.HasOne = true
 			if value != "" {
 				if len(itemParts) < 3 {
-					return nil, Error{
-						Code:    "invalid_has_one",
-						Message: "Explicit has-one needs to be in format 'has-one:localField:foreignKey'",
-					}
+					return nil, apperror.New("invalid_has_one",
+						"Explicit has-one needs to be in format 'has-one:localField:foreignKey'")
 				}
 				info.HasOneField = itemParts[1]
 				info.HasOneForeignField = itemParts[2]
@@ -337,10 +315,8 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 			info.BelongsTo = true
 			if value != "" {
 				if len(itemParts) < 3 {
-					return nil, Error{
-						Code:    "invalid_belongs_to",
-						Message: "Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'",
-					}
+					return nil, apperror.New("invalid_belongs_to",
+						"Explicit belongs-to needs to be in format 'belongs-to:localField:foreignKey'")
 				}
 				info.BelongsToField = itemParts[1]
 				info.BelongsToForeignField = itemParts[2]
@@ -352,7 +328,7 @@ func ParseFieldTag(tag string) (*FieldInfo, DbError) {
 }
 
 // Build the field information for the model.
-func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName string) DbError {
+func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName string) apperror.Error {
 	modelType := modelVal.Type()
 
 	for i := 0; i < modelVal.NumField(); i++ {
@@ -408,7 +384,7 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
  */
 
 // Build the relationship information for the model after all fields have been analyzed.
-func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
+func BuildAllRelationInfo(models map[string]*ModelInfo) apperror.Error {
 	for key := range models {
 		if err := buildRelationshipInfo(models, models[key]); err != nil {
 			return err
@@ -421,7 +397,7 @@ func BuildAllRelationInfo(models map[string]*ModelInfo) DbError {
 // Recursive helper for building the relationship information.
 // Will properly analyze all embedded structs as well.
 // WARNING: will panic on errors.
-func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbError {
+func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) apperror.Error {
 	for name := range model.FieldInfo {
 		fieldInfo := model.FieldInfo[name]
 
@@ -539,44 +515,30 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 
 		if fieldInfo.HasOne {
 			if fieldInfo.HasOneField == "" {
-				return Error{
-					Code: "has_one_field_not_determined",
-					Message: fmt.Sprintf("has-one specified on model %v, but field %v not found. Specify ID field.",
-						modelName, relatedName+"ID"),
-				}
+				return apperror.New("has_one_field_not_determined",
+					fmt.Sprintf("has-one specified on model %v, but field %v not found. Specify ID field.",
+						modelName, relatedName+"ID"))
 			}
 			if _, ok := model.FieldInfo[fieldInfo.HasOneField]; !ok {
-				return Error{
-					Code: "has_one_field_missing",
-					Message: fmt.Sprintf("Specified has-one field %v not found on model %v",
-						fieldInfo.HasOneField, modelName),
-				}
+				msg := fmt.Sprintf("Specified has-one field %v not found on model %v", fieldInfo.HasOneField, modelName)
+				return apperror.New("has_one_field_missing", msg)
 			}
 
 			// Ignore zero values to avoid inserts with 0.
 			model.FieldInfo[fieldInfo.HasOneField].IgnoreIfZero = true
 
 			if _, ok := relatedFields[fieldInfo.HasOneForeignField]; !ok {
-				return Error{
-					Code: "has_one_foreign_field_missing",
-					Message: fmt.Sprintf("has-one specified on model %v with foreign key %v which does not exist on target %v",
-						modelName, fieldInfo.HasOneForeignField, relatedName),
-				}
+				msg := fmt.Sprintf("has-one specified on model %v with foreign key %v which does not exist on target %v", modelName, fieldInfo.HasOneForeignField, relatedName)
+				return apperror.New("has_one_foreign_field_missing", msg)
 			}
 		} else if fieldInfo.BelongsTo {
 			if fieldInfo.BelongsToForeignField == "" {
-				return Error{
-					Code: "belongs_to_foreign_field_not_determined",
-					Message: fmt.Sprintf("belongs-to specified on model %v, but field %v not found. Specify ID field.",
-						modelName, modelName+"ID"),
-				}
+				msg := fmt.Sprintf("belongs-to specified on model %v, but field %v not found. Specify ID field.", modelName, modelName+"ID")
+				return apperror.New("belongs_to_foreign_field_not_determined", msg)
 			}
 			if _, ok := relatedFields[fieldInfo.BelongsToForeignField]; !ok {
-				return Error{
-					Code: "belongs_to_foreign_field_missing",
-					Message: fmt.Sprintf("Specified belongs-to field %v not found on model %v",
-						fieldInfo.BelongsToForeignField, relatedName),
-				}
+				msg := fmt.Sprintf("Specified belongs-to field %v not found on model %v", fieldInfo.BelongsToForeignField, relatedName)
+				return apperror.New("belongs_to_foreign_field_missing", msg)
 			}
 
 			if fieldInfo.BelongsToField == "" {
@@ -584,10 +546,8 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 			}
 
 			if _, ok := model.FieldInfo[fieldInfo.BelongsToField]; !ok {
-				return Error{
-					Code:    "belongs_to_field_missing",
-					Message: fmt.Sprintf("Model %v has no field %v", modelName, fieldInfo.BelongsToField),
-				}
+				msg := fmt.Sprintf("Model %v has no field %v", modelName, fieldInfo.BelongsToField)
+				return apperror.New("belongs_to_field_missing", msg)
 			}
 
 			model.FieldInfo[fieldInfo.BelongsToField].IgnoreIfZero = true
@@ -598,11 +558,8 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) DbErr
 		}
 
 		if !(fieldInfo.HasOne || fieldInfo.BelongsTo || fieldInfo.M2M) {
-			return Error{
-				Code: "relationship_not_determined",
-				Message: fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the neccessary relation fields.",
-					modelName, relatedName, name),
-			}
+			msg := fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the neccessary relation fields.", modelName, relatedName, name)
+			return apperror.New("relationship_not_determined", msg)
 		}
 	}
 

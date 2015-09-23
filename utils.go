@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 /**
@@ -56,7 +58,7 @@ func LowerCaseFirst(str string) string {
 
 // Given the internal name of a filter like "eq" or "lte", return a SQL operator like = or <.
 // WARNING: panics if an unsupported filter is given.
-func FilterToSqlCondition(filter string) (string, DbError) {
+func FilterToSqlCondition(filter string) (string, apperror.Error) {
 	typ := ""
 
 	switch filter {
@@ -77,7 +79,7 @@ func FilterToSqlCondition(filter string) (string, DbError) {
 	case "in":
 		typ = "IN"
 	default:
-		return "", Error{
+		return "", &apperror.AppError{
 			Code:    "unknown_filter",
 			Message: "Unknown filter '" + filter + "'",
 		}
@@ -186,7 +188,7 @@ func ConvertStringToType(value string, typ reflect.Kind) (interface{}, error) {
 	}
 }
 
-func CompareValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	typ := reflect.TypeOf(a).Kind()
 
 	switch typ {
@@ -195,14 +197,14 @@ func CompareValues(condition string, a, b interface{}) (bool, DbError) {
 	case reflect.String:
 		return CompareStringValues(condition, a, b)
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code:    "unsupported_comparison_type",
 			Message: fmt.Sprintf("Type %v can not be compared", typ),
 		}
 	}
 }
 
-func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareStringValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	aVal := a.(string)
 	bVal := b.(string)
 
@@ -224,14 +226,14 @@ func CompareStringValues(condition string, a, b interface{}) (bool, DbError) {
 		return aVal >= bVal, nil
 
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code:    "unknown_filter",
 			Message: fmt.Sprintf("Unknown filter type '%v'", condition),
 		}
 	}
 }
 
-func CompareNumericValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareNumericValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	typ := reflect.TypeOf(a).Kind()
 	switch typ {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -241,7 +243,7 @@ func CompareNumericValues(condition string, a, b interface{}) (bool, DbError) {
 	case reflect.Float32, reflect.Float64:
 		return CompareFloatValues(condition, a, b)
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code: "unsupported_type_for_numeric_comparison",
 			Message: fmt.Sprintf(
 				"For a numeric comparision with %v, a numeric type is expected. Got: %v",
@@ -250,7 +252,7 @@ func CompareNumericValues(condition string, a, b interface{}) (bool, DbError) {
 	}
 }
 
-func NumericToInt64(x interface{}) (int64, DbError) {
+func NumericToInt64(x interface{}) (int64, apperror.Error) {
 	var val int64
 
 	switch reflect.TypeOf(x).Kind() {
@@ -281,17 +283,17 @@ func NumericToInt64(x interface{}) (int64, DbError) {
 	case reflect.String:
 		x, err := strconv.ParseInt(x.(string), 10, 64)
 		if err != nil {
-			return int64(0), Error{Code: "non_numeric_string"}
+			return int64(0), &apperror.AppError{Code: "non_numeric_string"}
 		}
 		val = x
 	default:
-		return int64(0), Error{Code: "non_numeric_type"}
+		return int64(0), &apperror.AppError{Code: "non_numeric_type"}
 	}
 
 	return val, nil
 }
 
-func NumericToUint64(x interface{}) (uint64, DbError) {
+func NumericToUint64(x interface{}) (uint64, apperror.Error) {
 	var val uint64
 
 	switch reflect.TypeOf(x).Kind() {
@@ -322,18 +324,18 @@ func NumericToUint64(x interface{}) (uint64, DbError) {
 	case reflect.String:
 		x, err := strconv.ParseInt(x.(string), 10, 64)
 		if err != nil {
-			return uint64(0), Error{Code: "non_numeric_string"}
+			return uint64(0), &apperror.AppError{Code: "non_numeric_string"}
 		}
 		val = uint64(x)
 	default:
 		panic("nonnumeric")
-		return uint64(0), Error{Code: "non_numeric_type"}
+		return uint64(0), &apperror.AppError{Code: "non_numeric_type"}
 	}
 
 	return val, nil
 }
 
-func NumericToFloat64(x interface{}) (float64, DbError) {
+func NumericToFloat64(x interface{}) (float64, apperror.Error) {
 	var val float64
 
 	switch reflect.TypeOf(x).Kind() {
@@ -364,17 +366,17 @@ func NumericToFloat64(x interface{}) (float64, DbError) {
 	case reflect.String:
 		x, err := strconv.ParseFloat(x.(string), 64)
 		if err != nil {
-			return val, Error{Code: "non_numeric_string"}
+			return val, &apperror.AppError{Code: "non_numeric_string"}
 		}
 		val = x
 	default:
-		return float64(0), Error{Code: "non_numeric_type"}
+		return float64(0), &apperror.AppError{Code: "non_numeric_type"}
 	}
 
 	return val, nil
 }
 
-func CompareIntValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareIntValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	aVal, errA := NumericToInt64(a)
 	bVal, errB := NumericToInt64(b)
 
@@ -399,14 +401,14 @@ func CompareIntValues(condition string, a, b interface{}) (bool, DbError) {
 	case "gte":
 		return aVal >= bVal, nil
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
 	}
 }
 
-func CompareUintValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareUintValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	aVal, errA := NumericToUint64(a)
 	bVal, errB := NumericToUint64(b)
 
@@ -431,14 +433,14 @@ func CompareUintValues(condition string, a, b interface{}) (bool, DbError) {
 	case "gte":
 		return aVal >= bVal, nil
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
 	}
 }
 
-func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
+func CompareFloatValues(condition string, a, b interface{}) (bool, apperror.Error) {
 	aVal, errA := NumericToFloat64(a)
 	bVal, errB := NumericToFloat64(b)
 
@@ -463,7 +465,7 @@ func CompareFloatValues(condition string, a, b interface{}) (bool, DbError) {
 	case "gte":
 		return aVal >= bVal, nil
 	default:
-		return false, Error{
+		return false, &apperror.AppError{
 			Code:    "unknown_filter",
 			Message: "Unknown filter type: " + condition,
 		}
@@ -676,10 +678,10 @@ func SortStructSlice(items []interface{}, field string, ascending bool) {
 
 // Given a struct or a pointer to a struct, retrieve the value of a field from
 // the struct with reflection.
-func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError) {
+func GetStructFieldValue(s interface{}, fieldName string) (interface{}, apperror.Error) {
 	// Check if struct is valid.
 	if s == nil {
-		return nil, Error{Code: "pointer_or_struct_expected"}
+		return nil, &apperror.AppError{Code: "pointer_or_struct_expected"}
 	}
 
 	// Check if it is a pointer, and if so, dereference it.
@@ -689,12 +691,12 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	}
 
 	if v.Type().Kind() != reflect.Struct {
-		return nil, Error{Code: "struct_expected"}
+		return nil, &apperror.AppError{Code: "struct_expected"}
 	}
 
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "field_not_found",
 			Message: fmt.Sprintf("struct %v does not have field '%v'", v.Type(), fieldName),
 		}
@@ -703,10 +705,10 @@ func GetStructFieldValue(s interface{}, fieldName string) (interface{}, DbError)
 	return field.Interface(), nil
 }
 
-func GetStructField(s interface{}, fieldName string) (reflect.Value, DbError) {
+func GetStructField(s interface{}, fieldName string) (reflect.Value, apperror.Error) {
 	// Check if struct is valid.
 	if s == nil {
-		return reflect.Value{}, Error{Code: "pointer_or_struct_expected"}
+		return reflect.Value{}, &apperror.AppError{Code: "pointer_or_struct_expected"}
 	}
 
 	// Check if it is a pointer, and if so, dereference it.
@@ -716,12 +718,12 @@ func GetStructField(s interface{}, fieldName string) (reflect.Value, DbError) {
 	}
 
 	if v.Type().Kind() != reflect.Struct {
-		return reflect.Value{}, Error{Code: "struct_expected"}
+		return reflect.Value{}, &apperror.AppError{Code: "struct_expected"}
 	}
 
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
-		return reflect.Value{}, Error{
+		return reflect.Value{}, &apperror.AppError{
 			Code:    "field_not_found",
 			Message: fmt.Sprintf("struct does not have field '%v'", fieldName),
 		}
@@ -735,20 +737,20 @@ func GetStructField(s interface{}, fieldName string) (reflect.Value, DbError) {
 // to the proper type.
 // Returns an error if no pointer to a struct is given, if the field does not
 // exist, or if the string value can not be converted to the actual type.
-func SetStructFieldValueFromString(obj interface{}, fieldName string, val string) DbError {
+func SetStructFieldValueFromString(obj interface{}, fieldName string, val string) apperror.Error {
 	objVal := reflect.ValueOf(obj)
 	if objVal.Type().Kind() != reflect.Ptr {
-		return Error{Code: "pointer_expected"}
+		return &apperror.AppError{Code: "pointer_expected"}
 	}
 
 	objVal = objVal.Elem()
 	if objVal.Type().Kind() != reflect.Struct {
-		return Error{Code: "pointer_to_struct_expected"}
+		return &apperror.AppError{Code: "pointer_to_struct_expected"}
 	}
 
 	field := objVal.FieldByName(fieldName)
 	if !field.IsValid() {
-		return Error{
+		return &apperror.AppError{
 			Code:    "unknown_field",
 			Message: fmt.Sprintf("Field %v does not exist on %v", fieldName, objVal),
 		}
@@ -757,7 +759,7 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string, val string
 	//fieldType, _ := objType.FieldByName(fieldName)
 	convertedVal, err := ConvertStringToType(val, field.Type().Kind())
 	if err != nil {
-		return Error{Code: err.Error()}
+		return &apperror.AppError{Code: err.Error()}
 	}
 
 	field.Set(reflect.ValueOf(convertedVal))
@@ -765,7 +767,7 @@ func SetStructFieldValueFromString(obj interface{}, fieldName string, val string
 	return nil
 }
 
-func GetModelCollection(model interface{}) (string, DbError) {
+func GetModelCollection(model interface{}) (string, apperror.Error) {
 
 	// If the model  implements .Collection(), call it.
 	if hook, ok := model.(ModelCollectionHook); ok {
@@ -784,7 +786,7 @@ func GetModelCollection(model interface{}) (string, DbError) {
 
 	// Check if it is a struct.
 	if typ.Kind() != reflect.Struct {
-		return "", Error{
+		return "", &apperror.AppError{
 			Code:    "invalid_model",
 			Message: fmt.Sprintf("Expected model struct or pointer to struct, got %v", typ),
 		}
@@ -807,7 +809,7 @@ func MustGetModelCollection(model interface{}) string {
 	return collection
 }
 
-func GetModelID(info *ModelInfo, m interface{}) (interface{}, DbError) {
+func GetModelID(info *ModelInfo, m interface{}) (interface{}, apperror.Error) {
 	val, err := GetStructFieldValue(m, info.PkField)
 	if err != nil {
 		return nil, err
@@ -816,7 +818,7 @@ func GetModelID(info *ModelInfo, m interface{}) (interface{}, DbError) {
 	return val, nil
 }
 
-func GetModelSliceFieldValues(models []interface{}, fieldName string) ([]interface{}, DbError) {
+func GetModelSliceFieldValues(models []interface{}, fieldName string) ([]interface{}, apperror.Error) {
 	vals := make([]interface{}, 0)
 
 	for _, model := range models {
@@ -913,7 +915,7 @@ func SetStructModelField(obj interface{}, fieldName string, models []interface{}
 	return nil
 }
 
-func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (map[string]interface{}, DbError) {
+func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (map[string]interface{}, apperror.Error) {
 	data := make(map[string]interface{})
 
 	for fieldName := range info.FieldInfo {
@@ -936,7 +938,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 		if (forBackend || marshal) && field.Marshal {
 			js, err := json.Marshal(val)
 			if err != nil {
-				return nil, Error{
+				return nil, &apperror.AppError{
 					Code:    "marshal_error",
 					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.Name, fieldName, err),
 				}
@@ -957,9 +959,9 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 	return data, nil
 }
 
-func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
+func ModelToJson(info *ModelInfo, model Model) ([]byte, apperror.Error) {
 	if info == nil {
-		var err DbError
+		var err apperror.Error
 		info, err = CreateModelInfo(model)
 		if err != nil {
 			return nil, err
@@ -973,7 +975,7 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
 
 	js, err2 := json.Marshal(data)
 	if err2 != nil {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "json_marshal_error",
 			Message: err2.Error(),
 		}
@@ -982,10 +984,10 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, DbError) {
 	return js, nil
 }
 
-func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, DbError) {
+func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, apperror.Error) {
 	model, err := NewStruct(info.Item)
 	if err != nil {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "model_build_error",
 			Message: err.Error(),
 		}
@@ -993,7 +995,7 @@ func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{
 
 	err = UpdateModelFromData(info, model, data)
 	if err != nil {
-		return nil, Error{
+		return nil, &apperror.AppError{
 			Code:    "model_update_error",
 			Message: err.Error(),
 		}
@@ -1002,16 +1004,16 @@ func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{
 	return model, nil
 }
 
-func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]interface{}) DbError {
+func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]interface{}) apperror.Error {
 	ptrVal := reflect.ValueOf(obj)
 	if ptrVal.Type().Kind() != reflect.Ptr {
-		return Error{
+		return &apperror.AppError{
 			Code: "pointer_expected",
 		}
 	}
 	val := ptrVal.Elem()
 	if val.Type().Kind() != reflect.Struct {
-		return Error{
+		return &apperror.AppError{
 			Code: "pointer_to_struct_expected",
 		}
 	}
@@ -1160,7 +1162,7 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	}
 }
 
-func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, DbError) {
+func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, apperror.Error) {
 	slice := NewSlice(info.Item)
 
 	sliceVal := reflect.ValueOf(slice)
@@ -1180,7 +1182,7 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Model hooks.
  */
 
-func CallModelHook(b Backend, m interface{}, hook string) DbError {
+func CallModelHook(b Backend, m interface{}, hook string) apperror.Error {
 	switch hook {
 	case "Validate":
 		if h, ok := m.(ModelValidateHook); ok {
@@ -1223,7 +1225,7 @@ func CallModelHook(b Backend, m interface{}, hook string) DbError {
 		}
 		return nil
 	default:
-		return Error{
+		return &apperror.AppError{
 			Code:    "invalid_hook",
 			Message: fmt.Sprintf("Unknown hook %v", hook),
 		}

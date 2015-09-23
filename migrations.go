@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/theduke/go-apperror"
 )
 
 /**
@@ -39,11 +41,11 @@ func (m *MigrationHandler) Get(version int) *Migration {
 	return m.migrations[version-1]
 }
 
-func (m *MigrationHandler) Migrate(force bool) DbError {
+func (m *MigrationHandler) Migrate(force bool) apperror.Error {
 	return m.MigrateTo(len(m.migrations), force)
 }
 
-func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
+func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) apperror.Error {
 	// Ensure that migrations are set up.
 	if err := m.Backend.MigrationsSetup(); err != nil {
 		return err
@@ -57,10 +59,8 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 
 	if isLocked {
 		// Last attempt was aborted. DB is locked.
-		return Error{
-			Code:    "migrations_locked",
-			Message: "Can not migrate database: Last migration was aborted. DB is locked.",
-		}
+		return apperror.New("migrations_locked",
+			"Can not migrate database: Last migration was aborted. DB is locked.")
 	}
 
 	// Determine current version of the database.
@@ -73,10 +73,8 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 		for nextVersion := curVersion + 1; nextVersion <= targetVersion; nextVersion++ {
 			migration := m.Get(nextVersion)
 			if migration == nil {
-				return Error{
-					Code:    "unknown_migration",
-					Message: fmt.Sprintf("Unknown migration version: %v", nextVersion),
-				}
+				return apperror.New("unknown_migration",
+					fmt.Sprintf("Unknown migration version: %v", nextVersion))
 			}
 
 			if err := m.RunMigration(migration); err != nil {
@@ -89,7 +87,7 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) DbError {
 	return nil
 }
 
-func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
+func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 
 	backend := handler.Backend
 
@@ -122,11 +120,8 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 			backend.Update(attempt)
 		}
 
-		return Error{
-			Code: "migration_failed",
-			Message: fmt.Sprintf("Migration to %v (version %v) failed: %v",
-				m.Name, m.Version, err),
-		}
+		return apperror.Wrap(err, "migration_failed",
+			fmt.Sprintf("Migration to %v (version %v) failed: %v", m.Name, m.Version, err), true)
 	}
 
 	// All went fine.
@@ -137,10 +132,8 @@ func (handler *MigrationHandler) RunMigration(m *Migration) DbError {
 			tx.Rollback()
 		}
 
-		return Error{
-			Code:    "attempt_update_fail",
-			Message: "Migration succeded, but could not update the attempt in the database: " + err.Error(),
-		}
+		return apperror.Wrap(err, "attempt_update_failed",
+			"Migration succeded, but could not update the attempt in the database")
 	}
 
 	if hasTransactions {

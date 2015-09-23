@@ -4,27 +4,18 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/theduke/go-apperror"
 )
-
-type DbError interface {
-	GetCode() string
-	GetMessage() string
-	GetData() interface{}
-	IsInternal() bool
-	GetErrors() []error
-	AddError(error)
-	Error() string
-}
 
 type BackendQueryMixin interface {
 	GetBackend() Backend
 	SetBackend(Backend)
 
-	Find(targetSlice ...interface{}) ([]interface{}, DbError)
-	First(targetModel ...interface{}) (interface{}, DbError)
-	Last(targetModel ...interface{}) (interface{}, DbError)
-	Count() (int, DbError)
-	Delete() DbError
+	Find(targetSlice ...interface{}) ([]interface{}, apperror.Error)
+	First(targetModel ...interface{}) (interface{}, apperror.Error)
+	Last(targetModel ...interface{}) (interface{}, apperror.Error)
+	Count() (int, apperror.Error)
+	Delete() apperror.Error
 }
 
 type Query interface {
@@ -98,7 +89,7 @@ type RelationQuery interface {
 	GetForeignFieldName() string
 	SetForeignFieldName(string)
 
-	Build() (Query, DbError)
+	Build() (Query, apperror.Error)
 
 	// BackendQuery methods.
 	BackendQueryMixin
@@ -175,7 +166,8 @@ type Backend interface {
 	ModelInfo(collection string) *ModelInfo
 
 	// Retrieve the ModelInfo for a model.
-	InfoForModel(model interface{}) (*ModelInfo, DbError)
+	InfoForModel(model interface{}) (*ModelInfo, apperror.Error)
+	InfoForCollection(collection string) (*ModelInfo, apperror.Error)
 
 	SetModelInfo(collection string, info *ModelInfo)
 
@@ -186,14 +178,14 @@ type Backend interface {
 	// Determine if a model collection is registered with the backend.
 	HasCollection(collection string) bool
 
-	ModelToMap(model interface{}, marshal bool) (map[string]interface{}, DbError)
+	ModelToMap(model interface{}, marshal bool) (map[string]interface{}, apperror.Error)
 
 	// After all models have been registered, build the relationship
 	// info.
 	BuildRelationshipInfo()
 
 	// Get a new struct instance to a model struct based on model Collection.
-	CreateModel(collection string) (interface{}, DbError)
+	CreateModel(collection string) (interface{}, apperror.Error)
 
 	// Same as CreateModel(), but panics on error.
 	MustCreateModel(collection string) interface{}
@@ -202,79 +194,79 @@ type Backend interface {
 	MergeModel(model Model)
 
 	// Build a slice of a model for model Collection.
-	CreateModelSlice(collection string) (interface{}, DbError)
+	CreateModelSlice(collection string) (interface{}, apperror.Error)
 
 	// Determine the ID for a model.
-	ModelID(model interface{}) (interface{}, DbError)
+	ModelID(model interface{}) (interface{}, apperror.Error)
 
 	// Determine the ID for a model, and panic on error.
 	MustModelID(model interface{}) interface{}
 
 	// Set the id field on a model.
-	SetModelID(model interface{}, id interface{}) DbError
+	SetModelID(model interface{}, id interface{}) apperror.Error
 
 	// Set the id  field on a model and panic on error.
 	MustSetModelID(model interface{}, id interface{})
 
 	// Determine the  ID for a model and convert it to string.
-	ModelStrID(model interface{}) (string, DbError)
+	ModelStrID(model interface{}) (string, apperror.Error)
 
 	// Determine the  ID for a model and convert it to string. Panics on error.
 	MustModelStrID(model interface{}) string
 
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)
-	CreateCollection(collection string) DbError
-	CreateCollections(collection ...string) DbError
-	DropCollection(collection string) DbError
-	DropAllCollections() DbError
+	CreateCollection(collection string) apperror.Error
+	CreateCollections(collection ...string) apperror.Error
+	DropCollection(collection string) apperror.Error
+	DropAllCollections() apperror.Error
 
 	// Create a new query for a collection.
 	Q(collection string) Query
 
 	// Perform a query.
-	Query(q Query, targetSlice ...interface{}) ([]interface{}, DbError)
+	Query(q Query, targetSlice ...interface{}) ([]interface{}, apperror.Error)
 
 	// Perform a query and get the first result.
-	QueryOne(q Query, targetModel ...interface{}) (interface{}, DbError)
+	QueryOne(q Query, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Perform a query and get the last result.
-	Last(q Query, targetModel ...interface{}) (interface{}, DbError)
+	Last(q Query, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Find first model with primary key ID.
-	FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, DbError)
+	FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error)
 
 	// Find a model in a collection by ID.
-	FindOne(collection string, id interface{}, targetModel ...interface{}) (interface{}, DbError)
+	FindOne(collection string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Find a model  in a collection based on a field value.
-	FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, DbError)
+	FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Count by a query.
-	Count(Query) (int, DbError)
+	Count(Query) (int, apperror.Error)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
-	BuildRelationQuery(q RelationQuery) (Query, DbError)
+	BuildRelationQuery(q RelationQuery) (Query, apperror.Error)
 
 	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
-	M2M(model interface{}, name string) (M2MCollection, DbError)
+	M2M(model interface{}, name string) (M2MCollection, apperror.Error)
 
 	// Convenience methods.
 
-	Create(model interface{}) DbError
-	Update(model interface{}) DbError
-	UpdateByMap(model interface{}, data map[string]interface{}) DbError
-	Delete(model interface{}) DbError
-	DeleteMany(Query) DbError
+	Create(model interface{}) apperror.Error
+	Update(model interface{}) apperror.Error
+	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
+	Delete(model interface{}) apperror.Error
+	DeleteMany(Query) apperror.Error
 }
 
 type M2MCollection interface {
-	Add(models ...interface{}) DbError
-	Delete(models ...interface{}) DbError
-	Clear() DbError
-	Replace(models []interface{}) DbError
+	Add(models ...interface{}) apperror.Error
+	Delete(models ...interface{}) apperror.Error
+	Clear() apperror.Error
+	Replace(models []interface{}) apperror.Error
 
 	Count() int
 	Contains(model interface{}) bool
@@ -285,8 +277,8 @@ type M2MCollection interface {
 
 type Transaction interface {
 	Backend
-	Rollback() DbError
-	Commit() DbError
+	Rollback() apperror.Error
+	Commit() apperror.Error
 }
 
 type TransactionBackend interface {
@@ -312,10 +304,10 @@ type MigrationBackend interface {
 	Backend
 	GetMigrationHandler() *MigrationHandler
 
-	MigrationsSetup() DbError
+	MigrationsSetup() apperror.Error
 
-	IsMigrationLocked() (bool, DbError)
-	DetermineMigrationVersion() (int, DbError)
+	IsMigrationLocked() (bool, apperror.Error)
+	DetermineMigrationVersion() (int, apperror.Error)
 
 	NewMigrationAttempt() MigrationAttempt
 }
@@ -360,11 +352,11 @@ type ModelStrIDSetterHook interface {
 }
 
 type ModelValidateHook interface {
-	Validate() DbError
+	Validate() apperror.Error
 }
 
 type ModelBeforeCreateHook interface {
-	BeforeCreate(Backend) DbError
+	BeforeCreate(Backend) apperror.Error
 }
 
 type ModelAfterCreateHook interface {
@@ -372,7 +364,7 @@ type ModelAfterCreateHook interface {
 }
 
 type ModelBeforeUpdateHook interface {
-	BeforeUpdate(Backend) DbError
+	BeforeUpdate(Backend) apperror.Error
 }
 
 type ModelAfterUpdateHook interface {
@@ -380,7 +372,7 @@ type ModelAfterUpdateHook interface {
 }
 
 type ModelBeforeDeleteHook interface {
-	BeforeDelete(Backend) DbError
+	BeforeDelete(Backend) apperror.Error
 }
 
 type ModelAfterDeleteHook interface {

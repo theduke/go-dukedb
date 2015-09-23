@@ -8,7 +8,7 @@ import (
 
 type Model struct{}
 
-func (m Model) Validate() db.DbError {
+func (m Model) Validate() db.apperror.Error {
 	ok, err := govalidator.ValidateStruct(m)
 	if ok {
 		return nil

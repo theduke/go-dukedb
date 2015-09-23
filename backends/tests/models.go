@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	. "github.com/theduke/go-dukedb"
+
+	"github.com/theduke/go-apperror"
 )
 
 type TestModel struct {
@@ -26,15 +28,15 @@ type HooksModel struct {
 	HookError   bool     `db:"-"`
 }
 
-func (h *HooksModel) Validate() DbError {
+func (h *HooksModel) Validate() apperror.Error {
 	h.CalledHooks = append(h.CalledHooks, "validate")
 	return nil
 }
 
-func (h *HooksModel) BeforeCreate(Backend) DbError {
+func (h *HooksModel) BeforeCreate(Backend) apperror.Error {
 	h.CalledHooks = append(h.CalledHooks, "before_create")
 	if h.HookError {
-		return Error{Code: "before_create"}
+		return apperror.New("before_create")
 	}
 	return nil
 }
@@ -43,10 +45,10 @@ func (h *HooksModel) AfterCreate(Backend) {
 	h.CalledHooks = append(h.CalledHooks, "after_create")
 }
 
-func (h *HooksModel) BeforeUpdate(Backend) DbError {
+func (h *HooksModel) BeforeUpdate(Backend) apperror.Error {
 	h.CalledHooks = append(h.CalledHooks, "before_update")
 	if h.HookError {
-		return Error{Code: "before_update"}
+		return apperror.New("before_update")
 	}
 	return nil
 }
@@ -55,10 +57,10 @@ func (h *HooksModel) AfterUpdate(Backend) {
 	h.CalledHooks = append(h.CalledHooks, "after_update")
 }
 
-func (h *HooksModel) BeforeDelete(Backend) DbError {
+func (h *HooksModel) BeforeDelete(Backend) apperror.Error {
 	h.CalledHooks = append(h.CalledHooks, "before_delete")
 	if h.HookError {
-		return Error{Code: "before_delete"}
+		return apperror.New("before_delete")
 	}
 	return nil
 }

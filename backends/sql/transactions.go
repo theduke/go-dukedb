@@ -18,7 +18,7 @@ func (b Backend) Begin() db.Transaction {
 	return backendCopy
 }
 
-func (b *Backend) Rollback() db.DbError {
+func (b *Backend) Rollback() db.apperror.Error {
 	if err := b.Tx.Rollback(); err != nil {
 		return db.Error{
 			Code:    "transaction_rollback_failed",
@@ -29,7 +29,7 @@ func (b *Backend) Rollback() db.DbError {
 	return nil
 }
 
-func (b *Backend) Commit() db.DbError {
+func (b *Backend) Commit() db.apperror.Error {
 	if err := b.Tx.Commit(); err != nil {
 		return db.Error{
 			Code:    "transaction_commit_failed",
