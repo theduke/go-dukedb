@@ -118,7 +118,14 @@ func SaveConvert(val interface{}, typ reflect.Type) interface{} {
 	return reflect.ValueOf(val).Convert(typ).Interface()
 }
 
-func Convert(value interface{}, typ reflect.Type) (interface{}, error) {
+func Convert(value interface{}, rawType interface{}) (interface{}, error) {
+	var typ reflect.Type
+	if t, ok := rawType.(reflect.Type); ok {
+		typ = t
+	} else {
+		typ = reflect.TypeOf(rawType)
+	}
+
 	kind := typ.Kind()
 
 	valType := reflect.TypeOf(value)
