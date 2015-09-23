@@ -84,63 +84,78 @@ func (m *BaseModel) SetStrID(id string) error {
 }
 
 /**
- * BaseStrModel.
+ * BaseStrIDModel.
  */
 
 // Base model with a string ID.
-type BaseStrModel struct {
+type BaseStrIDModel struct {
 	BaseModel
 	ID string
 }
 
-func (m *BaseStrModel) GetID() interface{} {
+func (m *BaseStrIDModel) GetID() interface{} {
 	return m.ID
 }
 
-func (m *BaseStrModel) SetID(id interface{}) error {
+func (m *BaseStrIDModel) SetID(id interface{}) error {
 	if strId, ok := id.(string); ok {
 		m.ID = strId
 		return nil
 	}
-	return m.BaseModel.SetID(id)
+
+	convertedId, err := Convert(id, "")
+	if err != nil {
+		return err
+	}
+	m.ID = convertedId.(string)
+	return nil
 }
 
-func (m *BaseStrModel) GetStrID() string {
+func (m *BaseStrIDModel) GetStrID() string {
 	return m.ID
 }
 
-func (m *BaseStrModel) SetStrID(rawId string) error {
+func (m *BaseStrIDModel) SetStrID(rawId string) error {
 	m.ID = rawId
 	return nil
 }
 
 /**
- * BaseIntModel.
+ * BaseIntIDModel.
  */
 
 // Base model with a integer ID.
-type BaseIntModel struct {
+type BaseIntIDModel struct {
 	BaseModel
 	ID uint64
 }
 
-func (m *BaseIntModel) GetID() interface{} {
+func (m *BaseIntIDModel) GetID() interface{} {
 	return m.ID
 }
 
-func (m *BaseIntModel) SetID(id interface{}) error {
+func (m *BaseIntIDModel) SetID(id interface{}) error {
 	if intId, ok := id.(uint64); ok {
 		m.ID = intId
 		return nil
 	}
-	return m.BaseModel.SetID(id)
+
+	convertedId, err := Convert(id, uint64(0))
+	if err != nil {
+		return err
+	}
+	m.ID = convertedId.(uint64)
+	return nil
 }
 
-func (m *BaseIntModel) GetStrID() string {
+func (m *BaseIntIDModel) GetStrID() string {
+	if m.ID == 0 {
+		return ""
+	}
 	return strconv.FormatUint(m.ID, 10)
 }
 
-func (m *BaseIntModel) SetStrID(rawId string) error {
+func (m *BaseIntIDModel) SetStrID(rawId string) error {
 	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err

@@ -219,7 +219,6 @@ func (b *BaseBackend) SetModelID(model interface{}, id interface{}) DbError {
 	}
 
 	info := b.ModelInfo(collection)
-
 	convertedId, err2 := Convert(id, info.GetField(info.PkField).Type)
 	if err2 != nil {
 		return Error{
