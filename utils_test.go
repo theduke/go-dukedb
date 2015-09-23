@@ -265,10 +265,10 @@ var _ = Describe("Utils", func() {
 	})
 
 	Describe("GetModelSliceFieldValues", func() {
-		var modelSlice []Model
+		var modelSlice []interface{}
 
 		BeforeEach(func() {
-			modelSlice = []Model{&TestModel{
+			modelSlice = []interface{}{&TestModel{
 				ID:     1,
 				StrVal: "str1",
 				IntVal: 1,
@@ -344,7 +344,7 @@ var _ = Describe("Utils", func() {
 	Describe("InterfaceToModelSlice", func() {
 		var slice []interface{}
 
-		var modelSlice []Model
+		var modelSlice []interface{}
 
 		BeforeEach(func() {
 			modelSlice = NewTestModelInterfaceSlice(1, 2)
@@ -372,19 +372,6 @@ var _ = Describe("Utils", func() {
 
 		It("Should work with model slice", func() {
 			Expect(InterfaceToModelSlice(slice)).To(Equal(modelSlice))
-		})
-	})
-
-	Describe("ModelToInterfaceSlice", func() {
-		var modelSlice []Model
-
-		BeforeEach(func() {
-			modelSlice = NewTestModelInterfaceSlice(1, 2)
-		})
-
-		It("Converts correctly", func() {
-			ifSlice := []interface{}{modelSlice[0], modelSlice[1]}
-			Expect(ModelToInterfaceSlice(modelSlice)).To(Equal(ifSlice))
 		})
 	})
 
@@ -431,49 +418,47 @@ var _ = Describe("Utils", func() {
 		})
 
 		It("Should error on non-pointer", func() {
-			err := SetStructModelField(22, "Child", []Model{})
+			err := SetStructModelField(22, "Child", []interface{}{})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("pointer_expected"))
 		})
 
 		It("Should error on pointer to non-struct", func() {
 			x := 22
-			err := SetStructModelField(&x, "Child", []Model{})
+			err := SetStructModelField(&x, "Child", []interface{}{})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("pointer_to_struct_expected"))
 		})
 
 		It("Should error on unknown field", func() {
-			err := SetStructModelField(testParent, "InvalidField", []Model{})
+			err := SetStructModelField(testParent, "InvalidField", []interface{}{})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("unknown_field"))
 		})
 
 		It("Should error on invalid target field type", func() {
-			err := SetStructModelField(testParent, "StrVal", []Model{})
+			err := SetStructModelField(testParent, "StrVal", []interface{}{})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("unsupported_field_type"))
 		})
 
 		It("Should set struct", func() {
 			child := NewTestModel(1)
-			SetStructModelField(testParent, "Child", []Model{&child})
+			SetStructModelField(testParent, "Child", []interface{}{&child})
 			Expect(testParent.Child).To(Equal(child))
 		})
 
 		It("Should set struct pointer", func() {
 			child := NewTestModel(1)
-			SetStructModelField(testParent, "ChildPtr", []Model{&child})
+			SetStructModelField(testParent, "ChildPtr", []interface{}{&child})
 			Expect(testParent.ChildPtr).To(Equal(&child))
 		})
 
 		It("Should set slice", func() {
 			childSlice := NewTestModelSlice(1, 2)
+			ifSlice := []interface{}{childSlice[0], childSlice[1]}
 
-			modelSlice, err := InterfaceToModelSlice(childSlice)
-			Expect(err).ToNot(HaveOccurred())
-
-			err = SetStructModelField(testParent, "ChildSlice", modelSlice)
+			err := SetStructModelField(testParent, "ChildSlice", ifSlice)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(testParent.ChildSlice).To(Equal(childSlice))
@@ -481,8 +466,8 @@ var _ = Describe("Utils", func() {
 
 		It("Should set pointer slice", func() {
 			childSlice := NewTestModelPtrSlice(1, 2)
-			modelSlice, _ := InterfaceToModelSlice(childSlice)
-			SetStructModelField(testParent, "ChildSlicePtr", modelSlice)
+			ifSlice := []interface{}{childSlice[0], childSlice[1]}
+			SetStructModelField(testParent, "ChildSlicePtr", ifSlice)
 			Expect(testParent.ChildSlicePtr).To(Equal(childSlice))
 		})
 	})
@@ -566,7 +551,7 @@ var _ = Describe("Utils", func() {
 
 				_, err := CreateModelInfo(&InvalidTagModel{})
 				Expect(err).To(HaveOccurred())
-				Expect(err.GetCode()).To(Equal("build_field_info_failed"))
+				Expect(err.GetCode()).To(Equal("build_field_info_error"))
 			})
 
 			It("Should fail without primary key", func() {
@@ -714,153 +699,5 @@ var _ = Describe("Utils", func() {
 
 	Context("Invalid relationship info", func() {
 		// Todo: test invalid relationship info.
-	})
-
-	Describe("Query parsers", func() {
-
-		It("Shold parse simple condition correctly", func() {
-			json := `{
-				"filters": {"name": "testname"}
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetCollection()).To(Equal("col"))
-			Expect(q.GetFilters()[0]).To(BeEquivalentTo(Eq("name", "testname")))
-		})
-
-		It("Shold parse comparison operator condition correctly", func() {
-			json := `{
-				"filters": {"intField": {"$gt": 20}}
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetCollection()).To(Equal("col"))
-			Expect(q.GetFilters()[0]).To(BeEquivalentTo(Gt("intField", float64(20))))
-		})
-
-		It("Shold parse multiple conditions correctly", func() {
-			json := `{
-				"filters": {"name": "testname", "intField": {"$gt": 20}}
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-
-			first := q.GetFilters()[0].(*FieldCondition)
-			second := q.GetFilters()[1].(*FieldCondition)
-
-			// The ordering by json.Unmarshal() is random, so swap the filters
-			// if the order is reversed.
-			if first.Field == "intField" {
-				first, second = second, first
-			}
-
-			Expect(first).To(BeEquivalentTo(Eq("name", "testname")))
-			Expect(second).To(BeEquivalentTo(Gt("intField", float64(20))))
-		})
-
-		It("Shold parse top level $or correctly", func() {
-			json := `{
-				"filters": {
-					"$or": [{"name": "testname"}, {"intField": {"$lte": 100}}]
-				}
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-
-			// The ordering by json.Unmarshal() is random, so checking has to be done
-			// with order in mind.
-			or := q.GetFilters()[0].(*OrCondition)
-			first := or.Filters[0].(*FieldCondition)
-			second := or.Filters[1].(*FieldCondition)
-
-			// The ordering by json.Unmarshal() is random, so swap the filters
-			// if the order is reversed.
-			if first.Field == "intField" {
-				first, second = second, first
-			}
-
-			Expect(first).To(BeEquivalentTo(Eq("name", "testname")))
-			Expect(second).To(BeEquivalentTo(Lte("intField", float64(100))))
-		})
-
-		It("Shold parse limit correctly", func() {
-			json := `{
-				"limit": 20
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetLimit()).To(Equal(20))
-		})
-
-		It("Shold parse offset correctly", func() {
-			json := `{
-				"offset": 20
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetOffset()).To(Equal(20))
-		})
-
-		It("Shold parse fields correctly", func() {
-			json := `{
-				"fields": ["field1", "field2"]
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetFields()).To(Equal([]string{"field1", "field2"}))
-		})
-
-		It("Shold parse joins", func() {
-			json := `{
-				"joins": ["Children"]
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetJoins()[0]).To(Equal(RelQ(q, "Children")))
-		})
-
-		It("Shold parse joined fields", func() {
-			json := `{
-				"joins": ["Children"],
-				"fields": ["Children.field1", "Children.field2"]
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-			Expect(q.GetJoins()[0].GetFields()).To(Equal([]string{"field1", "field2"}))
-		})
-
-		It("Shold parse nested joins", func() {
-			json := `{
-				"joins": ["Children", "Children.Tags"]
-			}
-			`
-			q, err := ParseJsonQuery("col", []byte(json))
-
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(len(q.GetJoins())).To(Equal(1))
-			Expect(q.GetJoins()[0].GetRelationName()).To(Equal("Children"))
-
-			Expect(len(q.GetJoins()[0].GetJoins())).To(Equal(1))
-			Expect(q.GetJoins()[0].GetJoins()[0].GetRelationName()).To(Equal("Tags"))
-		})
 	})
 })
