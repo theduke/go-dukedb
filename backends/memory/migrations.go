@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"github.com/theduke/go-apperror"
+
 	db "github.com/theduke/go-dukedb"
 )
 
@@ -12,15 +14,15 @@ func (b Backend) GetMigrationHandler() *db.MigrationHandler {
 	return b.MigrationHandler
 }
 
-func (b Backend) MigrationsSetup() db.apperror.Error {
+func (b Backend) MigrationsSetup() apperror.Error {
 	return nil
 }
 
-func (b Backend) IsMigrationLocked() (bool, db.apperror.Error) {
+func (b Backend) IsMigrationLocked() (bool, apperror.Error) {
 	return false, nil
 }
 
-func (b Backend) DetermineMigrationVersion() (int, db.apperror.Error) {
+func (b Backend) DetermineMigrationVersion() (int, apperror.Error) {
 	return b.MigrationVersion, nil
 }
 

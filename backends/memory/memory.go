@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/theduke/go-apperror"
+
 	db "github.com/theduke/go-dukedb"
 )
 
@@ -62,7 +64,7 @@ func (b *Backend) RegisterModel(m interface{}) {
 	b.data[collection] = make(map[string]interface{})
 }
 
-func (b *Backend) CreateModel(collection string) (interface{}, db.apperror.Error) {
+func (b *Backend) CreateModel(collection string) (interface{}, apperror.Error) {
 	return db.BackendCreateModel(b, collection)
 }
 
@@ -74,41 +76,30 @@ func (b *Backend) MergeModel(model db.Model) {
 	db.BackendMergeModel(b, model)
 }
 
-func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.apperror.Error) {
-	collection, err := db.GetModelCollection(m)
+func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, apperror.Error) {
+	info, err := b.InfoForModel(m)
 	if err != nil {
 		return nil, err
-	}
-
-	info := b.ModelInfo(collection)
-	if info == nil {
-		return nil, db.Error{
-			Code:    "unknown_collection",
-			Message: fmt.Sprintf("The collection %v was not registered with backend", collection),
-		}
 	}
 
 	return db.ModelToMap(info, m, false, marshal)
 }
 
-func (b *Backend) CreateCollection(name string) db.apperror.Error {
-	info := b.ModelInfo(name)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
-		}
+func (b *Backend) CreateCollection(collection string) apperror.Error {
+	_, err := b.InfoForCollection(collection)
+	if err != nil {
+		return err
 	}
 
-	b.data[name] = make(map[string]interface{})
+	b.data[collection] = make(map[string]interface{})
 
 	return nil
 }
 
-func (b *Backend) CreateCollections(names ...string) db.apperror.Error {
+func (b *Backend) CreateCollections(names ...string) apperror.Error {
 	for _, name := range names {
 		if err := b.CreateCollection(name); err != nil {
-			return db.Error{
+			return &apperror.AppError{
 				Code:    "create_collection_error",
 				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
 			}
@@ -118,23 +109,20 @@ func (b *Backend) CreateCollections(names ...string) db.apperror.Error {
 	return nil
 }
 
-func (b *Backend) DropCollection(name string) db.apperror.Error {
-	info := b.ModelInfo(name)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
-		}
+func (b *Backend) DropCollection(collection string) apperror.Error {
+	_, err := b.InfoForCollection(collection)
+	if err != nil {
+		return err
 	}
 
-	if _, ok := b.data[name]; ok {
-		b.data[name] = make(map[string]interface{})
+	if _, ok := b.data[collection]; ok {
+		b.data[collection] = make(map[string]interface{})
 	}
 
 	return nil
 }
 
-func (b *Backend) DropAllCollections() db.apperror.Error {
+func (b *Backend) DropAllCollections() apperror.Error {
 	info := b.AllModelInfo()
 	for name := range info {
 		if err := b.DropCollection(name); err != nil {
@@ -151,7 +139,7 @@ func (b *Backend) Q(model string) db.Query {
 	return q
 }
 
-func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, db.apperror.Error) {
+func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, apperror.Error) {
 	filterType := filter.Type()
 
 	if filterType == "and" {
@@ -222,26 +210,23 @@ func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool,
 
 		match, err := db.CompareValues(condition.Type(), structVal, val)
 		if err != nil {
-			return false, db.Error{Code: err.Error()}
+			return false, err
 		}
 
 		return match, nil
 	}
 
 	// If execution comes here, filter type is unsupported.
-	return false, db.Error{
+	return false, &apperror.AppError{
 		Code:    "unsupported_filter",
 		Message: fmt.Sprintf("The filter %v is not supported by the memory backend", filter.Type()),
 	}
 }
 
-func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
-	info := b.ModelInfo(q.GetCollection())
-	if info == nil {
-		return nil, db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model '%v' not registered with backend gorm", q.GetCollection()),
-		}
+func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
+	info, err := b.InfoForCollection(q.GetCollection())
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]interface{}, 0)
@@ -268,7 +253,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 
 	// Handle field specificiaton.
 	if len(q.GetFields()) > 0 {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "memory_backend_unsupported_feature_fieldspec",
 			Message: "The memory backend does not support limiting fields",
 		}
@@ -282,7 +267,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	// Set default order.
 	if len(q.GetOrders()) > 0 {
 		if len(q.GetOrders()) > 1 {
-			return nil, db.Error{
+			return nil, &apperror.AppError{
 				Code:    "memory_backend_unsupported_feature_multiple_orders",
 				Message: "The memory backend does not support multiple orderings",
 			}
@@ -294,7 +279,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 			field = info.MapFieldName(field)
 		}
 		if !info.HasField(field) {
-			return nil, db.Error{
+			return nil, &apperror.AppError{
 				Code:    "cant_sort_on_inexistant_field",
 				Message: fmt.Sprintf("Trying to sort on non-existant field %v", field),
 			}
@@ -315,66 +300,55 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	return items, nil
 }
 
-func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.apperror.Error) {
+func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, apperror.Error) {
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
+func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 	res, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err
 	}
 	slice, err2 := db.ConvertInterfaceToSlice(res)
 	if err2 != nil {
-		return nil, db.Error{Code: "interface_conversion_error", Message: err2.Error()}
+		return nil, apperror.Wrap(err2, "interface_conversion_error")
 	}
 	return slice, nil
 }
 
 // Perform a query.
-func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, db.apperror.Error) {
+func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, apperror.Error) {
 	res, err := b.doQuery(q)
 	return db.BackendQuery(b, q, targetSlices, res, err)
 }
 
-func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendQueryOne(b, q, targetModel)
 }
 
-func (b *Backend) Count(q db.Query) (int, db.apperror.Error) {
-	info := b.ModelInfo(q.GetCollection())
-	if info == nil {
-		return 0, db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with backend gorm", q.GetCollection()),
-		}
-	}
-
+func (b *Backend) Count(q db.Query) (int, apperror.Error) {
 	result, err := b.executeQuery(q)
 	if err != nil {
-		return 0, db.Error{
-			Code:    "memory_count_error",
-			Message: err.Error(),
-		}
+		return 0, apperror.Wrap(err, "memory_count_error")
 	}
 
 	return len(result), nil
 }
 
-func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, db.apperror.Error) {
+func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
 	return db.BackendFindBy(b, modelType, field, value, targetSlice)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
@@ -383,14 +357,14 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 // Store the model.
 // Fails if the model type was not registered, or if the primary key already
 // exists.
-func (b *Backend) Create(m interface{}) db.apperror.Error {
-	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Create(m interface{}) apperror.Error {
+	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		collection := info.Collection
 
 		id := b.MustModelStrID(m)
 		if !db.IsZero(id) {
 			if _, ok := b.data[collection][id]; ok {
-				return db.Error{
+				return &apperror.AppError{
 					Code:    "pk_exists",
 					Message: fmt.Sprintf("A model of type %v with id %v already exists", collection, id),
 				}
@@ -399,7 +373,7 @@ func (b *Backend) Create(m interface{}) db.apperror.Error {
 			// Generate new id.
 			id = strconv.Itoa(len(b.data[collection]) + 1)
 			if err := b.SetModelID(m, id); err != nil {
-				return db.Error{
+				return &apperror.AppError{
 					Code:    "set_id_error",
 					Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
 				}
@@ -411,42 +385,34 @@ func (b *Backend) Create(m interface{}) db.apperror.Error {
 	})
 }
 
-func (b *Backend) Update(m interface{}) db.apperror.Error {
-	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Update(m interface{}) apperror.Error {
+	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		b.data[info.Collection][b.MustModelStrID(m)] = m
 		return nil
 	})
 }
 
-func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) db.apperror.Error {
-	collection, err := db.GetModelCollection(m)
+func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) apperror.Error {
+	info, err := b.InfoForModel(m)
 	if err != nil {
 		return err
-	}
-
-	info := b.ModelInfo(collection)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("The model %v was not registered with backend", collection),
-		}
 	}
 
 	if err := db.UpdateModelFromData(info, m, data); err != nil {
 		return err
 	}
 
-	b.data[collection][b.MustModelStrID(m)] = m
+	b.data[info.Collection][b.MustModelStrID(m)] = m
 	return nil
 }
 
-func (b *Backend) Delete(m interface{}) db.apperror.Error {
-	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Delete(m interface{}) apperror.Error {
+	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		id := b.MustModelStrID(m)
 		collection := info.Collection
 
 		if _, ok := b.data[collection][id]; !ok {
-			return db.Error{
+			return &apperror.AppError{
 				Code:    "not_found",
 				Message: fmt.Sprintf("A model of type %v with id %v does not exists", collection, id),
 			}
@@ -457,7 +423,7 @@ func (b *Backend) Delete(m interface{}) db.apperror.Error {
 	})
 }
 
-func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
+func (b *Backend) DeleteMany(q db.Query) apperror.Error {
 	result, err := b.executeQuery(q)
 	if err != nil {
 		return err
@@ -476,7 +442,7 @@ func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
  * M2M
  */
 
-func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperror.Error) {
+func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.Error) {
 	collection, err := db.GetModelCollection(obj)
 	if err != nil {
 		return nil, err
@@ -486,14 +452,14 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperr
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", collection, name),
 		}
 	}
 
 	if !fieldInfo.M2M {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, collection),
 		}
@@ -546,7 +512,7 @@ func (c M2MCollection) GetByID(id interface{}) interface{} {
 	return nil
 }
 
-func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
+func (c *M2MCollection) Add(items ...interface{}) apperror.Error {
 	for _, item := range items {
 		if !c.Contains(item) {
 			reflect.Append(c.items, reflect.ValueOf(item))
@@ -556,7 +522,7 @@ func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
 	return nil
 }
 
-func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
+func (c *M2MCollection) Delete(items ...interface{}) apperror.Error {
 	for _, item := range items {
 		itemId := c.Backend.MustModelID(item)
 
@@ -579,12 +545,12 @@ func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
 	return nil
 }
 
-func (c *M2MCollection) Clear() db.apperror.Error {
+func (c *M2MCollection) Clear() apperror.Error {
 	c.items.SetLen(0)
 	return nil
 }
 
-func (c *M2MCollection) Replace(items []interface{}) db.apperror.Error {
+func (c *M2MCollection) Replace(items []interface{}) apperror.Error {
 	for i, item := range items {
 		c.items.Index(i).Set(reflect.ValueOf(item))
 	}
