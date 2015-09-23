@@ -1,10 +1,11 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 
-	"database/sql"
+	"github.com/theduke/go-apperror"
 
 	db "github.com/theduke/go-dukedb"
 )
@@ -27,7 +28,7 @@ var _ db.Backend = (*Backend)(nil)
 var _ db.MigrationBackend = (*Backend)(nil)
 var _ db.TransactionBackend = (*Backend)(nil)
 
-func New(driver, driverOptions string) (*Backend, db.apperror.Error) {
+func New(driver, driverOptions string) (*Backend, apperror.Error) {
 	b := Backend{}
 
 	switch driver {
@@ -43,10 +44,7 @@ func New(driver, driverOptions string) (*Backend, db.apperror.Error) {
 
 	DB, err := sql.Open(driver, driverOptions)
 	if err != nil {
-		return nil, db.Error{
-			Code:    "connection_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "connection_error")
 	}
 
 	b.Db = DB
@@ -84,7 +82,7 @@ func (b *Backend) Copy() db.Backend {
 	return &copied
 }
 
-func (b *Backend) CreateModel(collection string) (interface{}, db.apperror.Error) {
+func (b *Backend) CreateModel(collection string) (interface{}, apperror.Error) {
 	return db.BackendCreateModel(b, collection)
 }
 
@@ -96,7 +94,7 @@ func (b *Backend) MergeModel(model db.Model) {
 	db.BackendMergeModel(b, model)
 }
 
-func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, db.apperror.Error) {
+func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, apperror.Error) {
 	info, err := b.InfoForModel(m)
 	if err != nil {
 		return nil, err
@@ -198,45 +196,32 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 	}
 }
 
-func (b *Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) db.apperror.Error {
+func (b *Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) apperror.Error {
 	rows, err := b.SqlQuery(query, args...)
 	if err != nil {
-		return db.Error{
-			Code:    "sql_error",
-			Message: err.Error(),
-			Data:    err,
-		}
+		return apperror.Wrap(err, "sql_error")
 	}
 
 	defer rows.Close()
 	rows.Next()
 	rows.Scan(vars...)
 	if err := rows.Err(); err != nil {
-		return db.Error{
-			Code:    "sql_rows_error",
-			Message: err.Error(),
-		}
+		return apperror.Wrap(err, "sql_rows_error")
 	}
 
 	return nil
 }
 
-func (b *Backend) CreateCollection(name string) db.apperror.Error {
-	info := b.ModelInfo(name)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
-		}
+func (b *Backend) CreateCollection(collection string) apperror.Error {
+	info, err := b.InfoForCollection(collection)
+	if err != nil {
+		return err
 	}
 
 	tableInfo := b.TableInfo[info.BackendName]
 	stmt := b.dialect.CreateTableStatement(tableInfo, true)
 	if _, err := b.SqlExec(stmt); err != nil {
-		return db.Error{
-			Code:    "create_table_failed",
-			Message: err.Error(),
-		}
+		return apperror.Wrap(err, "create_table_failed")
 	}
 
 	// Create m2m tables.
@@ -246,10 +231,7 @@ func (b *Backend) CreateCollection(name string) db.apperror.Error {
 			table := b.TableInfo[field.M2MCollection]
 			stmt := b.dialect.CreateTableStatement(table, true)
 			if _, err := b.SqlExec(stmt); err != nil {
-				return db.Error{
-					Code:    "create_m2m_table_failed",
-					Message: err.Error(),
-				}
+				return apperror.Wrap(err, "create_m2m_table_failed")
 			}
 		}
 	}
@@ -257,38 +239,30 @@ func (b *Backend) CreateCollection(name string) db.apperror.Error {
 	return nil
 }
 
-func (b *Backend) CreateCollections(names ...string) db.apperror.Error {
+func (b *Backend) CreateCollections(names ...string) apperror.Error {
 	for _, name := range names {
 		if err := b.CreateCollection(name); err != nil {
-			return db.Error{
-				Code:    "create_collection_error",
-				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
-			}
+			return apperror.Wrap(err, "create_collection_error",
+				fmt.Sprintf("Could not create collection %v: %v", name, err))
 		}
 	}
 
 	return nil
 }
 
-func (b *Backend) DropTable(name string, ifExists bool) db.apperror.Error {
+func (b *Backend) DropTable(name string, ifExists bool) apperror.Error {
 	stmt := b.dialect.DropTableStatement(name, ifExists)
 	if _, err := b.SqlExec(stmt); err != nil {
-		return db.Error{
-			Code:    "drop_table_failed",
-			Message: err.Error(),
-		}
+		return apperror.Wrap(err, "drop_table_failed")
 	}
 
 	return nil
 }
 
-func (b *Backend) DropCollection(name string) db.apperror.Error {
-	info := b.ModelInfo(name)
-	if info == nil {
-		return db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v not registered with GORM backend", name),
-		}
+func (b *Backend) DropCollection(collection string) apperror.Error {
+	info, err := b.InfoForCollection(collection)
+	if err != nil {
+		return err
 	}
 
 	// First delete all m2m tables.
@@ -302,7 +276,7 @@ func (b *Backend) DropCollection(name string) db.apperror.Error {
 	return b.DropTable(info.BackendName, true)
 }
 
-func (b *Backend) DropAllCollections() db.apperror.Error {
+func (b *Backend) DropAllCollections() apperror.Error {
 	info := b.AllModelInfo()
 	for name := range info {
 		info := info[name]
@@ -423,13 +397,10 @@ func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []i
 	return sql, args
 }
 
-func (b *Backend) selectByQuery(q db.Query) (*SelectSpec, db.apperror.Error) {
-	info := b.ModelInfo(q.GetCollection())
-	if info == nil {
-		return nil, db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model '%v' not registered with sql backend", q.GetCollection()),
-		}
+func (b *Backend) selectByQuery(q db.Query) (*SelectSpec, apperror.Error) {
+	info, err := b.InfoForCollection(q.GetCollection())
+	if err != nil {
+		return nil, err
 	}
 
 	// Handle filters.
@@ -506,26 +477,20 @@ func (b *Backend) selectByQuery(q db.Query) (*SelectSpec, db.apperror.Error) {
 	}, nil
 }
 
-func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, db.apperror.Error) {
+func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, apperror.Error) {
 	return db.BuildRelationQuery(b, nil, q)
 }
 
-func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interface{}, db.apperror.Error) {
+func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interface{}, apperror.Error) {
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
-		return nil, db.Error{
-			Code:    "sql_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_error")
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, db.Error{
-			Code:    "sql_rows_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_rows_error")
 	}
 
 	vals := make([]interface{}, len(cols))
@@ -537,10 +502,7 @@ func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfa
 	result := make([]map[string]interface{}, 0)
 	for rows.Next() {
 		if err := rows.Scan(valPointers...); err != nil {
-			return nil, db.Error{
-				Code:    "sql_scan_error",
-				Message: err.Error(),
-			}
+			return nil, apperror.Wrap(err, "sql_scan_error")
 		}
 
 		data := make(map[string]interface{})
@@ -550,31 +512,22 @@ func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfa
 		result = append(result, data)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, db.Error{
-			Code:    "sql_rows_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_rows_error")
 	}
 
 	return result, nil
 }
 
-func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface{}) ([]interface{}, db.apperror.Error) {
+func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interface{}) ([]interface{}, apperror.Error) {
 	rows, err := b.SqlQuery(sql, args...)
 	if err != nil {
-		return nil, db.Error{
-			Code:    "sql_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_error")
 	}
 	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, db.Error{
-			Code:    "sql_rows_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_rows_error")
 	}
 
 	models := make([]interface{}, 0)
@@ -595,39 +548,21 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 		}
 
 		if err := rows.Scan(vals...); err != nil {
-			return nil, db.Error{
-				Code:    "sql_scan_error",
-				Message: err.Error(),
-			}
+			return nil, apperror.Wrap(err, "sql_scan_error")
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, db.Error{
-			Code:    "sql_rows_error",
-			Message: err.Error(),
-		}
+		return nil, apperror.Wrap(err, "sql_rows_error")
 	}
 
 	return models, nil
 }
 
-func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
+func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 	collection := q.GetCollection()
-
-	if collection == "" {
-		panic("empty collection query")
-		return nil, db.Error{
-			Code:    "query_for_empty_collection",
-			Message: "Query.collection must be set",
-		}
-	}
-
-	info := b.ModelInfo(collection)
-	if info == nil {
-		return nil, db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.GetCollection()),
-		}
+	info, err := b.InfoForCollection(collection)
+	if err != nil {
+		return nil, err
 	}
 
 	spec, err := b.selectByQuery(q)
@@ -646,10 +581,8 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	for _, data := range result {
 		model, err := db.BuildModelFromMap(info, data)
 		if err != nil {
-			return nil, db.Error{
-				Code:    "map_to_model_error",
-				Message: fmt.Sprintf("Could not convert map to model: %v", err),
-			}
+			return nil, apperror.Wrap(err, "map_to_model_error",
+				fmt.Sprintf("Could not convert map to model: %v", err))
 		}
 		models = append(models, model)
 	}
@@ -657,10 +590,7 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 	// Do joins.
 	if len(q.GetJoins()) > 0 {
 		if err := db.BackendDoJoins(b, q.GetCollection(), models, q.GetJoins()); err != nil {
-			return nil, db.Error{
-				Code:    "join_error",
-				Message: err.Error(),
-			}
+			return nil, apperror.Wrap(err, "join_error")
 		}
 	}
 
@@ -668,22 +598,19 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, db.apperror.Error) {
 }
 
 // Perform a query.
-func (b *Backend) Query(q db.Query, targetSlice ...interface{}) ([]interface{}, db.apperror.Error) {
+func (b *Backend) Query(q db.Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
 	res, err := b.doQuery(q)
 	return db.BackendQuery(b, q, targetSlice, res, err)
 }
 
-func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendQueryOne(b, q, targetModel)
 }
 
-func (b *Backend) Count(q db.Query) (int, db.apperror.Error) {
-	info := b.ModelInfo(q.GetCollection())
-	if info == nil {
-		return -1, db.Error{
-			Code:    "unknown_model",
-			Message: fmt.Sprintf("Model %v was not registered with sql backend", q.GetCollection()),
-		}
+func (b *Backend) Count(q db.Query) (int, apperror.Error) {
+	_, err := b.InfoForCollection(q.GetCollection())
+	if err != nil {
+		return 0, err
 	}
 
 	q.Fields("COUNT(*) as count")
@@ -702,27 +629,27 @@ func (b *Backend) Count(q db.Query) (int, db.apperror.Error) {
 	return count, nil
 }
 
-func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendLast(b, q, targetModel)
 }
 
 // Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendFindOne(b, modelType, id, targetModel)
 }
 
-func (b *Backend) FindBy(modelType, field string, value interface{}, targetModel ...interface{}) ([]interface{}, db.apperror.Error) {
+func (b *Backend) FindBy(modelType, field string, value interface{}, targetModel ...interface{}) ([]interface{}, apperror.Error) {
 	return db.BackendFindBy(b, modelType, field, value, targetModel)
 }
 
-func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, db.apperror.Error) {
+func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
 	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
 }
 
 // Auto-persist related models.
 
-func (b *Backend) Create(m interface{}) db.apperror.Error {
-	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Create(m interface{}) apperror.Error {
+	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		data, err := db.ModelToMap(info, m, true, false)
 		if err != nil {
 			return err
@@ -734,10 +661,7 @@ func (b *Backend) Create(m interface{}) db.apperror.Error {
 		if b.dialect.HasLastInsertID() {
 			result, err2 := b.SqlExec(sql, args...)
 			if err2 != nil {
-				return db.Error{
-					Code:    "sql_insert_error",
-					Message: err2.Error(),
-				}
+				return apperror.Wrap(err2, "sql_insert_error")
 			}
 
 			id, err2 := result.LastInsertId()
@@ -761,7 +685,7 @@ func (b *Backend) Create(m interface{}) db.apperror.Error {
 	})
 }
 
-func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec, db.apperror.Error) {
+func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec, apperror.Error) {
 	collection, err := db.GetModelCollection(m)
 	if err != nil {
 		return nil, err
@@ -783,8 +707,8 @@ func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec
 	return b.selectByQuery(q)
 }
 
-func (b *Backend) Update(m interface{}) db.apperror.Error {
-	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Update(m interface{}) apperror.Error {
+	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		data, err := db.ModelToMap(info, m, true, false)
 		if err != nil {
 			return err
@@ -799,7 +723,7 @@ func (b *Backend) Update(m interface{}) db.apperror.Error {
 	})
 }
 
-func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) db.apperror.Error {
+func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) apperror.Error {
 	info, err := b.InfoForModel(m)
 	if err != nil {
 		return err
@@ -823,17 +747,14 @@ func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) db.
 
 	_, err2 := b.SqlExec(stmt, args...)
 	if err2 != nil {
-		return db.Error{
-			Code:    "sql_update_error",
-			Message: err2.Error(),
-		}
+		return apperror.Wrap(err2, "sql_update_error")
 	}
 
 	return nil
 }
 
-func (b *Backend) Delete(m interface{}) db.apperror.Error {
-	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) db.apperror.Error {
+func (b *Backend) Delete(m interface{}) apperror.Error {
+	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		spec, err := b.selectForModel(info, m)
 		if err != nil {
 			return err
@@ -842,17 +763,14 @@ func (b *Backend) Delete(m interface{}) db.apperror.Error {
 
 		_, err2 := b.SqlExec(stmt, args...)
 		if err2 != nil {
-			return db.Error{
-				Code:    "sql_delete_error",
-				Message: err2.Error(),
-			}
+			return apperror.Wrap(err2, "sql_delete_error")
 		}
 
 		return nil
 	})
 }
 
-func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
+func (b *Backend) DeleteMany(q db.Query) apperror.Error {
 	spec, err := b.selectByQuery(q)
 	if err != nil {
 		return err
@@ -862,10 +780,7 @@ func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
 
 	_, err2 := b.SqlExec(stmt, args...)
 	if err2 != nil {
-		return db.Error{
-			Code:    "sql_delete_error",
-			Message: err2.Error(),
-		}
+		return apperror.Wrap(err2, "sql_delete_error")
 	}
 
 	return nil
@@ -875,7 +790,7 @@ func (b *Backend) DeleteMany(q db.Query) db.apperror.Error {
  * M2M
  */
 
-func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperror.Error) {
+func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.Error) {
 	info, err := b.InfoForModel(obj)
 	if err != nil {
 		return nil, err
@@ -884,14 +799,14 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperr
 	fieldInfo, hasField := info.FieldInfo[name]
 
 	if !hasField {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "unknown_field",
 			Message: fmt.Sprintf("The model %v has no field %v", info.Collection, name),
 		}
 	}
 
 	if !fieldInfo.M2M {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "no_m2m_field",
 			Message: fmt.Sprintf("The %v on model %v is not m2m", name, info.Collection),
 		}
@@ -899,7 +814,7 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, db.apperr
 
 	relationInfo := b.ModelInfo(fieldInfo.RelationCollection)
 	if relationInfo == nil {
-		return nil, db.Error{
+		return nil, &apperror.AppError{
 			Code:    "unknown_relation_model",
 			Message: fmt.Sprintf("Model '%v' not registered with sql backend", fieldInfo.RelationCollection),
 		}
@@ -970,12 +885,12 @@ type M2MCollection struct {
 // Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
 var _ db.M2MCollection = (*M2MCollection)(nil)
 
-func (c M2MCollection) BuildQuery() (db.Query, db.apperror.Error) {
+func (c M2MCollection) BuildQuery() (db.Query, apperror.Error) {
 	pk, _ := db.GetStructFieldValue(c.Model, c.modelField)
 	return c.Backend.Q(c.ModelInfo.Collection).Filter(c.modelField, pk).Related(c.Name).Build()
 }
 
-func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
+func (c *M2MCollection) Add(items ...interface{}) apperror.Error {
 	modelId, _ := db.GetStructFieldValue(c.Model, c.modelField)
 
 	for _, item := range items {
@@ -990,10 +905,7 @@ func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
 
 			_, err := c.Backend.SqlExec(stmt, args...)
 			if err != nil {
-				return db.Error{
-					Code:    "sql_insert_error",
-					Message: err.Error(),
-				}
+				return apperror.Wrap(err, "sql_insert_error")
 			}
 
 			c.Items = append(c.Items, item)
@@ -1002,7 +914,7 @@ func (c *M2MCollection) Add(items ...interface{}) db.apperror.Error {
 	return nil
 }
 
-func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
+func (c *M2MCollection) Delete(items ...interface{}) apperror.Error {
 	modelId, _ := db.GetStructFieldValue(c.Model, c.modelField)
 
 	filters := db.Or()
@@ -1024,10 +936,7 @@ func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
 	stmt, args := c.Backend.dialect.DeleteStatement(spec)
 	_, err := c.Backend.SqlExec(stmt, args)
 	if err != nil {
-		return db.Error{
-			Code:    "sql_delete_error",
-			Message: err.Error(),
-		}
+		return apperror.Wrap(err, "sql_delete_error")
 	}
 
 	for _, item := range items {
@@ -1044,7 +953,7 @@ func (c *M2MCollection) Delete(items ...interface{}) db.apperror.Error {
 	return nil
 }
 
-func (c *M2MCollection) Clear() db.apperror.Error {
+func (c *M2MCollection) Clear() apperror.Error {
 	modelId, _ := db.GetStructFieldValue(c.Model, c.modelField)
 	filter := db.Eq(c.modelColumnName, modelId)
 	where, whereArgs := c.Backend.filterToSql(c.ModelInfo, filter)
@@ -1057,17 +966,14 @@ func (c *M2MCollection) Clear() db.apperror.Error {
 	stmt, args := c.Backend.dialect.DeleteStatement(spec)
 	_, err := c.Backend.SqlExec(stmt, args)
 	if err != nil {
-		return db.Error{
-			Code:    "sql_delete_error",
-			Message: err.Error(),
-		}
+		return apperror.Wrap(err, "sql_delete_error")
 	}
 
 	c.Items = make([]interface{}, 0)
 	return nil
 }
 
-func (c *M2MCollection) Replace(items []interface{}) db.apperror.Error {
+func (c *M2MCollection) Replace(items []interface{}) apperror.Error {
 	if err := c.Clear(); err != nil {
 		return err
 	}

@@ -1,6 +1,8 @@
 package sql
 
 import (
+	"github.com/theduke/go-apperror"
+
 	db "github.com/theduke/go-dukedb"
 )
 
@@ -18,24 +20,16 @@ func (b Backend) Begin() db.Transaction {
 	return backendCopy
 }
 
-func (b *Backend) Rollback() db.apperror.Error {
+func (b *Backend) Rollback() apperror.Error {
 	if err := b.Tx.Rollback(); err != nil {
-		return db.Error{
-			Code:    "transaction_rollback_failed",
-			Message: err.Error(),
-			Data:    err,
-		}
+		return apperror.Wrap(err, "transaction_rollback_failed")
 	}
 	return nil
 }
 
-func (b *Backend) Commit() db.apperror.Error {
+func (b *Backend) Commit() apperror.Error {
 	if err := b.Tx.Commit(); err != nil {
-		return db.Error{
-			Code:    "transaction_commit_failed",
-			Message: err.Error(),
-			Data:    err,
-		}
+		return apperror.Wrap(err, "transaction_commit_failed")
 	}
 	return nil
 }

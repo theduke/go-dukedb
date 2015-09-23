@@ -3,6 +3,8 @@ package sql
 import (
 	"time"
 
+	"github.com/theduke/go-apperror"
+
 	db "github.com/theduke/go-dukedb"
 )
 
@@ -13,7 +15,7 @@ func (b Backend) GetMigrationHandler() *db.MigrationHandler {
 	return b.MigrationHandler
 }
 
-func (b Backend) MigrationsSetup() db.apperror.Error {
+func (b Backend) MigrationsSetup() apperror.Error {
 	count, err := b.Count(b.Q("migration_attempts"))
 	// Todo. determine right error string.
 	if err != nil {
@@ -26,17 +28,8 @@ func (b Backend) MigrationsSetup() db.apperror.Error {
 		tx := b.Begin()
 
 		if err := tx.CreateCollection("migration_attempts"); err != nil {
-			return db.Error{
-				Code:    "migration_setup_failed",
-				Message: "Could not create migrations table: " + err.Error(),
-				Data:    err,
-			}
-
 			tx.Rollback()
-			return db.Error{
-				Code:    "migration_setup_failed",
-				Message: err.Error(),
-			}
+			return apperror.Wrap(err, "migration_setup_failed", "Could not create migrations table")
 		}
 
 		migration := MigrationAttempt{}
@@ -46,11 +39,7 @@ func (b Backend) MigrationsSetup() db.apperror.Error {
 		migration.Complete = true
 
 		if err := tx.Create(&migration); err != nil {
-			return db.Error{
-				Code:    "migration_setup_failed",
-				Message: "Could not create migrations table: " + err.Error(),
-				Data:    err,
-			}
+			return apperror.Wrap(err, "migration_setup_failed", "Could not create initial migration")
 		}
 
 		tx.Commit()
@@ -59,13 +48,10 @@ func (b Backend) MigrationsSetup() db.apperror.Error {
 	return nil
 }
 
-func (b Backend) IsMigrationLocked() (bool, db.apperror.Error) {
+func (b Backend) IsMigrationLocked() (bool, apperror.Error) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Last(); err != nil {
-		return true, db.Error{
-			Code:    "db_error",
-			Message: err.Error(),
-		}
+		return true, apperror.Wrap(err, "db_error")
 	} else {
 		lastAttempt = model.(*MigrationAttempt)
 	}
@@ -77,13 +63,10 @@ func (b Backend) IsMigrationLocked() (bool, db.apperror.Error) {
 	return false, nil
 }
 
-func (b Backend) DetermineMigrationVersion() (int, db.apperror.Error) {
+func (b Backend) DetermineMigrationVersion() (int, apperror.Error) {
 	var lastAttempt *MigrationAttempt
 	if model, err := b.Q("migration_attempts").Filter("complete", true).Last(); err != nil {
-		return -1, db.Error{
-			Code:    "db_error",
-			Message: err.Error(),
-		}
+		return -1, apperror.Wrap(err, "db_error")
 	} else {
 		lastAttempt = model.(*MigrationAttempt)
 	}
