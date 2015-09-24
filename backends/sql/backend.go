@@ -13,6 +13,8 @@ import (
 type Backend struct {
 	db.BaseBackend
 
+	name string
+
 	Db *sql.DB
 	Tx *sql.Tx
 
@@ -30,6 +32,7 @@ var _ db.TransactionBackend = (*Backend)(nil)
 
 func New(driver, driverOptions string) (*Backend, apperror.Error) {
 	b := Backend{}
+	b.SetName("sql")
 
 	switch driver {
 	case "postgres":
@@ -60,10 +63,6 @@ func New(driver, driverOptions string) (*Backend, apperror.Error) {
 
 func (b *Backend) HasStringIDs() bool {
 	return false
-}
-
-func (b *Backend) Name() string {
-	return "sql"
 }
 
 func (b *Backend) SetDebug(d bool) {

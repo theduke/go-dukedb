@@ -13,6 +13,8 @@ import (
 type Backend struct {
 	db.BaseBackend
 
+	name string
+
 	data map[string]map[string]interface{}
 
 	MigrationHandler *db.MigrationHandler
@@ -25,6 +27,7 @@ var _ db.MigrationBackend = (*Backend)(nil)
 
 func New() *Backend {
 	b := Backend{}
+	b.SetName("memory")
 
 	b.SetAllModelInfo(make(map[string]*db.ModelInfo))
 	b.data = make(map[string]map[string]interface{})
@@ -39,10 +42,6 @@ func New() *Backend {
 
 func (b *Backend) HasStringIDs() bool {
 	return false
-}
-
-func (b *Backend) Name() string {
-	return "memory"
 }
 
 func (b *Backend) SetDebug(d bool) {

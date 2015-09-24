@@ -41,9 +41,18 @@ func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
 }
 
 type BaseBackend struct {
+	name      string
 	Debug     bool
 	Logger    *logrus.Logger
 	modelInfo map[string]*ModelInfo
+}
+
+func (b *BaseBackend) Name() string {
+	return b.name
+}
+
+func (b *BaseBackend) SetName(name string) {
+	b.name = name
 }
 
 func (b *BaseBackend) GetDebug() bool {
