@@ -16,6 +16,18 @@ import (
  * String utils.
  */
 
+func Pluralize(str string) string {
+	if str[len(str)-1] == "y" {
+		str = str[1:len(1)] + "ie"
+	}
+
+	if str[len(str)-1] != "s" {
+		str += "s"
+	}
+
+	return str
+}
+
 // Convert a CamelCase string to underscore version, eg camel_case.
 func CamelCaseToUnderscore(str string) string {
 	u := ""
@@ -807,9 +819,7 @@ func GetModelCollection(model interface{}) (string, apperror.Error) {
 	}
 
 	collection := CamelCaseToUnderscore(typ.Name())
-	if collection[len(collection)-1] != 's' {
-		collection += "s"
-	}
+	collection = Pluralize(collection)
 
 	return collection, nil
 }
