@@ -3,25 +3,25 @@ package govalidate
 import (
 	"github.com/asaskevich/govalidator"
 
-	db "github.com/theduke/go-dukedb"
+	"github.com/theduke/go-apperror"
 )
 
 type Model struct{}
 
-func (m Model) Validate() db.apperror.Error {
+func (m Model) Validate() apperror.Error {
 	ok, err := govalidator.ValidateStruct(m)
 	if ok {
 		return nil
 	}
 
 	if errs, ok := err.(govalidator.Errors); ok {
-		return db.Error{
+		return &apperror.Err{
 			Code:   "validation_error",
 			Errors: errs,
 		}
 	}
 
-	return db.Error{
+	return &apperror.Err{
 		Code:    "validation_error",
 		Message: err.Error(),
 		Errors:  []error{err},

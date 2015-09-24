@@ -348,6 +348,10 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 	for name := range info.FieldInfo {
 		fieldInfo := info.FieldInfo[name]
 
+		if !fieldInfo.IsRelation() {
+			continue
+		}
+
 		// Handle has-one.
 		if fieldInfo.HasOne {
 			relationVal := modelVal.FieldByName(name)
@@ -368,7 +372,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 			}
 
 			// Auto-persist related model if neccessary.
-			if IsZero(b.MustModelID(relation)) {
+			if IsZero(b.MustModelID(relation)) && fieldInfo.RelationAutoCreate {
 				err := b.Create(relation)
 				if err != nil {
 					return err
@@ -432,7 +436,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 				foreignField.Set(reflect.ValueOf(belongsToKey))
 
 				// Auto-persist related model if neccessary.
-				if IsZero(relationId) {
+				if IsZero(relationId) && fieldInfo.RelationAutoCreate {
 					err := b.Create(relation)
 					if err != nil {
 						return err
@@ -465,11 +469,13 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 			}
 
 			// First, persist all unpersisted m2m models.
-			for _, model := range models {
-				id := b.MustModelID(model)
-				if IsZero(id) {
-					if err := b.Create(model); err != nil {
-						return err
+			if fieldInfo.RelationAutoCreate {
+				for _, model := range models {
+					id := b.MustModelID(model)
+					if IsZero(id) {
+						if err := b.Create(model); err != nil {
+							return err
+						}
 					}
 				}
 			}
@@ -511,7 +517,7 @@ func BackendCreateModel(b Backend, collection string) (interface{}, apperror.Err
 func BackendMustCreateModel(b Backend, collection string) interface{} {
 	model, err := b.CreateModel(collection)
 	if err != nil {
-		panic("Could not create model: " + err.Error())
+		panic(fmt.Sprintf("Could not create model of collection %v: %v", collection, err.Error()))
 	}
 
 	return model

@@ -51,7 +51,18 @@ type FieldInfo struct {
 	 * Relationship related fields
 	 */
 
-	// True if this field is a foreign key for a has one/belongs to relationship.
+	// Instance of the related struct.
+	RelationItem interface{}
+
+	// Collection name of the related struct.
+	RelationCollection string
+
+	// Wheter the relationship is many.
+	RelationIsMany bool
+
+	// Wheter to auto-persist this relationship. Defaults to true.
+	RelationAutoCreate bool
+
 	M2M           bool
 	M2MCollection string
 
@@ -62,10 +73,12 @@ type FieldInfo struct {
 	BelongsTo             bool
 	BelongsToField        string
 	BelongsToForeignField string
+}
 
-	RelationItem       interface{}
-	RelationCollection string
-	RelationIsMany     bool
+func NewFieldInfo() *FieldInfo {
+	return &FieldInfo{
+		RelationAutoCreate: true,
+	}
 }
 
 func (f FieldInfo) IsRelation() bool {
@@ -219,7 +232,7 @@ func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 
 // Parse the information contained in a 'db:"xxx"' field tag.
 func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
-	info := FieldInfo{}
+	info := NewFieldInfo()
 
 	parts := strings.Split(strings.TrimSpace(tag), ";")
 	for _, part := range parts {
@@ -321,10 +334,13 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 				info.BelongsToField = itemParts[1]
 				info.BelongsToForeignField = itemParts[2]
 			}
+
+		case "no-auto-create":
+			info.RelationAutoCreate = false
 		}
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // Build the field information for the model.
