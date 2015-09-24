@@ -1019,9 +1019,17 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 	}
 
 	for key := range data {
+		// Try to find field by backend name.
 		fieldInfo := info.FieldByBackendName(key)
 		if fieldInfo == nil {
-			fieldInfo = info.FieldInfo[key]
+			// Does not match a backend name.
+			// Try to find field by marshal name to support unmarshalled data.
+			fieldInfo = info.FieldByMarshalName(key)
+
+			// If key does not match a marshal name either, just assume it to be a plain struct field name.
+			if fieldInfo == nil {
+				fieldInfo = info.FieldInfo[key]
+			}
 		}
 
 		if fieldInfo == nil {

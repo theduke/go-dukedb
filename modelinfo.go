@@ -230,6 +230,16 @@ func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 	return nil
 }
 
+func (m ModelInfo) FieldByMarshalName(name string) *FieldInfo {
+	for key := range m.FieldInfo {
+		if m.FieldInfo[key].MarshalName == name {
+			return m.FieldInfo[key]
+		}
+	}
+
+	return nil
+}
+
 // Parse the information contained in a 'db:"xxx"' field tag.
 func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 	info := NewFieldInfo()
