@@ -3,6 +3,7 @@ package dukedb
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/theduke/go-apperror"
@@ -294,7 +295,12 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.GetCollection(), q.GetRelationName()))
 		}
 
+		if relInfo.RelationCollection == "" {
+			panic(fmt.Sprintf("Field %v.%v has no relation collection", baseInfo.Collection, relInfo.Name))
+		}
+
 		relatedInfo := b.ModelInfo(relInfo.RelationCollection)
+
 		targetModelName = relatedInfo.Collection
 		newQuery = b.Q(targetModelName)
 
@@ -779,9 +785,31 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
  */
 
 func BackendDoJoins(b Backend, model string, objs []interface{}, joins []RelationQuery) apperror.Error {
+	handledJoins := make(map[string]bool)
+	nestedJoins := make([]RelationQuery, 0)
+
+	modelInfo := b.ModelInfo(joins[0].GetBaseQuery().GetCollection())
+	if modelInfo == nil {
+		panic("Missing model info!")
+	}
+
 	for _, joinQ := range joins {
 		// With a specific join type, joins should be handled by the backend itself.
 		if joinQ.GetJoinType() != "" {
+			continue
+		}
+
+		parts := strings.Split(joinQ.GetRelationName(), ".")
+		if len(parts) > 1 {
+			// Add the nested join to nestedJoins and execute it later, after this loop.
+			nestedJoins = append(nestedJoins, joinQ)
+
+			// Build a new join query for the first level join.
+			joinQ = RelQ(joinQ.GetBaseQuery(), parts[0])
+		}
+
+		// Skip already executed joins to avoid duplicate work.
+		if _, ok := handledJoins[joinQ.GetRelationName()]; ok {
 			continue
 		}
 
@@ -789,6 +817,71 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []Relatio
 		if err != nil {
 			return err
 		}
+	}
+
+	// If no nestedJoins remain, we got nothing to do, so return.
+	if len(nestedJoins) < 1 {
+		return nil
+	}
+
+	// Nested joins remain!
+	// First, group the joins by parent.
+	joinMap := make(map[string][]RelationQuery, 0)
+
+	for _, joinQ := range nestedJoins {
+		parts := strings.Split(joinQ.GetRelationName(), ".")
+		joinMap[parts[0]] = append(joinMap[parts[0]], joinQ)
+	}
+
+	// Execute the joins for each Field.
+	for parentField := range joinMap {
+		fieldInfo := modelInfo.GetField(parentField)
+		parentCollection := fieldInfo.RelationCollection
+
+		// First, build a new slice of the objects to join.
+		var nestedObjs []interface{}
+
+		for _, obj := range objs {
+			nestedObj, err := GetStructFieldValue(obj, fieldInfo.Name)
+			if err != nil {
+				panic(err)
+			}
+
+			// Ignore zero values.
+			if nestedObj == nil || IsZero(nestedObj) {
+				continue
+			}
+
+			if fieldInfo.RelationIsMany {
+				// Many relationship means the nestedObj is actually an array, so
+				// we need to add all items of that array to nestedObjs.
+
+				nestedSlice := reflect.ValueOf(nestedObj)
+				for i := 0; i < nestedSlice.Len(); i++ {
+					nestedObjs = append(nestedObjs, nestedSlice.Index(i).Interface())
+				}
+			} else {
+				nestedObjs = append(nestedObjs, nestedObj)
+			}
+		}
+
+		// If no objs were found, avoid unneccessary work and skip this Field.
+		if len(nestedObjs) == 0 {
+			continue
+		}
+
+		// Need to determine the collection.
+
+		// Build a list of nested joins.
+		var nestedJoins []RelationQuery
+		for _, joinQ := range joinMap[parentField] {
+			parts := strings.Split(joinQ.GetRelationName(), ".")
+			nestedQ := RelQ(Q(parentCollection), strings.Join(parts[1:], "."))
+			nestedJoins = append(nestedJoins, nestedQ)
+		}
+
+		// Now, Actually execute the nested joins.
+		BackendDoJoins(b, parentCollection, nestedObjs, nestedJoins)
 	}
 
 	return nil
