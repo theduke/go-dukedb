@@ -53,7 +53,7 @@ func (d MysqlDialect) ColumnType(info *db.FieldInfo) string {
 
 	case reflect.String:
 		if info.Max > 0 && info.Max < 65532 {
-			return fmt.Sprintf("varchar(%d)", info.Max)
+			return fmt.Sprintf("varchar(%v)", info.Max)
 		}
 		return "longtext"
 
