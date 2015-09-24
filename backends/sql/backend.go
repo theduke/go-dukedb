@@ -921,7 +921,7 @@ func (c *M2MCollection) Delete(items ...interface{}) apperror.Error {
 	for _, item := range items {
 		relationId, _ := db.GetStructFieldValue(item, c.relationField)
 
-		filter := db.And(db.Eq(c.modelColumnName, modelId), db.Eq(c.relationColumnName, relationId))
+		filter := db.And(db.Eq(c.modelColumnName, modelId), db.Eq(c.joinTableModelColumn, relationId))
 		filters.Add(filter)
 	}
 
@@ -954,7 +954,7 @@ func (c *M2MCollection) Delete(items ...interface{}) apperror.Error {
 
 func (c *M2MCollection) Clear() apperror.Error {
 	modelId, _ := db.GetStructFieldValue(c.Model, c.modelField)
-	filter := db.Eq(c.modelColumnName, modelId)
+	filter := db.Eq(c.joinTableModelColumn, modelId)
 	where, whereArgs := c.Backend.filterToSql(c.ModelInfo, filter)
 	spec := &SelectSpec{
 		Table:     c.table,
@@ -963,7 +963,7 @@ func (c *M2MCollection) Clear() apperror.Error {
 	}
 
 	stmt, args := c.Backend.dialect.DeleteStatement(spec)
-	_, err := c.Backend.SqlExec(stmt, args)
+	_, err := c.Backend.SqlExec(stmt, args...)
 	if err != nil {
 		return apperror.Wrap(err, "sql_delete_error")
 	}

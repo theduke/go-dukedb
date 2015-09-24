@@ -338,7 +338,15 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 	vals := make([]interface{}, 0)
 	for _, m := range baseModels {
 		val, _ := GetStructFieldValue(m, joinField)
-		vals = append(vals, val)
+
+		reflVal := reflect.ValueOf(val)
+		if reflVal.Type().Kind() == reflect.Slice {
+			for i := 0; i < reflVal.Len(); i++ {
+				vals = append(vals, reflVal.Index(i).Interface())
+			}
+		} else {
+			vals = append(vals, val)
+		}
 	}
 
 	if len(vals) > 1 {
