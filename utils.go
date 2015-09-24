@@ -120,6 +120,8 @@ func SaveConvert(val interface{}, typ reflect.Type) interface{} {
 	return reflect.ValueOf(val).Convert(typ).Interface()
 }
 
+// Convert converts an arbitrary interface value to a different type.
+// The rawType argument may either be a reflect.Type or an acutal instance of the type.
 func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 	var typ reflect.Type
 	if t, ok := rawType.(reflect.Type); ok {
@@ -131,13 +133,25 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 	kind := typ.Kind()
 
 	valType := reflect.TypeOf(value)
+	valKind := valType.Kind()
 
-	if valType.Kind() == kind {
+	if valKind == kind {
 		// Same kind, nothing to convert.
 		return value, nil
 	}
 
-	// If target is string, just use fmt.
+	// Special handling for string to bool.
+	if kind == reflect.String && valKind == reflect.Bool {
+		str := strings.TrimSpace(value.(string))
+		switch str {
+		case "y", "yes", "1":
+			return true, nil
+		case "n", "no", "0":
+			return false, nil
+		}
+	}
+
+	// If target is string, use fmt.
 	if kind == reflect.String {
 		return fmt.Sprintf("%v", value), nil
 	}
@@ -1062,112 +1076,14 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 		return
 	}
 
-	switch fieldKind {
-	case reflect.Bool:
-		switch valKind {
-		case reflect.String:
-			x := rawValue.(string)
-			flag := x == "1" || x == "yes"
-			field.Set(reflect.ValueOf(flag))
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, err := NumericToInt64(rawValue)
-			if err == nil {
-				field.Set(reflect.ValueOf(x > 0))
-			}
-		}
-
-	case reflect.String:
-		bytes, ok := rawValue.([]byte)
-		if ok {
-			field.Set(reflect.ValueOf(string(bytes)))
-		} else {
-			x := fmt.Sprintf("%v", rawValue)
-			field.Set(reflect.ValueOf(x))
-		}
-
-	case reflect.Int:
-		switch valKind {
-		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToInt64(rawValue)
-			field.Set(reflect.ValueOf(int(x)))
-		}
-
-	case reflect.Int8:
-		switch valKind {
-		case reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToInt64(rawValue)
-			field.Set(reflect.ValueOf(int8(x)))
-		}
-
-	case reflect.Int16:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToInt64(rawValue)
-			field.Set(reflect.ValueOf(int16(x)))
-		}
-
-	case reflect.Int32:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToInt64(rawValue)
-			field.Set(reflect.ValueOf(int32(x)))
-		}
-	case reflect.Int64:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToInt64(rawValue)
-			field.Set(reflect.ValueOf(x))
-		}
-
-	case reflect.Uint:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToUint64(rawValue)
-			field.Set(reflect.ValueOf(uint(x)))
-		}
-
-	case reflect.Uint8:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToUint64(rawValue)
-			field.Set(reflect.ValueOf(uint8(x)))
-		}
-
-	case reflect.Uint16:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToUint64(rawValue)
-			field.Set(reflect.ValueOf(uint16(x)))
-		}
-
-	case reflect.Uint32:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint64, reflect.Float32, reflect.Float64:
-			x, _ := NumericToUint64(rawValue)
-			field.Set(reflect.ValueOf(uint32(x)))
-		}
-
-	case reflect.Uint64:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Float32, reflect.Float64:
-			x, _ := NumericToUint64(rawValue)
-			field.Set(reflect.ValueOf(x))
-		}
-
-	case reflect.Float32:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float64:
-			x, _ := NumericToFloat64(rawValue)
-			field.Set(reflect.ValueOf(float32(x)))
-		}
-
-	case reflect.Float64:
-		switch valKind {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32:
-			x, _ := NumericToFloat64(rawValue)
-			field.Set(reflect.ValueOf(x))
-		}
+	// Try to convert using Convert() method.
+	convertedVal, err := Convert(rawValue, info.Type)
+	if err == nil {
+		field.Set(reflect.ValueOf(convertedVal))
 	}
+
+	// Nothing worked.
+	panic(fmt.Sprintf("Could not convert type %v (%v) to type %v", valKind, rawValue, fieldKind))
 }
 
 func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, apperror.Error) {
