@@ -17,11 +17,11 @@ import (
  */
 
 func Pluralize(str string) string {
-	if str[len(str)-1] == "y" {
-		str = str[1:len(1)] + "ie"
+	if str[len(str)-1] == 'y' {
+		str = str[1:len(str)-1] + "ie"
 	}
 
-	if str[len(str)-1] != "s" {
+	if str[len(str)-1] != 's' {
 		str += "s"
 	}
 
@@ -1090,10 +1090,11 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	convertedVal, err := Convert(rawValue, info.Type)
 	if err == nil {
 		field.Set(reflect.ValueOf(convertedVal))
+		return
 	}
 
 	// Nothing worked.
-	panic(fmt.Sprintf("Could not convert type %v (%v) to type %v", valKind, rawValue, fieldKind))
+	panic(fmt.Sprintf("Could not convert type %v (%v) to type %v: %v", valKind, rawValue, fieldKind, err))
 }
 
 func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, apperror.Error) {
@@ -1120,6 +1121,21 @@ func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
 	val := reflect.ValueOf(m).Elem()
 
 	for fieldName, fieldInfo := range info.FieldInfo {
+
+		// Fill in default values.
+		if fieldInfo.Default != "" {
+			fieldVal := val.FieldByName(fieldName)
+			if IsZero(fieldVal.Interface()) {
+				convertedVal, err := Convert(fieldInfo.Default, fieldInfo.Type)
+				if err != nil {
+					msg := fmt.Sprintf("Could not convert the default value '%v' for field %v to type %v",
+						fieldInfo.Default, fieldName, fieldInfo.Type.Kind())
+					return apperror.Wrap(err, "default_value_conversion_error", msg)
+				}
+
+				fieldVal.Set(reflect.ValueOf(convertedVal))
+			}
+		}
 
 		if fieldInfo.NotNull && !fieldInfo.PrimaryKey {
 			fieldVal := val.FieldByName(fieldName)

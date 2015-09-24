@@ -61,7 +61,7 @@ type FieldInfo struct {
 	RelationIsMany bool
 
 	// Wheter to auto-persist this relationship. Defaults to true.
-	RelationAutoCreate bool
+	RelationAutoPersist bool
 
 	M2M           bool
 	M2MCollection string
@@ -77,7 +77,7 @@ type FieldInfo struct {
 
 func NewFieldInfo() *FieldInfo {
 	return &FieldInfo{
-		RelationAutoCreate: true,
+		RelationAutoPersist: true,
 	}
 }
 
@@ -292,6 +292,12 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 			info.NotNull = true
 			info.IgnoreIfZero = true
 
+		case "default":
+			if value == "" {
+				return nil, apperror.New("invalid_default", "default specifier must be in format default:value")
+			}
+			info.Default = value
+
 		case "min":
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
@@ -345,8 +351,8 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 				info.BelongsToForeignField = itemParts[2]
 			}
 
-		case "no-auto-create":
-			info.RelationAutoCreate = false
+		case "no-auto-persist":
+			info.RelationAutoPersist = false
 		}
 	}
 

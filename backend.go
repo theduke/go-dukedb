@@ -348,7 +348,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
  * Convenience functions.
  */
 
-func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror.Error {
+func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}, beforeCreate bool) apperror.Error {
 	modelVal := reflect.ValueOf(m)
 	if modelVal.Type().Kind() == reflect.Ptr {
 		modelVal = modelVal.Elem()
@@ -357,7 +357,13 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 	for name := range info.FieldInfo {
 		fieldInfo := info.FieldInfo[name]
 
+		// We only need to inspect relation fields.
 		if !fieldInfo.IsRelation() {
+			continue
+		}
+
+		// If autopersist is disabled, ignore.
+		if !fieldInfo.RelationAutoPersist {
 			continue
 		}
 
@@ -381,7 +387,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 			}
 
 			// Auto-persist related model if neccessary.
-			if IsZero(b.MustModelID(relation)) && fieldInfo.RelationAutoCreate {
+			if IsZero(b.MustModelID(relation)) {
 				err := b.Create(relation)
 				if err != nil {
 					return err
@@ -445,7 +451,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 				foreignField.Set(reflect.ValueOf(belongsToKey))
 
 				// Auto-persist related model if neccessary.
-				if IsZero(relationId) && fieldInfo.RelationAutoCreate {
+				if IsZero(relationId) {
 					err := b.Create(relation)
 					if err != nil {
 						return err
@@ -460,7 +466,10 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 					}
 				}
 			}
-		} else if fieldInfo.M2M {
+		}
+
+		// Handle m2m
+		if !beforeCreate && fieldInfo.M2M {
 			// m2m relationships can only be handled if the model itself has an id
 			// already. So skip if otherwise.
 			if IsZero(b.MustModelID(m)) {
@@ -469,6 +478,8 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 
 			val, _ := GetStructFieldValue(m, fieldInfo.Name)
 			if IsZero(val) {
+				// Field is nil, so it probably was not joined.
+				// Therefore it is ignored.
 				continue
 			}
 
@@ -478,13 +489,11 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 			}
 
 			// First, persist all unpersisted m2m models.
-			if fieldInfo.RelationAutoCreate {
-				for _, model := range models {
-					id := b.MustModelID(model)
-					if IsZero(id) {
-						if err := b.Create(model); err != nil {
-							return err
-						}
+			for _, model := range models {
+				id := b.MustModelID(model)
+				if IsZero(id) {
+					if err := b.Create(model); err != nil {
+						return err
 					}
 				}
 			}
@@ -493,7 +502,7 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}) apperror
 			if err2 != nil {
 				return err2
 			}
-			err2 = m2m.Add(models...)
+			err2 = m2m.Replace(models)
 			if err2 != nil {
 				return err2
 			}
@@ -676,7 +685,7 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	// Persist relationships before create.
-	if err := BackendPersistRelations(b, info, model); err != nil {
+	if err := BackendPersistRelations(b, info, model, true); err != nil {
 		return err
 	}
 
@@ -685,7 +694,7 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.
-	if err := BackendPersistRelations(b, info, model); err != nil {
+	if err := BackendPersistRelations(b, info, model, false); err != nil {
 		return err
 	}
 
@@ -718,7 +727,7 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	// Persist relationships before create.
-	if err := BackendPersistRelations(b, info, model); err != nil {
+	if err := BackendPersistRelations(b, info, model, false); err != nil {
 		return err
 	}
 
@@ -727,7 +736,7 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.
-	if err := BackendPersistRelations(b, info, model); err != nil {
+	if err := BackendPersistRelations(b, info, model, false); err != nil {
 		return err
 	}
 
