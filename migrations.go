@@ -90,10 +90,12 @@ func (m *MigrationHandler) MigrateTo(targetVersion int, force bool) apperror.Err
 func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 
 	backend := handler.Backend
+	useTransaction := false
 
 	var tx Transaction
 	txCapableBackend, hasTransactions := handler.Backend.(TransactionBackend)
-	if hasTransactions {
+	if hasTransactions && m.WrapTransaction {
+		useTransaction = true
 		tx = txCapableBackend.Begin()
 		backend = tx.(MigrationBackend)
 	}
@@ -104,14 +106,14 @@ func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 	attempt.SetComplete(false)
 
 	if err := backend.Create(attempt); err != nil {
-		if hasTransactions {
+		if useTransaction {
 			tx.Rollback()
 		}
 		return err
 	}
 
 	if err := m.Up(backend); err != nil {
-		if hasTransactions {
+		if useTransaction {
 			tx.Rollback()
 		} else {
 			// No transaction, so update the attempt to reflect
@@ -128,7 +130,10 @@ func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 	attempt.SetFinishedAt(time.Now())
 	attempt.SetComplete(true)
 	if err := backend.Update(attempt); err != nil {
-		if hasTransactions {
+		// Updating the attempt failed.
+
+		if useTransaction {
+			// Roll back the transaction.
 			tx.Rollback()
 		}
 
@@ -136,7 +141,7 @@ func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 			"Migration succeded, but could not update the attempt in the database")
 	}
 
-	if hasTransactions {
+	if useTransaction {
 		tx.Commit()
 	}
 
@@ -152,8 +157,11 @@ type Migration struct {
 	Name        string
 	Description string
 	SkipOnNew   bool // Determines if this migration can be skipped if setting up a new database.
-	Up          func(MigrationBackend) error
-	Down        func(MigrationBackend) error
+
+	// WrapTransaction specifies if the whole migration should be wrapped in a transaction.
+	WrapTransaction bool
+	Up              func(MigrationBackend) error
+	Down            func(MigrationBackend) error
 }
 
 /**
