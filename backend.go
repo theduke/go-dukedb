@@ -670,7 +670,8 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	if err := CallModelHook(b, model, "BeforeCreate"); err != nil {
 		return err
 	}
-	if err := CallModelHook(b, model, "Validate"); err != nil {
+
+	if err := ValidateModel(info, model); err != nil {
 		return err
 	}
 
@@ -712,7 +713,7 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	if err := CallModelHook(b, model, "BeforeUpdate"); err != nil {
 		return err
 	}
-	if err := CallModelHook(b, model, "Validate"); err != nil {
+	if err := ValidateModel(info, model); err != nil {
 		return err
 	}
 

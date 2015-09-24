@@ -19,6 +19,7 @@ func TestBackend(backend db.Backend) {
 		backend.RegisterModel(&TestModel{})
 		backend.RegisterModel(&TestParent{})
 		backend.RegisterModel(&HooksModel{})
+		backend.RegisterModel(&ValidationsModel{})
 		backend.BuildRelationshipInfo()
 
 		Expect(backend.GetDebug()).To(Equal(true))
@@ -486,59 +487,161 @@ func TestBackend(backend db.Backend) {
 		Expect(m).To(BeNil())
 	})
 
-	// Hooks tests.
-	It("Should call before/afterCreate + Validate hooks", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-		Expect(m.CalledHooks).To(Equal([]string{"before_create", "validate", "after_create"}))
+	Describe("Hooks", func() {
+		// Hooks tests.
+		It("Should call before/afterCreate + Validate hooks", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+			Expect(m.CalledHooks).To(Equal([]string{"before_create", "validate", "after_create"}))
+		})
+
+		It("Should stop on error in BeforeCreate()", func() {
+			m := &HooksModel{HookError: true}
+			Expect(backend.Create(m)).To(Equal(&apperror.Err{Code: "before_create"}))
+		})
+
+		It("Should call before/afterUpdate hooks", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+
+			m.CalledHooks = nil
+
+			Expect(backend.Update(m)).ToNot(HaveOccurred())
+			Expect(m.CalledHooks).To(Equal([]string{"before_update", "validate", "after_update"}))
+		})
+
+		It("Should stop on error in BeforeUpdate()", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+			m.HookError = true
+			Expect(backend.Update(m)).To(Equal(&apperror.Err{Code: "before_update"}))
+		})
+
+		It("Should call before/afterDelete hooks", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+
+			m.CalledHooks = nil
+
+			Expect(backend.Delete(m)).ToNot(HaveOccurred())
+			Expect(m.CalledHooks).To(Equal([]string{"before_delete", "after_delete"}))
+		})
+
+		It("Should stop on error in BeforeDelete()", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+			m.HookError = true
+			Expect(backend.Delete(m)).To(Equal(&apperror.Err{Code: "before_delete"}))
+		})
+
+		It("Should call AfterQuery hook", func() {
+			m := &HooksModel{}
+			Expect(backend.Create(m)).ToNot(HaveOccurred())
+			m.CalledHooks = nil
+
+			m2, err := backend.FindOne("hooks_models", m.ID)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(m2.(*HooksModel).CalledHooks).To(Equal([]string{"after_query"}))
+		})
 	})
 
-	It("Should stop on error in BeforeCreate()", func() {
-		m := &HooksModel{HookError: true}
-		Expect(backend.Create(m)).To(Equal(&apperror.Err{Code: "before_create"}))
+	Describe("Model validations", func() {
+
+		It("Should fail on empty not-null string", func() {
+			m := &ValidationsModel{
+				NotNullInt:      1,
+				ValidatedString: "123456",
+				ValidatedInt:    6,
+
+				NotNullString: "",
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("empty_required_field"))
+		})
+
+		It("Should fail on empty not-null int", func() {
+			m := &ValidationsModel{
+				NotNullString:   "x",
+				ValidatedString: "123456",
+				ValidatedInt:    6,
+
+				NotNullInt: 0,
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("empty_required_field"))
+		})
+
+		It("Should fail on minimum restraint string", func() {
+			m := &ValidationsModel{
+				NotNullString: "x",
+				ValidatedInt:  6,
+				NotNullInt:    1,
+
+				ValidatedString: "t",
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("shorter_than_min_length"))
+		})
+
+		It("Should fail on maximum restraint string", func() {
+			m := &ValidationsModel{
+				NotNullString: "x",
+				ValidatedInt:  6,
+				NotNullInt:    1,
+
+				ValidatedString: "tttttttttttt",
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("longer_than_max_length"))
+		})
+
+		It("Should fail on minimum restraint int", func() {
+			m := &ValidationsModel{
+				NotNullString:   "x",
+				NotNullInt:      1,
+				ValidatedString: "tttttt",
+
+				ValidatedInt: 1,
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("shorter_than_min_length"))
+		})
+
+		It("Should fail on maximum restraint int", func() {
+			m := &ValidationsModel{
+				NotNullString:   "x",
+				NotNullInt:      1,
+				ValidatedString: "tttttt",
+
+				ValidatedInt: 11,
+			}
+
+			err := backend.Create(m)
+			Expect(err).To(HaveOccurred())
+			Expect(err.(apperror.Error).GetCode()).To(Equal("longer_than_max_length"))
+		})
+
+		It("Should create correctly within restraints", func() {
+			m := &ValidationsModel{
+				NotNullString:   "x",
+				NotNullInt:      1,
+				ValidatedString: "tttttttttt",
+				ValidatedInt:    5,
+			}
+
+			err := backend.Create(m)
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
-	It("Should call before/afterUpdate hooks", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-
-		m.CalledHooks = nil
-
-		Expect(backend.Update(m)).ToNot(HaveOccurred())
-		Expect(m.CalledHooks).To(Equal([]string{"before_update", "validate", "after_update"}))
-	})
-
-	It("Should stop on error in BeforeUpdate()", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-		m.HookError = true
-		Expect(backend.Update(m)).To(Equal(&apperror.Err{Code: "before_update"}))
-	})
-
-	It("Should call before/afterDelete hooks", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-
-		m.CalledHooks = nil
-
-		Expect(backend.Delete(m)).ToNot(HaveOccurred())
-		Expect(m.CalledHooks).To(Equal([]string{"before_delete", "after_delete"}))
-	})
-
-	It("Should stop on error in BeforeDelete()", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-		m.HookError = true
-		Expect(backend.Delete(m)).To(Equal(&apperror.Err{Code: "before_delete"}))
-	})
-
-	It("Should call AfterQuery hook", func() {
-		m := &HooksModel{}
-		Expect(backend.Create(m)).ToNot(HaveOccurred())
-		m.CalledHooks = nil
-
-		m2, err := backend.FindOne("hooks_models", m.ID)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(m2.(*HooksModel).CalledHooks).To(Equal([]string{"after_query"}))
-	})
 }

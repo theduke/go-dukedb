@@ -1106,6 +1106,65 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Model hooks.
  */
 
+func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
+	val := reflect.ValueOf(m).Elem()
+
+	for fieldName, fieldInfo := range info.FieldInfo {
+
+		if fieldInfo.NotNull && !fieldInfo.PrimaryKey {
+			fieldVal := val.FieldByName(fieldName)
+
+			if IsZero(fieldVal.Interface()) {
+				return &apperror.Err{
+					Code:    "empty_required_field",
+					Message: fmt.Sprintf("The required field %v is empty", fieldName),
+				}
+			}
+		} else if fieldInfo.Min > 0 || fieldInfo.Max > 0 {
+			// Either min or max is set, so check length.
+			fieldVal := val.FieldByName(fieldName)
+
+			var length float64
+
+			if fieldInfo.Type.Kind() == reflect.String {
+				length = float64(fieldVal.Len())
+			} else if IsNumericKind(fieldInfo.Type.Kind()) {
+				length = fieldVal.Convert(reflect.TypeOf(float64(0))).Interface().(float64)
+			} else {
+				// Not string or numeric, so can't check.
+				continue
+			}
+
+			if fieldInfo.Min > 0 && length < fieldInfo.Min {
+				return &apperror.Err{
+					Code:    "shorter_than_min_length",
+					Message: fmt.Sprintf("The field %v is shorter than the minimum length %v", fieldName, fieldInfo.Min),
+				}
+			} else if fieldInfo.Max > 0 && length > fieldInfo.Max {
+				return &apperror.Err{
+					Code:    "longer_than_max_length",
+					Message: fmt.Sprintf("The field %v is longer than the maximum length %v", fieldName, fieldInfo.Max),
+				}
+			}
+		}
+	}
+
+	// If the model implements ModelValidateHook, call it.
+	if validator, ok := m.(ModelValidateHook); ok {
+		if err := validator.Validate(); err != nil {
+			// Check if error is an apperror, and return it if so.
+			if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				// Not an apperror, so create a new one.
+				return apperror.New(err.Error())
+			}
+		}
+	}
+
+	return nil
+}
+
 func CallModelHook(b Backend, m interface{}, hook string) apperror.Error {
 	switch hook {
 	case "Validate":

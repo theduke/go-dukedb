@@ -73,6 +73,20 @@ func (h *HooksModel) AfterQuery(Backend) {
 	h.CalledHooks = append(h.CalledHooks, "after_query")
 }
 
+type ValidationsModel struct {
+	TestModel
+
+	NotNullString string `db:"not-null"`
+	NotNullInt    int    `db:"not-null"`
+
+	ValidatedString string `db:"min:5;max:10"`
+	ValidatedInt    int    `db:"min:5;max:10"`
+}
+
+func (m *ValidationsModel) Collection() string {
+	return "validations_models"
+}
+
 type TestParent struct {
 	TestModel
 
