@@ -3,6 +3,7 @@ package dukedb
 import (
 	"fmt"
 	"strconv"
+	"time"
 )
 
 /**
@@ -162,5 +163,25 @@ func (m *IntIDModel) SetStrID(rawId string) error {
 	}
 
 	m.ID = id
+	return nil
+}
+
+/**
+ * Timestamped model with createdAt and UpdatedAt.
+ */
+
+type TimeStampedModel struct {
+	CreatedAt time.Time `db:"not-null"`
+	UpdatedAt time.Time `db:"not-null"`
+}
+
+func (m *TimeStampedModel) BeforeCreate(b Backend) error {
+	m.CreatedAt = time.Now()
+	m.UpdatedAt = time.Now()
+	return nil
+}
+
+func (m *TimeStampedModel) BeforeUpdate(b Backend) error {
+	m.UpdatedAt = time.Now()
 	return nil
 }
