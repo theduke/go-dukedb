@@ -120,7 +120,7 @@ func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 		return nil, err
 	}
 
-	info := ModelInfo{
+	info := &ModelInfo{
 		Item:       reflect.New(typ).Interface(),
 		FullName:   typ.PkgPath() + "." + typ.Name(),
 		Name:       typ.Name(),
@@ -157,7 +157,11 @@ func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 		if fieldInfo.PrimaryKey {
 			fieldInfo.NotNull = true
 			fieldInfo.IgnoreIfZero = true
-			fieldInfo.Unique = true
+
+			// Only set unique to true if no unique-with was specified.
+			if fieldInfo.UniqueWith == nil {
+				fieldInfo.Unique = true
+			}
 
 			// On numeric fields, activate autoincrement.
 			// TODO: allow a way to disable autoincrement with a tag.
@@ -177,7 +181,7 @@ func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 			fmt.Sprintf("Primary key could not be determined for model %v", info.Name))
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 func (m ModelInfo) HasField(name string) bool {
@@ -292,6 +296,14 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 			info.NotNull = true
 			info.IgnoreIfZero = true
 
+		case "index":
+			if value == "" {
+				// Set a default name for the index.
+				// The buildFieldInfo function will create a proper name later.
+				value = "index"
+			}
+			info.Index = value
+
 		case "default":
 			if value == "" {
 				return nil, apperror.New("invalid_default", "default specifier must be in format default:value")
@@ -403,6 +415,11 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 		// Default marshal name.
 		if fieldInfo.MarshalName == "" {
 			fieldInfo.MarshalName = LowerCaseFirst(fieldInfo.Name)
+		}
+
+		// If index is set to the default value "index", fill in a proper name.
+		if fieldInfo.Index == "index" {
+			fieldInfo.Index = info.BackendName + "_" + fieldInfo.BackendName
 		}
 
 		info.FieldInfo[fieldType.Name] = fieldInfo
