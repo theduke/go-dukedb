@@ -107,7 +107,7 @@ func ColumnStatement(d Dialect, info *ColumnInfo) string {
 		stmt += " CHECK(" + info.Constraints + ")"
 	}
 	if info.Default != "" {
-		stmt += " DEFAULT " + info.Default
+		stmt += " DEFAULT " + d.QuoteValue(info.Default)
 	}
 	if info.Unique {
 		stmt += " UNIQUE"

@@ -223,6 +223,19 @@ func (b *Backend) CreateCollection(collection string) apperror.Error {
 		return apperror.Wrap(err, "create_table_failed")
 	}
 
+	// Create indexes.
+	for name, column := range tableInfo.Columns {
+		if column.Index == "" {
+			continue
+		}
+
+		stmt := b.dialect.CreateIndexStatement(column.Index, tableInfo.Name, []string{name})
+		if _, err := b.SqlExec(stmt); err != nil {
+			msg := fmt.Sprintf("Could not create index %v on %v.%v", column.Index, tableInfo.Name, column.Name)
+			return apperror.Wrap(err, "create_index_failed", msg)
+		}
+	}
+
 	// Create m2m tables.
 	for name := range info.FieldInfo {
 		field := info.FieldInfo[name]
@@ -560,6 +573,7 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 	collection := q.GetCollection()
 	info, err := b.InfoForCollection(collection)
+	fmt.Printf("info: %+v\n", b.AllModelInfo())
 	if err != nil {
 		return nil, err
 	}

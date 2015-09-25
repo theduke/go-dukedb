@@ -24,6 +24,10 @@ func (d PostgresDialect) HasTransactions() bool {
 	return true
 }
 
+func (d PostgresDialect) QuoteValue(value string) string {
+	return `'` + value + `'`
+}
+
 func (d PostgresDialect) ReplacementCharacter() string {
 	return "${}$"
 }

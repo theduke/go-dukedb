@@ -13,6 +13,7 @@ type Dialect interface {
 
 	ReplacementCharacter() string
 	Quote(string) string
+	QuoteValue(string) string
 	QuoteMany([]string) string
 
 	ColumnType(*db.FieldInfo) string
@@ -57,6 +58,10 @@ func (d BaseDialect) ReplacementCharacter() string {
 
 func (d BaseDialect) Quote(id string) string {
 	return "\"" + strings.Replace(id, "\"", "", -1) + "\""
+}
+
+func (d BaseDialect) QuoteValue(value string) string {
+	return `"` + value + `"`
 }
 
 func (d BaseDialect) QuoteMany(ids []string) string {
