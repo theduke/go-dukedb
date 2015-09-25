@@ -163,9 +163,13 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 		}
 	}
 
-	// If target is string, use fmt.
+	// Special handling for string target.
 	if kind == reflect.String {
-		return fmt.Sprintf("%v", value), nil
+		if bytes, ok := value.([]byte); ok {
+			return string(bytes), nil
+		}
+
+		return fmt.Sprintf("%s", value), nil
 	}
 
 	// If value is string, and target type is numeric,
@@ -1008,6 +1012,23 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, apperror.Error) {
 	return js, nil
 }
 
+// ModelFieldDiff compares two models and returns a list of fields that are different.
+func ModelFieldDiff(info *ModelInfo, m1, m2 interface{}) []string {
+	m1Data, _ := ModelToMap(info, m1, false, false)
+	m2Data, _ := ModelToMap(info, m2, false, false)
+
+	diff := make([]string, 0)
+	for key, m1Val := range m1Data {
+		if m2Val, ok := m2Data[key]; ok {
+			if m1Val != m2Val {
+				diff = append(diff, key)
+			}
+		}
+	}
+
+	return diff
+}
+
 func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, apperror.Error) {
 	model, err := NewStruct(info.Item)
 	if err != nil {
@@ -1195,12 +1216,26 @@ func CallModelHook(b Backend, m interface{}, hook string) apperror.Error {
 	switch hook {
 	case "Validate":
 		if h, ok := m.(ModelValidateHook); ok {
-			return h.Validate()
+			err := h.Validate()
+			if err == nil {
+				return nil
+			} else if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				return apperror.Wrap(err, "validation_error")
+			}
 		}
 		return nil
 	case "BeforeCreate":
 		if h, ok := m.(ModelBeforeCreateHook); ok {
-			return h.BeforeCreate(b)
+			err := h.BeforeCreate(b)
+			if err == nil {
+				return nil
+			} else if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				return apperror.Wrap(err, "before_create_error")
+			}
 		}
 		return nil
 	case "AfterCreate":
@@ -1210,7 +1245,14 @@ func CallModelHook(b Backend, m interface{}, hook string) apperror.Error {
 		return nil
 	case "BeforeUpdate":
 		if h, ok := m.(ModelBeforeUpdateHook); ok {
-			return h.BeforeUpdate(b)
+			err := h.BeforeUpdate(b)
+			if err == nil {
+				return nil
+			} else if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				return apperror.Wrap(err, "before_update_error")
+			}
 		}
 		return nil
 	case "AfterUpdate":
@@ -1220,7 +1262,14 @@ func CallModelHook(b Backend, m interface{}, hook string) apperror.Error {
 		return nil
 	case "BeforeDelete":
 		if h, ok := m.(ModelBeforeDeleteHook); ok {
-			return h.BeforeDelete(b)
+			err := h.BeforeDelete(b)
+			if err == nil {
+				return nil
+			} else if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				return apperror.Wrap(err, "before_create_error")
+			}
 		}
 		return nil
 	case "AfterDelete":

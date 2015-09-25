@@ -353,11 +353,11 @@ type ModelStrIDSetterHook interface {
 }
 
 type ModelValidateHook interface {
-	Validate() apperror.Error
+	Validate() error
 }
 
 type ModelBeforeCreateHook interface {
-	BeforeCreate(Backend) apperror.Error
+	BeforeCreate(Backend) error
 }
 
 type ModelAfterCreateHook interface {
@@ -365,7 +365,7 @@ type ModelAfterCreateHook interface {
 }
 
 type ModelBeforeUpdateHook interface {
-	BeforeUpdate(Backend) apperror.Error
+	BeforeUpdate(Backend) error
 }
 
 type ModelAfterUpdateHook interface {
@@ -373,7 +373,7 @@ type ModelAfterUpdateHook interface {
 }
 
 type ModelBeforeDeleteHook interface {
-	BeforeDelete(Backend) apperror.Error
+	BeforeDelete(Backend) error
 }
 
 type ModelAfterDeleteHook interface {
