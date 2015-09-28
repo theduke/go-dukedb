@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/theduke/go-apperror"
 
@@ -382,12 +383,22 @@ func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []i
 
 		sql = cond.Field + " " + operator
 		if filterName == "in" {
-			sql += " (" + b.dialect.ReplacementCharacter() + ")"
+			slice := reflect.ValueOf(cond.Value)
+			if slice.Type().Kind() != reflect.Slice {
+				panic("Non-slice condition value for IN query")
+			}
+
+			replacements := make([]string, 0)
+			for i := 0; i < slice.Len(); i++ {
+				replacements = append(replacements, b.dialect.ReplacementCharacter())
+				args = append(args, slice.Index(i).Interface())
+			}
+
+			sql += " (" + strings.Join(replacements, ",") + ")"
 		} else {
 			sql += " " + b.dialect.ReplacementCharacter()
+			args = append(args, cond.Value)
 		}
-
-		args = append(args, cond.Value)
 
 		return sql, args
 	}
@@ -519,7 +530,12 @@ func (b *Backend) QuerySql(sql string, args []interface{}) ([]map[string]interfa
 
 		data := make(map[string]interface{})
 		for i, col := range cols {
-			data[col] = vals[i]
+			val := vals[i]
+			if bytes, ok := val.([]byte); ok {
+				val = string(bytes)
+			}
+
+			data[col] = val
 		}
 		result = append(result, data)
 	}
@@ -573,7 +589,6 @@ func (b *Backend) querySqlModels(info *db.ModelInfo, sql string, args []interfac
 func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 	collection := q.GetCollection()
 	info, err := b.InfoForCollection(collection)
-	fmt.Printf("info: %+v\n", b.AllModelInfo())
 	if err != nil {
 		return nil, err
 	}
@@ -605,6 +620,49 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 		if err := db.BackendDoJoins(b, q.GetCollection(), models, q.GetJoins()); err != nil {
 			return nil, apperror.Wrap(err, "join_error")
 		}
+	}
+
+	if q.GetJoinType() == "m2m" {
+
+		// For m2m, a custom join result assigner has to be used,
+		// because the resulting models do not contain the m2m fields
+		// neccessary for mapping the join result.
+		q.SetJoinResultAssigner(func(objs, joinedModels []interface{}, joinQ db.RelationQuery) {
+			targetField := joinQ.GetRelationName()
+			joinedField := joinQ.GetJoinFieldName()
+
+			joinField := joinQ.GetForeignFieldName()
+			parts := strings.Split(joinField, ".")
+			joinField = parts[len(parts)-1]
+
+			parentCollection := joinQ.GetBaseQuery().GetCollection()
+			parentInfo := b.ModelInfo(parentCollection)
+			joinedFieldType := parentInfo.GetField(joinedField).Type
+
+			mapper := make(map[interface{}][]interface{})
+			for index, row := range result {
+				val := row[joinField]
+
+				// Need to convert the value to the proper type.
+				convertedVal, err := db.Convert(val, joinedFieldType)
+				if err != nil {
+					panic(err)
+				}
+
+				mapper[convertedVal] = append(mapper[convertedVal], joinedModels[index])
+			}
+
+			for _, model := range objs {
+				val, err := db.GetStructFieldValue(model, joinedField)
+				if err != nil {
+					panic("Join result assignment error: " + err.Error())
+				}
+
+				if joins, ok := mapper[val]; ok && len(joins) > 0 {
+					db.SetStructModelField(model, targetField, joins)
+				}
+			}
+		})
 	}
 
 	return models, nil
@@ -666,6 +724,10 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 		data, err := db.ModelToMap(info, m, true, false)
 		if err != nil {
 			return err
+		}
+
+		if len(data) == 0 {
+			return apperror.New("empty_model_data", "Can't create a model with empty data")
 		}
 
 		tableInfo := b.TableInfo[info.BackendName]

@@ -289,7 +289,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			foreignFieldName = relatedInfo.PkField
 		}
 	} else if q.GetRelationName() != "" {
-		// query for a known relationship reflectet in the model struct.
+		// query for a known relationship reflected in the model struct.
 		relInfo, ok := baseInfo.FieldInfo[q.GetRelationName()]
 		if !ok {
 			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.GetCollection(), q.GetRelationName()))
@@ -314,6 +314,8 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			// RelatedQuery fields here.
 			q.SetJoinFieldName(joinField)
 			q.SetForeignFieldName(relInfo.HasOneForeignField)
+
+			newQuery.SetJoinType("has-one")
 		} else if relInfo.BelongsTo {
 			joinField = relInfo.BelongsToField
 			foreignFieldName = relatedInfo.FieldInfo[relInfo.BelongsToForeignField].Name
@@ -324,6 +326,8 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			// RelatedQuery fields here.
 			q.SetJoinFieldName(joinField)
 			q.SetForeignFieldName(relInfo.BelongsToForeignField)
+
+			newQuery.SetJoinType("belongs-to")
 		} else if relInfo.M2M {
 			joinField = baseInfo.PkField
 			foreignFieldName = relInfo.M2MCollection + "." + baseInfo.BackendName + "_" + baseInfo.GetPkField().BackendName
@@ -332,6 +336,11 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			relationColumn := relatedInfo.GetPkField().BackendName
 			joinQ := RelQCustom(newQuery, q.GetRelationName(), relInfo.M2MCollection, joinTableRelationColumn, relationColumn, InnerJoin)
 			newQuery.JoinQ(joinQ)
+
+			q.SetJoinFieldName(joinField)
+			q.SetForeignFieldName(foreignFieldName)
+
+			newQuery.SetJoinType("m2m")
 		}
 	}
 
@@ -351,8 +360,12 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 
 	if len(vals) > 1 {
 		newQuery = newQuery.FilterCond(foreignFieldName, "in", vals)
-	} else {
+	} else if len(vals) == 1 {
 		newQuery = newQuery.Filter(foreignFieldName, vals[0])
+	} else {
+		return nil, &apperror.Err{
+			Code: "relation_query_on_empty_result",
+		}
 	}
 
 	return newQuery, nil
@@ -491,11 +504,6 @@ func BackendPersistRelations(b Backend, info *ModelInfo, m interface{}, beforeCr
 			}
 
 			val, _ := GetStructFieldValue(m, fieldInfo.Name)
-			if IsZero(val) {
-				// Field is nil, so it probably was not joined.
-				// Therefore it is ignored.
-				continue
-			}
 
 			models, err := ConvertInterfaceToSlice(val)
 			if err != nil {
@@ -792,7 +800,14 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
  * Join logic.
  */
 
+type JoinAssigner func(objs, joinedModels []interface{}, joinQ RelationQuery)
+
 func BackendDoJoins(b Backend, model string, objs []interface{}, joins []RelationQuery) apperror.Error {
+	if len(objs) == 0 {
+		// Nothing to do if no objects.
+		return nil
+	}
+
 	handledJoins := make(map[string]bool)
 	nestedJoins := make([]RelationQuery, 0)
 
@@ -898,6 +913,11 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []Relatio
 func doJoin(b Backend, model string, objs []interface{}, joinQ RelationQuery) apperror.Error {
 	resultQuery, err := BuildRelationQuery(b, objs, joinQ)
 	if err != nil {
+		if apperror.IsCode(err, "relation_query_on_empty_result") {
+			// If the base result was empty, we just ignore this join.
+			return nil
+		}
+
 		return err
 	}
 
@@ -907,13 +927,21 @@ func doJoin(b Backend, model string, objs []interface{}, joinQ RelationQuery) ap
 	}
 
 	if len(res) > 0 {
-		assignJoinModels(objs, res, joinQ.GetRelationName(), joinQ.GetJoinFieldName(), joinQ.GetForeignFieldName())
+		if assigner := resultQuery.GetJoinResultAssigner(); assigner != nil {
+			assigner(objs, res, joinQ)
+		} else {
+			assignJoinModels(objs, res, joinQ)
+		}
 	}
 
 	return nil
 }
 
-func assignJoinModels(objs, joinedModels []interface{}, targetField, joinedField, joinField string) {
+func assignJoinModels(objs, joinedModels []interface{}, joinQ RelationQuery) {
+	targetField := joinQ.GetRelationName()
+	joinedField := joinQ.GetJoinFieldName()
+	joinField := joinQ.GetForeignFieldName()
+
 	mapper := make(map[interface{}][]interface{})
 	for _, model := range joinedModels {
 		val, _ := GetStructFieldValue(model, joinField)
@@ -921,7 +949,11 @@ func assignJoinModels(objs, joinedModels []interface{}, targetField, joinedField
 	}
 
 	for _, model := range objs {
-		val, _ := GetStructFieldValue(model, joinedField)
+		val, err := GetStructFieldValue(model, joinedField)
+		if err != nil {
+			panic("Join result assignment error: " + err.Error())
+		}
+
 		if joins, ok := mapper[val]; ok && len(joins) > 0 {
 			SetStructModelField(model, targetField, joins)
 		}

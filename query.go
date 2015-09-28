@@ -287,6 +287,19 @@ type DbQuery struct {
 	orders  []OrderSpec
 	fields  []string
 	filters []Filter
+
+	// joinType specifies the type of join that this query executes.
+	// For a regular query, it will be emptys
+	// For a query that executes a join, it will be either "m2m", "belongs-to" or "has-one".
+	joinType string
+
+	// joinResultAssigner can hold a function that will take care of assigning the results
+	// of a join query to the parent models. This is needed for m2m joins, since models
+	// obtained by executing the query will not hold the neccessary fields for mapping
+	// the query result to the parent objects.
+	// For example, the SQL backend will use a closure to keep track of the raw query
+	// result and assign based on it.
+	joinResultAssigner JoinAssigner
 }
 
 // Ensure DbQuery implements Query.
@@ -300,6 +313,22 @@ func Q(collection string) Query {
 
 func (q *DbQuery) GetCollection() string {
 	return q.collection
+}
+
+func (q *DbQuery) GetJoinType() string {
+	return q.joinType
+}
+
+func (q *DbQuery) SetJoinType(x string) {
+	q.joinType = x
+}
+
+func (q *DbQuery) GetJoinResultAssigner() JoinAssigner {
+	return q.joinResultAssigner
+}
+
+func (q *DbQuery) SetJoinResultAssigner(x JoinAssigner) {
+	q.joinResultAssigner = x
 }
 
 /**

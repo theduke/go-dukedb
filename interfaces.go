@@ -66,6 +66,19 @@ type Query interface {
 	GetJoin(field string) RelationQuery
 	GetJoins() []RelationQuery
 
+	// GetJoinType specifies the type of join that is fullfilled by this query.
+	GetJoinType() string
+
+	// SetJoinType sets the type of join that is fullfilled by this query.
+	SetJoinType(typ string)
+
+	// Can return a function that takes care of assigning join results.
+	GetJoinResultAssigner() JoinAssigner
+
+	// Specify a function that takes care of assigning join results.
+	// Needed for example in the sql backend for M2M joins.
+	SetJoinResultAssigner(assigner JoinAssigner)
+
 	// Related.
 
 	Related(name string) RelationQuery
@@ -248,6 +261,7 @@ type Backend interface {
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
+	// The third skip parameter is true when the base query does not contain any results.
 	BuildRelationQuery(q RelationQuery) (Query, apperror.Error)
 
 	// Return a M2MCollection instance for a model, which allows

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/theduke/go-apperror"
 )
@@ -114,6 +115,10 @@ func IsNumericKind(kind reflect.Kind) bool {
 }
 
 func IsZero(val interface{}) bool {
+	if val == nil {
+		return true
+	}
+
 	reflVal := reflect.ValueOf(val)
 	reflType := reflVal.Type()
 
@@ -152,6 +157,17 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 		return value, nil
 	}
 
+	// Parse dates into time.Time.
+	isTime := kind == reflect.Struct && typ.PkgPath() == "time" && typ.Name() == "Time"
+
+	if isTime && valKind == reflect.String {
+		date, err := time.Parse(time.RFC3339, value.(string))
+		if err != nil {
+			return nil, apperror.Wrap(err, "time_parse_error", "Invalid time format", true)
+		}
+		return date, nil
+	}
+
 	// Special handling for string to bool.
 	if kind == reflect.String && valKind == reflect.Bool {
 		str := strings.TrimSpace(value.(string))
@@ -169,7 +185,7 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 			return string(bytes), nil
 		}
 
-		return fmt.Sprintf("%s", value), nil
+		return fmt.Sprintf("%v", value), nil
 	}
 
 	// If value is string, and target type is numeric,
