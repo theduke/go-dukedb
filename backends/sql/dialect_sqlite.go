@@ -81,6 +81,10 @@ func (d Sqlite3Dialect) TableConstraintStatements(info *TableInfo) []string {
 	return stmts
 }
 
+func (d Sqlite3Dialect) AlterAutoIncrementIndexStatement(info *TableInfo, column string, index int) string {
+	return ""
+}
+
 func (d Sqlite3Dialect) CreateIndexStatement(name, table string, columnNames []string) string {
 	return CreateIndexStatement(d, name, table, columnNames)
 }

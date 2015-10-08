@@ -223,6 +223,44 @@ func (m ModelInfo) MapMarshalName(name string) string {
 	return ""
 }
 
+// Tries to determine the backend name by checking struct field names, MarshalName and
+// BackendName. Returns the backend field name, or an empty string if not found.
+func (m ModelInfo) FindBackendFieldName(name string) string {
+	if m.HasField(name) {
+		return m.GetField(name).BackendName
+	}
+
+	for _, fieldInfo := range m.FieldInfo {
+		if fieldInfo.BackendName == name {
+			return name
+		}
+		if fieldInfo.MarshalName == name {
+			return fieldInfo.BackendName
+		}
+	}
+
+	return ""
+}
+
+// Tries to determine the struct field name by checking struct field names, MarshalName and
+// BackendName. Returns the struct field name, or an empty string if not found.
+func (m ModelInfo) FindStructFieldName(name string) string {
+	if m.HasField(name) {
+		return name
+	}
+
+	for _, fieldInfo := range m.FieldInfo {
+		if fieldInfo.BackendName == name {
+			return fieldInfo.Name
+		}
+		if fieldInfo.MarshalName == name {
+			return fieldInfo.Name
+		}
+	}
+
+	return ""
+}
+
 // Return the field info for a given name.
 func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
 	for key := range m.FieldInfo {
@@ -375,15 +413,26 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName string) apperror.Error {
 	modelType := modelVal.Type()
 
+	// First build the info for embedded structs, since the random ordering of struct fields
+	// by reflect might mean that an overwritting field is not picked up on, and the nested
+	// field is put in FieldInfo instead.
+
 	for i := 0; i < modelVal.NumField(); i++ {
 		field := modelVal.Field(i)
 		fieldType := modelType.Field(i)
 		fieldKind := fieldType.Type.Kind()
 
-		// Skip fields that  were already defined in parent model.
-		if embeddedName != "" && info.HasField(fieldType.Name) {
-			continue
+		if fieldKind == reflect.Struct && fieldType.Anonymous {
+			// Embedded struct. Find nested fields.
+			if err := info.buildFieldInfo(field, fieldType.Name); err != nil {
+				return err
+			}
 		}
+	}
+
+	for i := 0; i < modelVal.NumField(); i++ {
+		fieldType := modelType.Field(i)
+		fieldKind := fieldType.Type.Kind()
 
 		// Ignore private fields.
 		firstChar := fieldType.Name[0:1]
@@ -391,11 +440,8 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 			continue
 		}
 
+		// Ignore embedded structs, which were handled above.
 		if fieldKind == reflect.Struct && fieldType.Anonymous {
-			// Embedded struct. Find nested fields.
-			if err := info.buildFieldInfo(field, fieldType.Name); err != nil {
-				return err
-			}
 			continue
 		}
 

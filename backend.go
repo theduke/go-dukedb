@@ -306,7 +306,7 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 
 		if relInfo.HasOne {
 			joinField = relInfo.HasOneField
-			foreignFieldName = baseInfo.FieldInfo[relInfo.HasOneForeignField].Name
+			foreignFieldName = relatedInfo.FieldInfo[relInfo.HasOneForeignField].Name
 
 			// Set field names on query so Join logic can use it.
 			// Attention: ususally these fields contain the converted names,
@@ -702,12 +702,12 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 		return err
 	}
 
-	if err := ValidateModel(info, model); err != nil {
+	// Persist relationships before create.
+	if err := BackendPersistRelations(b, info, model, true); err != nil {
 		return err
 	}
 
-	// Persist relationships before create.
-	if err := BackendPersistRelations(b, info, model, true); err != nil {
+	if err := ValidateModel(info, model); err != nil {
 		return err
 	}
 

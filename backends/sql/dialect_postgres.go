@@ -73,10 +73,13 @@ func (d PostgresDialect) ColumnType(info *db.FieldInfo) string {
 		}
 		return "text"
 
-	case reflect.Struct:
-		typ := info.Type.PkgPath() + "." + info.Type.Name()
-		if typ == "time.Time" {
+	case reflect.Struct, reflect.Ptr:
+		if info.StructType == "time.Time" {
 			return "timestamp with time zone"
+		}
+
+		if strings.HasSuffix(info.StructType, "go-dukedb.Point") {
+			return "point"
 		}
 
 	case reflect.Map:
@@ -118,6 +121,10 @@ func (d PostgresDialect) TableConstraintStatements(info *TableInfo) []string {
 	return stmts
 }
 
+func (d PostgresDialect) AlterAutoIncrementIndexStatement(info *TableInfo, column string, index int) string {
+	return fmt.Sprintf("ALTER SEQUENCE %v_%v_seq RESTART WITH %v", info.Name, column, index)
+}
+
 func (d PostgresDialect) CreateIndexStatement(name, table string, columnNames []string) string {
 	return CreateIndexStatement(d, name, table, columnNames)
 }
@@ -147,7 +154,40 @@ func (d PostgresDialect) DropColumnStatement(table, name string) string {
 }
 
 func (d PostgresDialect) InsertMapStatement(tableInfo *TableInfo, data map[string]interface{}) (string, []interface{}) {
-	stmt, args := InsertMapStatement(d, tableInfo.Name, data)
+	stmt := "INSERT INTO " + d.Quote(tableInfo.Name) + " "
+
+	columns := make([]string, 0)
+	replacements := make([]string, 0)
+	args := make([]interface{}, 0)
+
+	for key := range data {
+		columns = append(columns, d.Quote(key))
+
+		// Need to customly handle point type.
+		if tableInfo.Columns[key].Type == "point" {
+			rawPoint := data[key]
+			val := reflect.ValueOf(rawPoint)
+
+			if val.Type().Kind() == reflect.Ptr {
+				if val.IsNil() {
+					// Ignoren nil pointers.
+					continue
+				}
+				rawPoint = val.Elem().Interface()
+			}
+
+			point := rawPoint.(db.Point)
+
+			replacements = append(replacements, "POINT("+d.ReplacementCharacter()+","+d.ReplacementCharacter()+")")
+			args = append(args, point.Lat, point.Lon)
+		} else {
+			replacements = append(replacements, d.ReplacementCharacter())
+			args = append(args, d.Value(data[key]))
+		}
+	}
+
+	stmt += "(" + strings.Join(columns, ", ") + ") "
+	stmt += "VALUES (" + strings.Join(replacements, ", ") + ")"
 
 	// Add RETURNING statement for autovalue fields.
 	returnColumns := make([]string, 0)

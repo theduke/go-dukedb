@@ -224,6 +224,18 @@ func (b *Backend) CreateCollection(collection string) apperror.Error {
 		return apperror.Wrap(err, "create_table_failed")
 	}
 
+	// Change the serial start value of auto-incrementing primary keys to start at 1 instead
+	// of zero.
+	pkField := info.GetField(info.PkField)
+	if pkField.AutoIncrement {
+		stmt = b.dialect.AlterAutoIncrementIndexStatement(tableInfo, pkField.BackendName, 1)
+		if stmt != "" {
+			if _, err := b.SqlExec(stmt); err != nil {
+				return apperror.Wrap(err, "alter_sequence_error", "Table was created, but sequence could not be altered to start at 1")
+			}
+		}
+	}
+
 	// Create indexes.
 	for name, column := range tableInfo.Columns {
 		if column.Index == "" {
@@ -593,6 +605,11 @@ func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
 		return nil, err
 	}
 
+	// Normalize the query.
+	if err := db.NormalizeQuery(info, q); err != nil {
+		return nil, err
+	}
+
 	spec, err := b.selectByQuery(q)
 	if err != nil {
 		return nil, err
@@ -684,9 +701,10 @@ func (b *Backend) Count(q db.Query) (int, apperror.Error) {
 		return 0, err
 	}
 
-	q.Fields("COUNT(*) as count")
+	newQ := b.Q(q.GetCollection()).Fields("COUNT(*) as count")
+	newQ.SetFilters(q.GetFilters()...)
 
-	spec, err := b.selectByQuery(q)
+	spec, err := b.selectByQuery(newQ)
 	if err != nil {
 		return -1, err
 	}
@@ -724,6 +742,14 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 		data, err := db.ModelToMap(info, m, true, false)
 		if err != nil {
 			return err
+		}
+
+		// Remove primary key from data if it is the zero value.
+		pkField := info.GetField(info.PkField).BackendName
+		if pk, ok := data[pkField]; ok {
+			if db.IsZero(pk) {
+				delete(data, pkField)
+			}
 		}
 
 		if len(data) == 0 {
@@ -859,6 +885,26 @@ func (b *Backend) DeleteMany(q db.Query) apperror.Error {
 	}
 
 	return nil
+}
+
+/**
+ * Related.
+ */
+
+func (b *Backend) Related(model interface{}, name string) (db.RelationQuery, apperror.Error) {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return nil, err
+	}
+
+	if !info.HasField(name) || !info.GetField(name).IsRelation() {
+		return nil, &apperror.Err{
+			Code:    "invalid_relation",
+			Message: fmt.Sprintf("The collection %v does not have a relation '%v'", name),
+		}
+	}
+
+	return b.Q(info.Collection).Filter(info.PkField, b.MustModelID(model)).Related(name), nil
 }
 
 /**

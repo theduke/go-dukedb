@@ -228,6 +228,10 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 		return nil, err
 	}
 
+	if err := db.NormalizeQuery(q); err != nil {
+		return nil, err
+	}
+
 	items := make([]interface{}, 0)
 
 	for _, item := range b.data[q.GetCollection()] {
@@ -304,6 +308,7 @@ func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, apperror.Err
 }
 
 func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
+
 	res, err := b.executeQuery(q)
 	if err != nil {
 		return nil, err

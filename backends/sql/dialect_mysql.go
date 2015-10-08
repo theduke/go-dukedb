@@ -104,6 +104,10 @@ func (d MysqlDialect) TableConstraintStatements(info *TableInfo) []string {
 	return stmts
 }
 
+func (d MysqlDialect) AlterAutoIncrementIndexStatement(info *TableInfo, column string, index int) string {
+	return fmt.Sprintf("ALTER TABLE %v AUTO_INCREMENT = %v", info.Name, index)
+}
+
 func (d MysqlDialect) CreateIndexStatement(name, table string, columnNames []string) string {
 	return CreateIndexStatement(d, name, table, columnNames)
 }

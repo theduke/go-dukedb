@@ -29,6 +29,32 @@ func ParseJsonQuery(collection string, js []byte) (Query, apperror.Error) {
 //
 // It returns a Query equal to the Mongo query, with unsupported features omitted.
 // An error is returned if the building of the query fails.
+//
+// Format: {
+//   // Order by field:
+//   order: "field",
+//  //  Order descending:
+//  order: "-field",
+//
+//  // Joins:
+//  joins: ["myJoin", "my.nestedJoin"],
+//
+//  // Filters:
+//  Filters conform to the mongo query syntax.
+//  See http://docs.mongodb.org/manual/reference/operator/query/.
+//  filters: {
+//  	id: "22",
+//    weight: {$gt: 222},
+//    type: {$in: ["type1", "type2"]}
+//  },
+//
+//  // Limiting:
+//  limit: 100,
+//
+//  // Offset:
+//  offset: 20
+// }
+//
 func ParseQuery(collection string, data map[string]interface{}) (Query, apperror.Error) {
 	q := Q(collection)
 
@@ -71,6 +97,8 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 			}
 		}
 	}
+
+	// Handle filters.
 
 	if rawQuery, ok := data["filters"]; ok {
 		query, ok := rawQuery.(map[string]interface{})
@@ -120,6 +148,53 @@ func ParseQuery(collection string, data map[string]interface{}) (Query, apperror
 				// Not nested, just add the field.
 				q.AddFields(field)
 			}
+		}
+	}
+
+	// Handle orders.
+	if rawOrders, ok := data["order"]; ok {
+		var orders []interface{}
+
+		// Order may either be a single string, or a list of strings.
+
+		if oneOrder, ok := rawOrders.(string); ok {
+			orders = []interface{}{oneOrder}
+		} else {
+			var ok bool
+			orders, ok = rawOrders.([]interface{})
+			if !ok {
+				return nil, &apperror.Err{
+					Code:    "invalid_orders",
+					Message: "Order specification must be an array",
+				}
+			}
+		}
+
+		for _, rawOrder := range orders {
+			field, ok := rawOrder.(string)
+			if !ok {
+				return nil, &apperror.Err{
+					Code:    "invalid_orders",
+					Message: "Order specification must be an array of strings.",
+				}
+			}
+
+			ascending := true
+			if field[0] == '-' {
+				ascending = false
+				field = strings.TrimLeft(field, "-")
+			} else if field[0] == '+' {
+				field = strings.TrimLeft(field, "-")
+			}
+
+			if field == "" {
+				return nil, &apperror.Err{
+					Code:    "invalid_orders_empty_field",
+					Message: "Order specification is empty",
+				}
+			}
+
+			q.Order(field, ascending)
 		}
 	}
 

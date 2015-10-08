@@ -589,7 +589,14 @@ func NewSlice(typ interface{}) interface{} {
 	// Build new array.
 	// See http://stackoverflow.com/questions/25384640/why-golang-reflect-makeslice-returns-un-addressable-value
 	// Create a slice to begin with
-	myType := reflect.TypeOf(typ)
+	var myType reflect.Type
+
+	if t, ok := typ.(reflect.Type); ok {
+		myType = t
+	} else {
+		myType = reflect.TypeOf(typ)
+	}
+
 	slice := reflect.MakeSlice(reflect.SliceOf(myType), 0, 0)
 
 	// Create a pointer to a slice value and set it to the slice
@@ -975,7 +982,9 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 		}
 
 		// Ignore zero values if specified.
-		if field.IgnoreIfZero && IsZero(val) {
+		// Note that numeric fields are not included, since 0 is their zero value.
+		// Also, primary keys are ignored.
+		if field.IgnoreIfZero && !field.PrimaryKey && !IsNumericKind(field.Type.Kind()) && IsZero(val) {
 			continue
 		}
 
@@ -1100,6 +1109,23 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 			continue
 		}
 
+		// Need special handling for point type.
+		if strings.HasSuffix(fieldInfo.StructType, "go-dukedb.Point") {
+			p := new(Point)
+			_, err := fmt.Sscanf(data[key].(string), "(%f,%f)", &p.Lat, &p.Lon)
+			if err != nil {
+				return &apperror.Err{
+					Code:    "point_conversion_error",
+					Message: fmt.Sprintf("Could not parse point specification: %v", data[key]),
+				}
+			}
+			if fieldInfo.Type.Kind() == reflect.Ptr {
+				data[key] = p
+			} else {
+				data[key] = *p
+			}
+		}
+
 		SetModelValue(fieldInfo, val.FieldByName(fieldInfo.Name), data[key])
 	}
 
@@ -1151,6 +1177,104 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
 }
 
 /**
+ * Query related.
+ */
+
+// NormalizeQuery perfoms multiple actions on queries to normalize them.
+// It accepts FieldInfo.BackendName, FieldInfo.Name and FieldInfo.MarshalName
+// for as field names in filters, field limitations and joins.
+// It also replaces an "id" filter with the primary key field,
+// if the model does not have an ID struct field.
+func NormalizeQuery(info *ModelInfo, query Query) apperror.Error {
+	// First, normalize field limitations.
+	fields := query.GetFields()
+	for index, fieldName := range fields {
+		backendName := info.FindBackendFieldName(fieldName)
+
+		if backendName == "" {
+			return &apperror.Err{
+				Code:    "invalid_field",
+				Message: fmt.Sprintf("Collection %v does not have a field %v", info.Collection, fieldName),
+				Public:  true,
+			}
+		}
+
+		fields[index] = backendName
+	}
+
+	// Next, normalize joins.
+	joins := query.GetJoins()
+	for _, join := range joins {
+		relationName := join.GetRelationName()
+
+		if relationName != "" {
+
+			fieldName := info.FindStructFieldName(relationName)
+			if fieldName != "" {
+				join.SetRelationName(fieldName)
+			}
+		}
+	}
+
+	// Now, check filters.
+	filters := query.GetFilters()
+	for _, filter := range filters {
+		if err := NormalizeFilter(info, filter); err != nil {
+			return err
+		}
+	}
+
+	// Finally, check orders.
+	orders := query.GetOrders()
+	for _, order := range orders {
+		// Replace id with actual primary key.
+		if order.Field == "id" && !info.HasField("id") {
+			order.Field = info.GetField(info.PkField).BackendName
+			continue
+		}
+
+		if field := info.FindBackendFieldName(order.Field); field != "" {
+			order.Field = field
+		}
+	}
+
+	return nil
+}
+
+func NormalizeFilter(info *ModelInfo, filter Filter) apperror.Error {
+	// Handle multi filters, by recursively checking them.
+	if multi, ok := filter.(MultiFilter); ok {
+		for _, f := range multi.GetFilters() {
+			if err := NormalizeFilter(info, f); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Handle field conditions.
+	if cond, ok := filter.(*FieldCondition); ok {
+		field := cond.Field
+
+		// If the filter is for "id", but the model does not have an id field,
+		// replace it with the PkField.
+		if field == "id" && !info.HasField("id") {
+			cond.SetField(info.GetField(info.PkField).BackendName)
+			return nil
+		}
+
+		backendName := info.FindBackendFieldName(field)
+		if backendName != "" {
+			cond.SetField(backendName)
+		}
+	}
+
+	// Unknown filter type, so ignore.
+
+	// No errors detected, return nil.
+	return nil
+}
+
+/**
  * Model hooks.
  */
 
@@ -1174,13 +1298,18 @@ func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
 			}
 		}
 
-		if fieldInfo.NotNull && !fieldInfo.PrimaryKey {
+		// If NotNull is set to true, and the field is not a primary key, validate that it is
+		// not zero.
+		// Note: numeric fields will not be checked, since their zero value is "0", which might
+		// be a valid field value.
+		if fieldInfo.NotNull && !fieldInfo.PrimaryKey && !IsNumericKind(fieldInfo.Type.Kind()) {
 			fieldVal := val.FieldByName(fieldName)
 
 			if IsZero(fieldVal.Interface()) {
 				return &apperror.Err{
 					Code:    "empty_required_field",
 					Message: fmt.Sprintf("The required field %v is empty", fieldName),
+					Public:  true,
 				}
 			}
 		} else if fieldInfo.Min > 0 || fieldInfo.Max > 0 {

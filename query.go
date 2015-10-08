@@ -15,6 +15,7 @@ type Filter interface {
 type MultiFilter interface {
 	Filter
 	Add(...Filter) MultiFilter
+	GetFilters() []Filter
 }
 
 /**
@@ -32,6 +33,10 @@ func (m multiFilter) Type() string {
 func (m *multiFilter) Add(filters ...Filter) MultiFilter {
 	m.Filters = append(m.Filters, filters...)
 	return m
+}
+
+func (m *multiFilter) GetFilters() []Filter {
+	return m.Filters
 }
 
 func (m *multiFilter) SetField(field string) Filter {
@@ -706,6 +711,10 @@ func (q *DbRelationQuery) SetBaseQuery(bq Query) {
 
 func (q *DbRelationQuery) GetRelationName() string {
 	return q.relationName
+}
+
+func (q *DbRelationQuery) SetRelationName(name string) {
+	q.relationName = name
 }
 
 func (q *DbRelationQuery) GetJoinType() string {

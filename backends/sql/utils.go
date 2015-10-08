@@ -160,6 +160,7 @@ func InsertMapStatement(d Dialect, table string, data map[string]interface{}) (s
 
 	for key := range data {
 		columns = append(columns, d.Quote(key))
+
 		replacements = append(replacements, d.ReplacementCharacter())
 		vals = append(vals, d.Value(data[key]))
 	}

@@ -29,6 +29,8 @@ type Dialect interface {
 	CreateTableStatement(info *TableInfo, ifExists bool) string
 	DropTableStatement(table string, ifExists bool) string
 
+	AlterAutoIncrementIndexStatement(info *TableInfo, column string, index int) string
+
 	ColumnStatement(*ColumnInfo) string
 	TableConstraintStatements(*TableInfo) []string
 

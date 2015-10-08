@@ -94,6 +94,8 @@ type RelationQuery interface {
 	SetBaseQuery(Query)
 
 	GetRelationName() string
+	SetRelationName(name string)
+
 	GetJoinType() string
 
 	GetJoinFieldName() string
@@ -263,6 +265,9 @@ type Backend interface {
 	// relation.
 	// The third skip parameter is true when the base query does not contain any results.
 	BuildRelationQuery(q RelationQuery) (Query, apperror.Error)
+
+	// Retrieve a query for a relationship.
+	Related(model interface{}, name string) (RelationQuery, apperror.Error)
 
 	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
