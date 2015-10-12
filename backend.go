@@ -604,6 +604,22 @@ func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []in
 	return models, nil
 }
 
+func BackendRelated(b Backend, model interface{}, name string) (RelationQuery, apperror.Error) {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return nil, err
+	}
+
+	if !info.HasField(name) || !info.GetField(name).IsRelation() {
+		return nil, &apperror.Err{
+			Code:    "invalid_relation",
+			Message: fmt.Sprintf("The collection %v does not have a relation '%v'", name),
+		}
+	}
+
+	return b.Q(info.Collection).Filter(info.PkField, b.MustModelID(model)).Related(name), nil
+}
+
 func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (interface{}, apperror.Error) {
 	res, err := b.Query(q)
 	if err != nil {

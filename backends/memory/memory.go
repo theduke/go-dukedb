@@ -228,7 +228,7 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 		return nil, err
 	}
 
-	if err := db.NormalizeQuery(q); err != nil {
+	if err := db.NormalizeQuery(info, q); err != nil {
 		return nil, err
 	}
 
@@ -440,6 +440,10 @@ func (b *Backend) DeleteMany(q db.Query) apperror.Error {
 	}
 
 	return nil
+}
+
+func (b *Backend) Related(model interface{}, name string) (db.RelationQuery, apperror.Error) {
+	return db.BackendRelated(b, model, name)
 }
 
 /**

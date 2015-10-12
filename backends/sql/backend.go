@@ -892,19 +892,7 @@ func (b *Backend) DeleteMany(q db.Query) apperror.Error {
  */
 
 func (b *Backend) Related(model interface{}, name string) (db.RelationQuery, apperror.Error) {
-	info, err := b.InfoForModel(model)
-	if err != nil {
-		return nil, err
-	}
-
-	if !info.HasField(name) || !info.GetField(name).IsRelation() {
-		return nil, &apperror.Err{
-			Code:    "invalid_relation",
-			Message: fmt.Sprintf("The collection %v does not have a relation '%v'", name),
-		}
-	}
-
-	return b.Q(info.Collection).Filter(info.PkField, b.MustModelID(model)).Related(name), nil
+	return db.BackendRelated(b, model, name)
 }
 
 /**
