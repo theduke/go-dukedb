@@ -473,11 +473,14 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.
 		}
 	}
 
-	items, _ := db.GetStructFieldValue(obj, name)
+	objVal := reflect.ValueOf(obj).Elem()
+	items := objVal.FieldByName(name)
 
 	col := M2MCollection{
-		Backend: b,
-		items:   reflect.ValueOf(items),
+		Backend:  b,
+		object:   objVal,
+		itemType: fieldInfo.Type.Elem(),
+		items:    items,
 	}
 
 	return &col, nil
@@ -486,7 +489,10 @@ func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.
 type M2MCollection struct {
 	Backend db.Backend
 	Name    string
-	items   reflect.Value
+
+	object   reflect.Value
+	itemType reflect.Type
+	items    reflect.Value
 }
 
 // Ensure that M2MCollection implements the db.M2MCollection interface at compile time.
@@ -559,9 +565,7 @@ func (c *M2MCollection) Clear() apperror.Error {
 }
 
 func (c *M2MCollection) Replace(items []interface{}) apperror.Error {
-	for i, item := range items {
-		c.items.Index(i).Set(reflect.ValueOf(item))
-	}
-	c.items.SetLen(len(items))
+	slice := db.InterfaceToTypedSlice(c.itemType, items)
+	c.items.Set(reflect.ValueOf(slice).Convert(reflect.SliceOf(c.itemType)))
 	return nil
 }

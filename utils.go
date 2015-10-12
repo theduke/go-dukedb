@@ -629,6 +629,16 @@ func ConvertInterfaceToSlice(slice interface{}) ([]interface{}, error) {
 	return result, nil
 }
 
+func InterfaceToTypedSlice(itemType reflect.Type, slice []interface{}) interface{} {
+	newSlice := reflect.ValueOf(NewSlice(itemType))
+
+	for _, item := range slice {
+		newSlice = reflect.Append(newSlice, reflect.ValueOf(item))
+	}
+
+	return newSlice.Interface()
+}
+
 // Convert a slice of type interface{} to a []Model slice.
 func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 	reflSlice := reflect.ValueOf(slice)
