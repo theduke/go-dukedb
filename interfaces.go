@@ -280,7 +280,18 @@ type Backend interface {
 	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
 	Delete(model interface{}) apperror.Error
 	DeleteMany(Query) apperror.Error
+
+	// Hooks.
+
+	// RegisterHook registers a hook function that will be called for a model.
+	// The available hooks are: (before/after)_(create/update/delete).
+	RegisterHook(hook string, handler HookHandler)
+
+	// GetHooks returns a slice with all hooks of the hook type.
+	GetHooks(hook string) []HookHandler
 }
+
+type HookHandler func(backend Backend, obj interface{}) apperror.Error
 
 type M2MCollection interface {
 	Add(models ...interface{}) apperror.Error

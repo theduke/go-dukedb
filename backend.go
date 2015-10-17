@@ -41,11 +41,22 @@ func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
 	return nil
 }
 
+const (
+	HOOK_BEFORE_CREATE = "before_create"
+	HOOK_AFTER_CREATE  = "after_create"
+	HOOK_BEFORE_UPDATE = "before_update"
+	HOOK_AFTER_UPDATE  = "after_update"
+	HOOK_BEFORE_DELETE = "before_delete"
+	HOOK_AFTER_DELETE  = "after_delete"
+)
+
 type BaseBackend struct {
 	name      string
 	Debug     bool
 	Logger    *logrus.Logger
 	modelInfo map[string]*ModelInfo
+
+	Hooks map[string][]HookHandler
 }
 
 func (b *BaseBackend) Name() string {
@@ -246,6 +257,37 @@ func (b *BaseBackend) MustSetModelID(model interface{}, id interface{}) {
 	if err := b.SetModelID(model, id); err != nil {
 		panic(err.GetMessage())
 	}
+}
+
+/**
+ * Backend hooks.
+ */
+
+func (b *BaseBackend) RegisterHook(hook string, handler HookHandler) {
+	switch hook {
+	case "before_create", "after_create", "before_update", "after_update", "before_delete", "after_delete":
+		// No op.
+	default:
+		panic("Unknown hook type: " + hook)
+	}
+
+	if b.Hooks == nil {
+		b.Hooks = make(map[string][]HookHandler)
+	}
+
+	if _, ok := b.Hooks[hook]; !ok {
+		b.Hooks[hook] = make([]HookHandler, 0)
+	}
+
+	b.Hooks[hook] = append(b.Hooks[hook], handler)
+}
+
+func (b *BaseBackend) GetHooks(hook string) []HookHandler {
+	if b.Hooks == nil {
+		return nil
+	}
+
+	return b.Hooks[hook]
 }
 
 // Relationship stuff.
@@ -714,8 +756,14 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 		return err
 	}
 
+	// Call BeforeCreate hook on model.
 	if err := CallModelHook(b, model, "BeforeCreate"); err != nil {
 		return err
+	}
+
+	// Call backend-wide before_create hooks.
+	for _, handler := range b.GetHooks("before_create") {
+		handler(b, model)
 	}
 
 	// Persist relationships before create.
@@ -737,6 +785,11 @@ func BackendCreate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	CallModelHook(b, model, "AfterCreate")
+
+	// Call backend-wide after_create hooks.
+	for _, handler := range b.GetHooks("after_create") {
+		handler(b, model)
+	}
 
 	return nil
 }
@@ -764,6 +817,11 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 		return err
 	}
 
+	// Call backend-wide before_update hooks.
+	for _, handler := range b.GetHooks("before_update") {
+		handler(b, model)
+	}
+
 	// Persist relationships before create.
 	if err := BackendPersistRelations(b, info, model, false); err != nil {
 		return err
@@ -779,6 +837,11 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	}
 
 	CallModelHook(b, model, "AfterUpdate")
+
+	// Call backend-wide after_update hooks.
+	for _, handler := range b.GetHooks("after_update") {
+		handler(b, model)
+	}
 
 	return nil
 }
@@ -803,11 +866,21 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
 		return err
 	}
 
+	// Call backend-wide before_delete hooks.
+	for _, handler := range b.GetHooks("before_delete") {
+		handler(b, model)
+	}
+
 	if err := handler(info, model); err != nil {
 		return err
 	}
 
 	CallModelHook(b, model, "AfterDelete")
+
+	// Call backend-wide after_delete hooks.
+	for _, handler := range b.GetHooks("after_delete") {
+		handler(b, model)
+	}
 
 	return nil
 }

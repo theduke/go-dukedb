@@ -30,6 +30,12 @@ type FieldInfo struct {
 	// "" if not embedded.
 	Embedded string
 
+	// Whether to embed the struct.
+	// Embedding is dependant on the backend.
+	// In relational databases, the data will be stored in a text field as json.
+	// In document/graph databases it will be stored as a nested document.
+	Embed bool
+
 	PrimaryKey    bool
 	AutoIncrement bool
 	Ignore        bool
@@ -46,6 +52,7 @@ type FieldInfo struct {
 
 	BackendName       string
 	BackendConstraint string
+	BackendType       string
 
 	/**
 	 * Relationship related fields
@@ -305,6 +312,9 @@ func ParseFieldTag(tag string) (*FieldInfo, apperror.Error) {
 			}
 
 			info.BackendName = value
+
+		case "type":
+			info.BackendType = value
 
 		case "marshal-name":
 			if value == "" {
