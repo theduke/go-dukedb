@@ -219,6 +219,11 @@ func (b *Backend) CreateCollection(collection string) apperror.Error {
 	}
 
 	tableInfo := b.TableInfo[info.BackendName]
+	if tableInfo == nil {
+		return apperror.New(
+			"missing_table_info",
+			fmt.Sprintf("There is no table info for the collection %v. Did you forget to call backend.BuildRelationshipInfo() after backend.RegisterModel()?", collection))
+	}
 	stmt := b.dialect.CreateTableStatement(tableInfo, true)
 	if _, err := b.SqlExec(stmt); err != nil {
 		return apperror.Wrap(err, "create_table_failed")
