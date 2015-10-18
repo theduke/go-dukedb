@@ -28,12 +28,12 @@ type HooksModel struct {
 	HookError   bool     `db:"-"`
 }
 
-func (h *HooksModel) Validate() apperror.Error {
+func (h *HooksModel) Validate() error {
 	h.CalledHooks = append(h.CalledHooks, "validate")
 	return nil
 }
 
-func (h *HooksModel) BeforeCreate(Backend) apperror.Error {
+func (h *HooksModel) BeforeCreate(Backend) error {
 	h.CalledHooks = append(h.CalledHooks, "before_create")
 	if h.HookError {
 		return apperror.New("before_create")
@@ -45,7 +45,7 @@ func (h *HooksModel) AfterCreate(Backend) {
 	h.CalledHooks = append(h.CalledHooks, "after_create")
 }
 
-func (h *HooksModel) BeforeUpdate(Backend) apperror.Error {
+func (h *HooksModel) BeforeUpdate(Backend) error {
 	h.CalledHooks = append(h.CalledHooks, "before_update")
 	if h.HookError {
 		return apperror.New("before_update")
@@ -57,7 +57,7 @@ func (h *HooksModel) AfterUpdate(Backend) {
 	h.CalledHooks = append(h.CalledHooks, "after_update")
 }
 
-func (h *HooksModel) BeforeDelete(Backend) apperror.Error {
+func (h *HooksModel) BeforeDelete(Backend) error {
 	h.CalledHooks = append(h.CalledHooks, "before_delete")
 	if h.HookError {
 		return apperror.New("before_delete")
