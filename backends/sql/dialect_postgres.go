@@ -48,6 +48,10 @@ func (d PostgresDialect) FixReplacementChar(query string) string {
 }
 
 func (d PostgresDialect) ColumnType(info *db.FieldInfo) string {
+	if info.Marshal {
+		return "text"
+	}
+
 	switch info.Type.Kind() {
 	case reflect.Bool:
 		return "boolean"

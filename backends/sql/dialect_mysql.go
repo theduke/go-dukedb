@@ -32,6 +32,10 @@ func (d MysqlDialect) ReplacementCharacter() string {
 }
 
 func (d MysqlDialect) ColumnType(info *db.FieldInfo) string {
+	if info.Marshal {
+		return "longtext"
+	}
+
 	switch info.Type.Kind() {
 	case reflect.Bool:
 		return "boolean"
