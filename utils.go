@@ -235,41 +235,145 @@ func ConvertStringToType(value string, typ reflect.Kind) (interface{}, error) {
 }
 
 func CompareValues(condition string, a, b interface{}) (bool, apperror.Error) {
-	typ := reflect.TypeOf(a).Kind()
+	nilType := reflect.TypeOf(nil)
+	typA := reflect.TypeOf(a)
+	typB := reflect.TypeOf(b)
 
-	switch typ {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-		return CompareNumericValues(condition, a, b)
-	case reflect.String:
-		return CompareStringValues(condition, a, b)
+	if a == nil || typA == nilType {
+		a = float64(0)
+		typA = reflect.TypeOf(a)
+	}
+	if b == nil || typB == nilType {
+		b = float64(0)
+		typB = reflect.TypeOf(b)
+		a, b = b, a
+		typA, typB = typB, typA
+	}
+
+	kindA := typA.Kind()
+	if kindA == reflect.Ptr {
+		val := reflect.ValueOf(a)
+		if !val.IsValid() || val.IsNil() {
+			a = float64(0)
+		} else {
+			a = reflect.ValueOf(a).Elem().Interface()
+		}
+		typA = reflect.TypeOf(a)
+		kindA = typA.Kind()
+	}
+
+	kindB := typB.Kind()
+	if kindB == reflect.Ptr {
+		val := reflect.ValueOf(b)
+		if !val.IsValid() || val.IsNil() {
+			b = float64(0)
+		} else {
+			b = reflect.ValueOf(b).Elem().Interface()
+		}
+		typB = reflect.TypeOf(b)
+		kindB = typB.Kind()
+	}
+
+	// Compare time.Time values numerically.
+	if kindA == reflect.Struct && typA.PkgPath() == "time" && typA.Name() == "Time" {
+		t := a.(time.Time)
+		if t.IsZero() {
+			a = float64(0)
+		} else {
+			a = float64(t.UnixNano())
+		}
+		typA = reflect.TypeOf(a)
+		kindA = typA.Kind()
+	}
+
+	if kindB == reflect.Struct && typB.PkgPath() == "time" && typB.Name() == "Time" {
+		t := b.(time.Time)
+		if t.IsZero() {
+			b = float64(0)
+		} else {
+			b = float64(t.UnixNano())
+		}
+		typB = reflect.TypeOf(b)
+		kindB = typB.Kind()
+	}
+
+	if IsNumericKind(kindA) || IsNumericKind(kindB) {
+		var err error
+
+		a, err = Convert(a, float64(0))
+		if err != nil {
+			return false, apperror.New("conversion_error", err)
+		}
+
+		b, err = Convert(b, float64(0))
+		if err != nil {
+			return false, apperror.New("conversion_error", err)
+		}
+
+		return CompareFloat64Values(condition, a.(float64), b.(float64))
+	}
+
+	if condition == "eq" || condition == "neq" {
+		convertedB, err := Convert(b, a)
+		if err != nil {
+			return false, apperror.New(err.Error())
+		}
+
+		if condition == "eq" {
+			return a == convertedB, nil
+		} else {
+			return a != convertedB, nil
+		}
+	}
+
+	return false, apperror.New(
+		"impossible_comparison",
+		fmt.Sprintf("Cannot compare type %v(value %v) to type %v(value %v)", kindA, a, kindB, b))
+}
+
+func CompareStringValues(condition, a, b string) (bool, apperror.Error) {
+	// Check different possible filters.
+	switch condition {
+	case "eq":
+		return a == b, nil
+	case "neq":
+		return a != b, nil
+	case "like":
+		return strings.Contains(a, b), nil
+	case "lt":
+		return a < b, nil
+	case "lte":
+		return a <= b, nil
+	case "gt":
+		return a > b, nil
+	case "gte":
+		return a >= b, nil
+
 	default:
 		return false, &apperror.Err{
-			Code:    "unsupported_comparison_type",
-			Message: fmt.Sprintf("Type %v can not be compared", typ),
+			Code:    "unknown_filter",
+			Message: fmt.Sprintf("Unknown filter type '%v'", condition),
 		}
 	}
 }
 
-func CompareStringValues(condition string, a, b interface{}) (bool, apperror.Error) {
-	aVal := a.(string)
-	bVal := b.(string)
-
+func CompareFloat64Values(condition string, a, b float64) (bool, apperror.Error) {
 	// Check different possible filters.
 	switch condition {
 	case "eq":
-		return aVal == bVal, nil
+		return a == b, nil
 	case "neq":
-		return aVal != bVal, nil
+		return a != b, nil
 	case "like":
-		return strings.Contains(aVal, bVal), nil
+		return false, apperror.New("invalid_filter_comparison", "LIKE filter can only be used for string values, not numbers")
 	case "lt":
-		return aVal < bVal, nil
+		return a < b, nil
 	case "lte":
-		return aVal <= bVal, nil
+		return a <= b, nil
 	case "gt":
-		return aVal > bVal, nil
+		return a > b, nil
 	case "gte":
-		return aVal >= bVal, nil
+		return a >= b, nil
 
 	default:
 		return false, &apperror.Err{
@@ -998,7 +1102,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 			continue
 		}
 
-		if (forBackend || marshal) && field.Marshal {
+		if forBackend && field.Marshal {
 			js, err := json.Marshal(val)
 			if err != nil {
 				return nil, &apperror.Err{
