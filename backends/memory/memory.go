@@ -293,11 +293,21 @@ func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
 
 	// Limit & Offset.
 
-	if q.GetOffset() != 0 {
-		items = items[q.GetOffset():]
+	itemCount := len(items)
+
+	if offset := q.GetOffset(); offset > 0 {
+		if offset > itemCount {
+			items = []interface{}{}
+		} else {
+			items = items[q.GetOffset():]
+		}
 	}
-	if q.GetLimit() != 0 {
-		items = items[:q.GetLimit()]
+
+	if limit := q.GetLimit(); limit > 0 {
+		if limit > itemCount {
+			limit = itemCount
+		}
+		items = items[:limit]
 	}
 
 	return items, nil
