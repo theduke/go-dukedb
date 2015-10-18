@@ -125,6 +125,9 @@ func IsZero(val interface{}) bool {
 	if reflType.Kind() == reflect.Slice {
 		return reflVal.Len() < 1
 	}
+	if reflType.Kind() == reflect.Map {
+		return reflVal.Len() < 1
+	}
 
 	return val == reflect.Zero(reflType).Interface()
 }
@@ -311,6 +314,10 @@ func CompareValues(condition string, a, b interface{}) (bool, apperror.Error) {
 		}
 
 		return CompareFloat64Values(condition, a.(float64), b.(float64))
+	}
+
+	if kindA == reflect.String {
+		return CompareStringValues(condition, a.(string), b.(string))
 	}
 
 	if condition == "eq" || condition == "neq" {
@@ -1102,7 +1109,21 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 			continue
 		}
 
+		reflVal := reflect.ValueOf(val)
+		reflType := reflVal.Type()
+		if reflType.Kind() == reflect.Ptr && forBackend {
+			if reflVal.IsNil() {
+				val = nil
+			} else {
+				val = reflVal.Elem().Interface()
+			}
+		}
+
 		if forBackend && field.Marshal {
+			if IsZero(val) {
+				continue
+			}
+
 			js, err := json.Marshal(val)
 			if err != nil {
 				return nil, &apperror.Err{
@@ -1237,6 +1258,38 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 				data[key] = p
 			} else {
 				data[key] = *p
+			}
+		}
+
+		// Handle marshalled fields.
+		if fieldInfo.Marshal {
+			var marshalledData []byte
+
+			if strVal, ok := data[key].(string); ok {
+				if strVal != "" {
+					marshalledData = []byte(strVal)
+				}
+			} else if bytes, ok := data[key].([]byte); ok {
+				if len(bytes) > 0 {
+					marshalledData = bytes
+				}
+			}
+
+			if marshalledData != nil {
+				itemVal := reflect.New(fieldInfo.Type)
+				itemPtr := itemVal.Interface()
+
+				if err := json.Unmarshal(marshalledData, itemPtr); err != nil {
+					return apperror.Wrap(err,
+						"marshal_field_unmarshal_error",
+						fmt.Sprintf("Could not unmarshal the content of field %v", fieldInfo.Name))
+				}
+
+				data[key] = itemVal.Elem().Interface()
+
+				fmt.Printf("Unmarshaling field %v to type %v\nitem: %v\n", fieldInfo.Name, fieldInfo.Type, itemVal.Elem().Interface())
+			} else {
+				continue
 			}
 		}
 
