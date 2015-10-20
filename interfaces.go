@@ -277,6 +277,7 @@ type Backend interface {
 
 	Create(model interface{}) apperror.Error
 	Update(model interface{}) apperror.Error
+	Save(model interface{}) apperror.Error
 	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
 	Delete(model interface{}) apperror.Error
 	DeleteMany(Query) apperror.Error
