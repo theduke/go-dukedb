@@ -118,7 +118,7 @@ func (b *BaseBackend) InfoForCollection(collection string) (*ModelInfo, apperror
 	}
 
 	return nil, apperror.New("unknown_collection",
-		fmt.Sprintf("The collection %v was not registered with backend"))
+		fmt.Sprintf("The collection %v was not registered with backend", collection))
 }
 
 func (b *BaseBackend) SetModelInfo(collection string, info *ModelInfo) {
@@ -385,6 +385,11 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 			newQuery.SetJoinType("m2m")
 		}
 	}
+
+	// Copy over old filters, fields and orders.
+	newQuery.SetFilters(q.GetFilters()...)
+	newQuery.Fields(q.GetFields()...)
+	newQuery.SetOrders(q.GetOrders()...)
 
 	vals := make([]interface{}, 0)
 	for _, m := range baseModels {
@@ -846,6 +851,19 @@ func BackendUpdate(b Backend, model interface{}, handler func(*ModelInfo, interf
 	return nil
 }
 
+func BackendSave(b Backend, model interface{}) apperror.Error {
+	id, err := b.ModelStrID(model)
+	if err != nil {
+		return err
+	}
+
+	if id == "" {
+		return b.Create(model)
+	} else {
+		return b.Update(model)
+	}
+}
+
 func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interface{}) apperror.Error) apperror.Error {
 	info, err := b.InfoForModel(model)
 	if err != nil {
@@ -869,6 +887,24 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
 	// Call backend-wide before_delete hooks.
 	for _, handler := range b.GetHooks("before_delete") {
 		handler(b, model)
+	}
+
+	// Handle relationships.
+	for _, fieldInfo := range info.FieldInfo {
+		if !fieldInfo.IsRelation() || !fieldInfo.RelationAutoPersist {
+			continue
+		}
+
+		if fieldInfo.M2M {
+			// Clear m2m collection.
+			m2m, err := b.M2M(model, fieldInfo.Name)
+			if err != nil {
+				return err
+			}
+			if err := m2m.Clear(); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := handler(info, model); err != nil {
