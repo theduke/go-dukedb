@@ -260,7 +260,7 @@ func parseQueryJoins(q Query, joins []string, depth int) ([]string, apperror.Err
 }
 
 func parseQueryFilters(q Query, filters map[string]interface{}) apperror.Error {
-	filter, err := parseQueryFilter("", filters)
+	filter, err := parseQueryFilter("", filters, q)
 	if err != nil {
 		return err
 	}
@@ -281,7 +281,7 @@ func parseQueryFilters(q Query, filters map[string]interface{}) apperror.Error {
 // Parses a mongo query filter to a Filter.
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
-func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
+func parseQueryFilter(name string, data interface{}, query Query) (Filter, apperror.Error) {
 	// Handle
 	switch name {
 	case "$eq":
@@ -325,7 +325,7 @@ func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
 				return nil, &apperror.Err{Code: "invalid_or_data"}
 			}
 
-			filter, err := parseQueryFilter("", clause)
+			filter, err := parseQueryFilter("", clause, query)
 			if err != nil {
 				return nil, err
 			}
@@ -341,20 +341,44 @@ func parseQueryFilter(name string, data interface{}) (Filter, apperror.Error) {
 		// Build an AND filter.
 		and := And()
 		for key := range nestedData {
-			filter, err := parseQueryFilter(key, nestedData[key])
+			filter, err := parseQueryFilter(key, nestedData[key], query)
 			if err != nil {
 				return nil, err
 			}
 
+			doAdd := true
+
 			if key == "$or" || key == "$and" || key == "$not" {
 				// Do nothing
-			} else if name == "" {
-				filter.SetField(key)
 			} else {
-				filter.SetField(name)
+				field := name
+				if field == "" {
+					field = key
+				}
+
+				// Check for joins.
+
+				parts := strings.Split(field, ".")
+				if len(parts) > 1 {
+					// Possibly a field on a joined model. Check if a parent join can be found.
+					joinQ := query.GetJoin(strings.Join(parts[:len(parts)-1], "."))
+					if joinQ != nil {
+						// Join query found, add filter to the join query.
+						filter.SetField(parts[len(parts)-1])
+						joinQ.FilterQ(filter)
+						// Set flag to prevent adding to regular query.
+						doAdd = false
+					}
+				}
+
+				if doAdd {
+					filter.SetField(field)
+				}
 			}
 
-			and.Add(filter)
+			if doAdd {
+				and.Add(filter)
+			}
 		}
 
 		if len(and.Filters) == 1 {
