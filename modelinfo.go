@@ -511,6 +511,11 @@ func buildRelationshipInfo(models map[string]*ModelInfo, model *ModelInfo) apper
 			continue
 		}
 
+		// Also ignore marshalled fields.
+		if fieldInfo.Marshal {
+			continue
+		}
+
 		fieldType := fieldInfo.Type
 		fieldKind := fieldInfo.Type.Kind()
 
