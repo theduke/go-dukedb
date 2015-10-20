@@ -406,6 +406,10 @@ func (b *Backend) Update(m interface{}) apperror.Error {
 	})
 }
 
+func (b *Backend) Save(m interface{}) apperror.Error {
+	return db.BackendSave(b, m)
+}
+
 func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) apperror.Error {
 	info, err := b.InfoForModel(m)
 	if err != nil {
