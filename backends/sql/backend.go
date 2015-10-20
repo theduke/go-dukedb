@@ -398,6 +398,14 @@ func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []i
 			cond.Field = fieldInfo.BackendName
 		}
 
+		// Handle nil values.
+		if cond.Value == nil {
+			if filterName == "eq" {
+				sql = cond.Field + " IS NULL"
+				return sql, args
+			}
+		}
+
 		sql = cond.Field + " " + operator
 		if filterName == "in" {
 			slice := reflect.ValueOf(cond.Value)
@@ -827,6 +835,10 @@ func (b *Backend) Update(m interface{}) apperror.Error {
 
 		return nil
 	})
+}
+
+func (b *Backend) Save(m interface{}) apperror.Error {
+	return db.BackendSave(b, m)
 }
 
 func (b *Backend) UpdateByMap(m interface{}, rawData map[string]interface{}) apperror.Error {
