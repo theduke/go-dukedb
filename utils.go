@@ -61,12 +61,24 @@ func LowerCaseFirst(str string) string {
 		return ""
 	}
 
-	lc := strings.ToLower(string(str[0]))
-	if len(str) > 1 {
-		lc += str[1:]
+	newStr := ""
+
+	doReplace := true
+	for _, c := range str {
+		x := int(c)
+		if doReplace {
+			if x >= 65 && x <= 90 {
+				newStr += string(x + 32)
+			} else {
+				doReplace = false
+				newStr += string(c)
+			}
+		} else {
+			newStr += string(c)
+		}
 	}
 
-	return lc
+	return newStr
 }
 
 // Given the internal name of a filter like "eq" or "lte", return a SQL operator like = or <.
@@ -152,15 +164,26 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 
 	kind := typ.Kind()
 
+	reflVal := reflect.ValueOf(value)
 	valType := reflect.TypeOf(value)
 	valKind := valType.Kind()
 
-	if valKind == kind {
-		// Same kind, nothing to convert.
+	if typ == valType {
+		// Same type, nothing to convert.
 		return value, nil
 	}
 
+	// If target value is a pointer and the value is not (and the types match),
+	// create a new pointer pointing to the value.
+	if kind == reflect.Ptr && valType == typ.Elem() {
+		newVal := reflect.New(valType)
+		newVal.Elem().Set(reflVal)
+
+		return newVal.Interface(), nil
+	}
+
 	// Parse dates into time.Time.
+
 	isTime := kind == reflect.Struct && typ.PkgPath() == "time" && typ.Name() == "Time"
 
 	if isTime && valKind == reflect.String {
@@ -1110,12 +1133,14 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 		}
 
 		reflVal := reflect.ValueOf(val)
-		reflType := reflVal.Type()
-		if reflType.Kind() == reflect.Ptr && forBackend {
-			if reflVal.IsNil() {
-				val = nil
-			} else {
-				val = reflVal.Elem().Interface()
+		if reflVal.IsValid() {
+			reflType := reflVal.Type()
+			if reflType.Kind() == reflect.Ptr && forBackend {
+				if reflVal.IsNil() {
+					val = nil
+				} else {
+					val = reflVal.Elem().Interface()
+				}
 			}
 		}
 
@@ -1286,8 +1311,6 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 				}
 
 				data[key] = itemVal.Elem().Interface()
-
-				fmt.Printf("Unmarshaling field %v to type %v\nitem: %v\n", fieldInfo.Name, fieldInfo.Type, itemVal.Elem().Interface())
 			} else {
 				continue
 			}
@@ -1356,14 +1379,23 @@ func NormalizeQuery(info *ModelInfo, query Query) apperror.Error {
 	// First, normalize field limitations.
 	fields := query.GetFields()
 	for index, fieldName := range fields {
-		backendName := info.FindBackendFieldName(fieldName)
+		// Handle join fields.
 
-		if backendName == "" {
-			return &apperror.Err{
-				Code:    "invalid_field",
-				Message: fmt.Sprintf("Collection %v does not have a field %v", info.Collection, fieldName),
-				Public:  true,
+		parts := strings.Split(fieldName, ".")
+		if len(parts) > 1 {
+			// Possibly a field on a joined model. Check if a parent join can be found.
+			joinQ := query.GetJoin(strings.Join(parts[:len(parts)-1], "."))
+			if joinQ != nil {
+				// Join query found, add field to the join query.
+				joinQ.AddFields(parts[len(parts)-1])
+				continue
 			}
+		}
+
+		// Try to map name.
+		backendName := info.FindBackendFieldName(fieldName)
+		if backendName != "" {
+			fieldName = backendName
 		}
 
 		fields[index] = backendName
