@@ -23,6 +23,9 @@ type Query interface {
 
 	GetCollection() string
 
+	GetName() string
+	SetName(name string)
+
 	Limit(int) Query
 	GetLimit() int
 

@@ -283,6 +283,9 @@ func (o OrderSpec) String() string {
 type DbQuery struct {
 	backend Backend
 
+	// name is an optional identifier for the query (for profiling, etc).
+	name string
+
 	collection string
 
 	joins []RelationQuery
@@ -318,6 +321,14 @@ func Q(collection string) Query {
 
 func (q *DbQuery) GetCollection() string {
 	return q.collection
+}
+
+func (q *DbQuery) GetName() string {
+	return q.name
+}
+
+func (q *DbQuery) SetName(x string) {
+	q.name = x
 }
 
 func (q *DbQuery) GetJoinType() string {
