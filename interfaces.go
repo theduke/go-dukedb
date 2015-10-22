@@ -64,7 +64,7 @@ type Query interface {
 
 	// Joins.
 
-	JoinQ(jq RelationQuery) Query
+	JoinQ(jq ...RelationQuery) Query
 	Join(fieldName string) Query
 	GetJoin(field string) RelationQuery
 	GetJoins() []RelationQuery
@@ -92,6 +92,9 @@ type RelationQuery interface {
 	// RelationQuery specific methods.
 
 	GetCollection() string
+
+	GetName() string
+	SetName(name string)
 
 	GetBaseQuery() Query
 	SetBaseQuery(Query)
@@ -150,7 +153,7 @@ type RelationQuery interface {
 
 	// Joins.
 
-	JoinQ(jq RelationQuery) RelationQuery
+	JoinQ(jq ...RelationQuery) RelationQuery
 	Join(fieldName string) RelationQuery
 	GetJoin(field string) RelationQuery
 	GetJoins() []RelationQuery
@@ -197,7 +200,7 @@ type Backend interface {
 	// Determine if a model collection is registered with the backend.
 	HasCollection(collection string) bool
 
-	ModelToMap(model interface{}, marshal bool) (map[string]interface{}, apperror.Error)
+	ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error)
 
 	// After all models have been registered, build the relationship
 	// info.

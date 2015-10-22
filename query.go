@@ -555,9 +555,11 @@ func (q *DbQuery) GetFilters() []Filter {
  * Joins.
  */
 
-func (q *DbQuery) JoinQ(jq RelationQuery) Query {
-	jq.SetBaseQuery(q)
-	q.joins = append(q.joins, jq)
+func (q *DbQuery) JoinQ(jqs ...RelationQuery) Query {
+	for _, jq := range jqs {
+		jq.SetBaseQuery(q)
+		q.joins = append(q.joins, jq)
+	}
 	return q
 }
 
@@ -947,8 +949,8 @@ func (q *DbRelationQuery) NotCond(field string, condition string, val interface{
  * Joins.
  */
 
-func (q *DbRelationQuery) JoinQ(jq RelationQuery) RelationQuery {
-	q.DbQuery.JoinQ(jq)
+func (q *DbRelationQuery) JoinQ(jq ...RelationQuery) RelationQuery {
+	q.DbQuery.JoinQ(jq...)
 	return q
 }
 
