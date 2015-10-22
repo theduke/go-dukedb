@@ -390,6 +390,8 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 	newQuery.SetFilters(q.GetFilters()...)
 	newQuery.Fields(q.GetFields()...)
 	newQuery.SetOrders(q.GetOrders()...)
+	newQuery.JoinQ(q.GetJoins()...)
+	newQuery.SetName(q.GetName())
 
 	vals := make([]interface{}, 0)
 	for _, m := range baseModels {

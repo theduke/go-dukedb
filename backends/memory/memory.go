@@ -75,13 +75,13 @@ func (b *Backend) MergeModel(model db.Model) {
 	db.BackendMergeModel(b, model)
 }
 
-func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, apperror.Error) {
+func (b *Backend) ModelToMap(m interface{}, marshal, includeRelations bool) (map[string]interface{}, apperror.Error) {
 	info, err := b.InfoForModel(m)
 	if err != nil {
 		return nil, err
 	}
 
-	return db.ModelToMap(info, m, false, marshal)
+	return db.ModelToMap(info, m, false, marshal, includeRelations)
 }
 
 func (b *Backend) CreateCollection(collection string) apperror.Error {

@@ -94,13 +94,13 @@ func (b *Backend) MergeModel(model db.Model) {
 	db.BackendMergeModel(b, model)
 }
 
-func (b *Backend) ModelToMap(m interface{}, marshal bool) (map[string]interface{}, apperror.Error) {
+func (b *Backend) ModelToMap(m interface{}, marshal, includeRelations bool) (map[string]interface{}, apperror.Error) {
 	info, err := b.InfoForModel(m)
 	if err != nil {
 		return nil, err
 	}
 
-	return db.ModelToMap(info, m, false, marshal)
+	return db.ModelToMap(info, m, false, marshal, includeRelations)
 }
 
 func (b *Backend) BuildRelationshipInfo() {
@@ -359,6 +359,10 @@ func (b *Backend) Q(collection string) db.Query {
 }
 
 func (b *Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, connector string) (string, []interface{}) {
+	if len(filters) == 0 {
+		return "", []interface{}{}
+	}
+
 	sql := "("
 	args := make([]interface{}, 0)
 
@@ -366,11 +370,13 @@ func (b *Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, conne
 	for i := 0; i < count; i++ {
 		subSql, subArgs := b.filterToSql(info, filters[i])
 
-		sql += subSql
-		args = append(args, subArgs...)
+		if subSql != "" {
+			sql += subSql
+			args = append(args, subArgs...)
 
-		if i < count-1 {
-			sql += " " + connector + " "
+			if i < count-1 {
+				sql += " " + connector + " "
+			}
 		}
 	}
 
@@ -752,7 +758,7 @@ func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetMo
 
 func (b *Backend) Create(m interface{}) apperror.Error {
 	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
-		data, err := db.ModelToMap(info, m, true, false)
+		data, err := db.ModelToMap(info, m, true, false, false)
 		if err != nil {
 			return err
 		}
@@ -823,7 +829,7 @@ func (b *Backend) selectForModel(info *db.ModelInfo, m interface{}) (*SelectSpec
 
 func (b *Backend) Update(m interface{}) apperror.Error {
 	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
-		data, err := db.ModelToMap(info, m, true, false)
+		data, err := db.ModelToMap(info, m, true, false, false)
 		if err != nil {
 			return err
 		}
