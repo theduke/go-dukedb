@@ -173,9 +173,15 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 		return value, nil
 	}
 
+	isPointer := kind == reflect.Ptr
+	var pointerType reflect.Type
+	if isPointer {
+		pointerType = typ.Elem()
+	}
+
 	// If target value is a pointer and the value is not (and the types match),
 	// create a new pointer pointing to the value.
-	if kind == reflect.Ptr && valType == typ.Elem() {
+	if isPointer && valType == pointerType {
 		newVal := reflect.New(valType)
 		newVal.Elem().Set(reflVal)
 
@@ -185,13 +191,19 @@ func Convert(value interface{}, rawType interface{}) (interface{}, error) {
 	// Parse dates into time.Time.
 
 	isTime := kind == reflect.Struct && typ.PkgPath() == "time" && typ.Name() == "Time"
+	isTimePointer := isPointer && pointerType.Kind() == reflect.Struct && pointerType.PkgPath() == "time" && pointerType.Name() == "Time"
 
-	if isTime && valKind == reflect.String {
+	if (isTime || isTimePointer) && valKind == reflect.String {
 		date, err := time.Parse(time.RFC3339, value.(string))
 		if err != nil {
 			return nil, apperror.Wrap(err, "time_parse_error", "Invalid time format", true)
 		}
-		return date, nil
+
+		if isTime {
+			return date, nil
+		} else {
+			return &date, nil
+		}
 	}
 
 	// Special handling for string to bool.
@@ -1110,12 +1122,16 @@ func SetStructModelField(obj interface{}, fieldName string, models []interface{}
 	return nil
 }
 
-func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (map[string]interface{}, apperror.Error) {
+func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
 	data := make(map[string]interface{})
 
 	for fieldName := range info.FieldInfo {
 		field := info.FieldInfo[fieldName]
-		if field.Ignore || field.IsRelation() {
+		if field.Ignore {
+			continue
+		}
+
+		if field.IsRelation() && !includeRelations {
 			continue
 		}
 
@@ -1172,7 +1188,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool) (m
 	return data, nil
 }
 
-func ModelToJson(info *ModelInfo, model Model) ([]byte, apperror.Error) {
+func ModelToJson(info *ModelInfo, model Model, includeRelations bool) ([]byte, apperror.Error) {
 	if info == nil {
 		var err apperror.Error
 		info, err = CreateModelInfo(model)
@@ -1181,7 +1197,7 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, apperror.Error) {
 		}
 	}
 
-	data, err := ModelToMap(info, model, false, true)
+	data, err := ModelToMap(info, model, false, true, includeRelations)
 	if err != nil {
 		return nil, err
 	}
@@ -1199,8 +1215,8 @@ func ModelToJson(info *ModelInfo, model Model) ([]byte, apperror.Error) {
 
 // ModelFieldDiff compares two models and returns a list of fields that are different.
 func ModelFieldDiff(info *ModelInfo, m1, m2 interface{}) []string {
-	m1Data, _ := ModelToMap(info, m1, false, false)
-	m2Data, _ := ModelToMap(info, m2, false, false)
+	m1Data, _ := ModelToMap(info, m1, false, false, false)
+	m2Data, _ := ModelToMap(info, m2, false, false, false)
 
 	diff := make([]string, 0)
 	for key, m1Val := range m1Data {
