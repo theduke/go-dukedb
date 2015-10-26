@@ -12,16 +12,17 @@ import (
  * Query parser functions.
  */
 
-func ParseJsonQuery(collection string, js []byte) (Query, apperror.Error) {
+func ParseJsonQuery(js []byte) (Query, apperror.Error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
 		return nil, &apperror.Err{
+			Public:  true,
 			Code:    "invalid_json",
 			Message: "Query json could not be unmarshaled. Check for invalid json.",
 		}
 	}
 
-	return ParseQuery(collection, data)
+	return ParseQuery(data)
 }
 
 // Build a database query based a map[string]interface{} data structure
@@ -55,7 +56,16 @@ func ParseJsonQuery(collection string, js []byte) (Query, apperror.Error) {
 //  offset: 20
 // }
 //
-func ParseQuery(collection string, data map[string]interface{}) (Query, apperror.Error) {
+func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
+	if data == nil {
+		return nil, apperror.New("empty_query_data")
+	}
+
+	collection, _ := data["collection"].(string)
+	if collection == "" {
+		return nil, apperror.New("no_collection", "Query must contain a 'collection' key.")
+	}
+
 	q := Q(collection)
 
 	// First, Handle joins so query and field specification parsing can use
