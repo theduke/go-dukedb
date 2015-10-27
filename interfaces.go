@@ -21,6 +21,8 @@ type BackendQueryMixin interface {
 type Query interface {
 	BackendQueryMixin
 
+	GetStatement() *SelectStatement
+
 	GetCollection() string
 
 	GetName() string
@@ -32,14 +34,15 @@ type Query interface {
 	Offset(int) Query
 	GetOffset() int
 
-	Fields(...string) Query
-	AddFields(...string) Query
-	LimitFields(...string) Query
-	GetFields() []string
+	Field(fields ...string) Query
+	FieldExpr(expressions ...Expression) Query
+	SetFields(fields []string) Query
+	SetFieldExpressions(expressions []Expression) Query
+	LimitFields(fields ...string) Query
 
-	Order(name string, asc bool) Query
-	SetOrders(...OrderSpec) Query
-	GetOrders() []OrderSpec
+	Sort(field string, asc bool) Query
+	SortExpr(expressions ...SortExpression)
+	SetSorts(sorts []SortExpression) Query
 
 	// Filters.
 
@@ -91,6 +94,8 @@ type Query interface {
 type RelationQuery interface {
 	// RelationQuery specific methods.
 
+	GetStatement() *JoinStatement
+
 	GetCollection() string
 
 	GetName() string
@@ -103,12 +108,6 @@ type RelationQuery interface {
 	SetRelationName(name string)
 
 	GetJoinType() string
-
-	GetJoinFieldName() string
-	SetJoinFieldName(string)
-
-	GetForeignFieldName() string
-	SetForeignFieldName(string)
 
 	Build() (Query, apperror.Error)
 
@@ -286,7 +285,7 @@ type Backend interface {
 	Save(model interface{}) apperror.Error
 	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
 	Delete(model interface{}) apperror.Error
-	DeleteMany(Query) apperror.Error
+	DeleteQ(Query) apperror.Error
 
 	// Hooks.
 
