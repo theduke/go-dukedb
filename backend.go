@@ -2,6 +2,7 @@ package dukedb
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -81,6 +82,15 @@ func (b *BaseBackend) GetLogger() *logrus.Logger {
 
 func (b *BaseBackend) SetLogger(x *logrus.Logger) {
 	b.Logger = x
+}
+
+func (b *BaseBackend) BuildLogger() {
+	b.Logger = &logrus.Logger{
+		Out:       os.Stderr,
+		Formatter: new(logrus.TextFormatter),
+		Hooks:     make(logrus.LevelHooks),
+		Level:     logrus.DebugLevel,
+	}
 }
 
 func (b *BaseBackend) RegisterModel(model interface{}) {

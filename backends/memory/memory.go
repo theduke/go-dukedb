@@ -37,6 +37,8 @@ func New() *Backend {
 
 	b.RegisterModel(&MigrationAttempt{})
 
+	b.BuildLogger()
+
 	return &b
 }
 

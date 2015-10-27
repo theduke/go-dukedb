@@ -59,6 +59,8 @@ func New(driver, driverOptions string) (*Backend, apperror.Error) {
 
 	b.RegisterModel(&MigrationAttempt{})
 
+	b.BuildLogger()
+
 	return &b, nil
 }
 
@@ -165,35 +167,41 @@ func (b *Backend) BuildRelationshipInfo() {
 }
 
 func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
-	if b.Debug {
-		if b.Logger != nil {
-			b.Logger.Debugf("%v | %+v", query, args)
-		} else {
-			fmt.Printf("%v | %v\n", query, args)
-		}
-	}
+	var res sql.Result
+	var err error
 
 	if b.Tx != nil {
-		return b.Tx.Exec(query, args...)
+		res, err = b.Tx.Exec(query, args...)
 	} else {
-		return b.Db.Exec(query, args...)
+		res, err = b.Db.Exec(query, args...)
 	}
+
+	if err != nil {
+		b.Logger.Errorf("SQL error: %v: %v | %+v", err, query, args)
+	} else if b.Debug {
+		b.Logger.Debugf("%v | %v", query, args)
+	}
+
+	return res, err
 }
 
 func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error) {
-	if b.Debug {
-		if b.Logger != nil {
-			b.Logger.Debugf("%v | %+v", query, args)
-		} else {
-			fmt.Printf("%v | %v\n", query, args)
-		}
-	}
+	var rows *sql.Rows
+	var err error
 
 	if b.Tx != nil {
-		return b.Tx.Query(query, args...)
+		rows, err = b.Tx.Query(query, args...)
 	} else {
-		return b.Db.Query(query, args...)
+		rows, err = b.Db.Query(query, args...)
 	}
+
+	if err != nil {
+		b.Logger.Errorf("SQL error: %v: %v | %+v", err, query, args)
+	} else if b.Debug {
+		b.Logger.Debugf("%v | %v", query, args)
+	}
+
+	return rows, err
 }
 
 func (b *Backend) sqlScanRow(query string, args []interface{}, vars ...interface{}) apperror.Error {
@@ -386,6 +394,8 @@ func (b *Backend) filterManyToSql(info *db.ModelInfo, filters []db.Filter, conne
 }
 
 func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []interface{}) {
+	tableInfo := b.TableInfo[info.Collection]
+
 	filterType := reflect.TypeOf(filter).Elem().Name()
 	filterName := filter.Type()
 
@@ -410,6 +420,11 @@ func (b *Backend) filterToSql(info *db.ModelInfo, filter db.Filter) (string, []i
 				sql = cond.Field + " IS NULL"
 				return sql, args
 			}
+		}
+
+		// Escape field if it is a valid field name.
+		if _, ok := tableInfo.Columns[cond.Field]; ok {
+			cond.Field = b.dialect.Quote(cond.Field)
 		}
 
 		sql = cond.Field + " " + operator
