@@ -69,7 +69,7 @@ type ArgumentExpr struct {
 	Arg interface{}
 }
 
-func (e *ArgumentExpression) GetArgument() interface{} {
+func (e *ArgumentExpr) GetArgument() interface{} {
 	return e.Arg
 }
 
@@ -144,9 +144,6 @@ type MultiExpr struct {
 	Expressions []Expression
 }
 
-// Ensure MultiExpr implements MultiExpression.
-var _ MultiExpression = (*MultiExpr)(nil)
-
 func (m *MultiExpr) GetExpressions() []Expression {
 	return m.Expressions
 }
@@ -175,14 +172,18 @@ func (m MultiExpr) GetIdentifiers() []string {
 
 type FieldTypeExpression struct {
 	GoType reflect.Type
-	Type   string
+	Typ    string
 }
 
 // Ensure FieldTypeExpression implements Expression.
 var _ Expression = (*FieldTypeExpression)(nil)
 
-func (FieldTypeExpression) Type() string {
+func (*FieldTypeExpression) Type() string {
 	return "field_type"
+}
+
+func (e *FieldTypeExpression) GetIdentifiers() []string {
+	return nil
 }
 
 /**
@@ -200,7 +201,7 @@ type ValueExpression struct {
 // Make sure ValueExpression implements TypedExpression.
 var _ TypedExpression = (*ValueExpression)(nil)
 
-func (ValueExpression) Type() string {
+func (*ValueExpression) Type() string {
 	return "value"
 }
 
@@ -233,7 +234,7 @@ type IdentifierExpression struct {
 // Make sure IdentifierExpression implements TypedExpression.
 var _ TypedExpession = (*IdentifierExpression)(nil)
 
-func (IdentifierExpression) Type() string {
+func (*IdentifierExpression) Type() string {
 	return "identifier"
 }
 
@@ -266,7 +267,7 @@ type CollectionFieldIdentifierExpression struct {
 // Make sure CollectionFieldIdentifierExpression implements TypedExpression.
 var _ TypedExpession = (*CollectionFieldIdentifierExpression)(nil)
 
-func (CollectionFieldIdentifierExpression) Type() string {
+func (*CollectionFieldIdentifierExpression) Type() string {
 	return "collection_field_identifier"
 }
 
@@ -290,7 +291,7 @@ func ColFieldIdentifier(collection, field string, typ ...reflect.Type) *Collecti
  * ConstraintExpression.
  */
 
-type ContraintExpression interface {
+type ConstraintExpression interface {
 	Expression
 	GetName() string
 }
@@ -314,7 +315,7 @@ type NotNullConstraint struct {
 // Ensure NotNullConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*NotNullConstraint)(nil)
 
-func (NotNullConstraint) Type() string {
+func (*NotNullConstraint) Type() string {
 	return "not_null"
 }
 
@@ -329,7 +330,7 @@ type UniqueConstraint struct {
 // Ensure UniqueConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*UniqueConstraint)(nil)
 
-func (UniqueConstraint) Type() string {
+func (*UniqueConstraint) Type() string {
 	return "unique"
 }
 
@@ -348,7 +349,7 @@ type UniqueFieldsConstraint struct {
 // Ensure UniqueFieldsConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*UniqueFieldsConstraint)(nil)
 
-func (UniqueFieldsConstraint) Type() string {
+func (*UniqueFieldsConstraint) Type() string {
 	return "unique_fields"
 }
 
@@ -363,7 +364,7 @@ type PrimaryKeyConstraint struct {
 // Ensure NotNullConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*PrimaryKeyConstraint)(nil)
 
-func (PrimaryKeyConstraint) Type() string {
+func (*PrimaryKeyConstraint) Type() string {
 	return "primary_key"
 }
 
@@ -378,7 +379,7 @@ type AutoIncrementConstraint struct {
 // Ensure AutoIncrementConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*AutoIncrementConstraint)(nil)
 
-func (AutoIncrementConstraint) Type() string {
+func (*AutoIncrementConstraint) Type() string {
 	return "auto_increment"
 }
 
@@ -394,7 +395,7 @@ type DefaultValueConstraint struct {
 // Ensure DefaultValueConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*DefaultValueConstraint)(nil)
 
-func (DefaultValueConstraint) Type() string {
+func (*DefaultValueConstraint) Type() string {
 	return "default_value_constraint"
 }
 
@@ -412,7 +413,7 @@ type FieldUpdateConstraint struct {
 // Make sure FieldUpdateConstraint implements Expression.
 var _ ConstraintExpression = (*FieldUpdateConstraint)(nil)
 
-func (FieldUpdateConstraint) Type() string {
+func (*FieldUpdateConstraint) Type() string {
 	return "field_update_constraint"
 }
 
@@ -430,7 +431,7 @@ type IndexConstraint struct {
 // Make sure IndexConstraint implements Constraint.
 var _ ConstraintExpression = (*IndexConstraint)(nil)
 
-func (IndexConstraint) Type() string {
+func (*IndexConstraint) Type() string {
 	return "index_constraint"
 }
 
@@ -446,7 +447,7 @@ type CheckConstraint struct {
 // Make sure CheckConstraint implements Constraint.
 var _ ConstraintExpression = (*CheckConstraint)(nil)
 
-func (CheckConstraint) Type() string {
+func (*CheckConstraint) Type() string {
 	return "check_constraint"
 }
 
@@ -462,7 +463,7 @@ type ReferenceConstraint struct {
 // Make sure ReferenceConstraint implements Constraint.
 var _ ConstraintExpression = (*ReferenceConstraint)(nil)
 
-func (ReferenceConstraint) Type() string {
+func (*ReferenceConstraint) Type() string {
 	return "reference_constraint"
 }
 
@@ -483,7 +484,7 @@ type FieldExpression struct {
 // Ensure FieldExpression implements Expression.
 var _ Expression = (*FieldExpression)(nil)
 
-func (FieldExpression) Type() string {
+func (*FieldExpression) Type() string {
 	return "field"
 }
 
@@ -501,7 +502,7 @@ type FieldValueExpression struct {
 // Ensure FieldValueExpression implements Expression.
 var _ Expression = (*FieldValueExpression)(nil)
 
-func (FieldValueExpression) Type() string {
+func (*FieldValueExpression) Type() string {
 	return "field_value"
 }
 
@@ -529,7 +530,7 @@ type FunctionExpression struct {
 // Ensure FunctionExpression implements NestedExpression.
 var _ NestedExpression = (*FunctionExpression)(nil)
 
-func (FunctionExpression) Type() string {
+func (*FunctionExpression) Type() string {
 	return "function"
 }
 
@@ -605,7 +606,7 @@ type NotExpression struct {
 // Ensure NotCondition implements NestedExpression.
 var _ NestedExpr = (*NotExpression)(nil)
 
-func (NotExpression) Type() string {
+func (*NotExpression) Type() string {
 	return "not"
 }
 
@@ -659,7 +660,7 @@ type Filter struct {
 // Ensure Filter implements Expression.
 var _ Expression = (*Filter)(nil)
 
-func (Filter) Type() string {
+func (*Filter) Type() string {
 	return "filter"
 }
 
@@ -697,7 +698,7 @@ type FieldFilter struct {
 // Ensure FieldFilter implements Expression.
 var _ Expression = (*FieldFilter)(nil)
 
-func (FieldFilter) Type() string {
+func (*FieldFilter) Type() string {
 	return "field_filter"
 }
 
@@ -735,7 +736,7 @@ type FieldValueFilter struct {
 // Ensure FieldValueFilter implements Expression.
 var _ Expression = (*FieldValueFilter)(nil)
 
-func (FieldValueFilter) Type() string {
+func (*FieldValueFilter) Type() string {
 	return "field_value_filter"
 }
 
@@ -883,7 +884,7 @@ type SortExpression struct {
 // Ensure SortExpression implements Expression.
 var _ Expression = (*SortExpression)(nil)
 
-func (SortExpression) Type() string {
+func (*SortExpression) Type() string {
 	return "sort"
 }
 

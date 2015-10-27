@@ -26,7 +26,7 @@ type CreateCollectionStatement struct {
 // Ensure CreateCollectionStatement implements Expression.
 var _ Expression = (*CreateCollectionStatement)(nil)
 
-func (CreateCollectionStatement) Type() string {
+func (*CreateCollectionStatement) Type() string {
 	return "create_collection"
 }
 
@@ -43,7 +43,7 @@ type DropCollectionStatement struct {
 // Ensure DropCollectionStatement implements Expression.
 var _ Expression = (*DropCollectionStatement)(nil)
 
-func (DropCollectionStatement) Type() string {
+func (*DropCollectionStatement) Type() string {
 	return "drop_collection"
 }
 
@@ -60,7 +60,7 @@ type AddCollectionFieldStatement struct {
 // Ensure AddCollectionFieldStatement implements Expression.
 var _ Expression = (*AddCollectionFieldStatement)(nil)
 
-func (AddCollectionFieldStatement) Type() string {
+func (*AddCollectionFieldStatement) Type() string {
 	return "add_collection_field"
 }
 
@@ -77,7 +77,7 @@ type RenameCollectionFieldStatement struct {
 // Ensure RenameCollectionFieldStatement implements Expression.
 var _ Expression = (*RenameCollectionFieldStatement)(nil)
 
-func (RenameCollectionFieldStatement) Type() string {
+func (*RenameCollectionFieldStatement) Type() string {
 	return "add_collection_field"
 }
 
@@ -93,7 +93,7 @@ type DropCollectionFieldStatement struct {
 // Ensure DropCollectionFieldStatement implements Expression.
 var _ Expression = (*DropCollectionFieldStatement)(nil)
 
-func (DropCollectionFieldStatement) Type() string {
+func (*DropCollectionFieldStatement) Type() string {
 	return "drop_collection_field"
 }
 
@@ -110,7 +110,7 @@ type AddIndexStatement struct {
 // Ensure AddIndexStatement implements Expression.
 var _ Expression = (*AddIndexStatement)(nil)
 
-func (AddIndexStatement) Type() string {
+func (*AddIndexStatement) Type() string {
 	return "add_index"
 }
 
@@ -126,7 +126,7 @@ type DropIndexStatement struct {
 // Ensure DropIndexStatement implements Expression.
 var _ Expression = (*DropIndexStatement)(nil)
 
-func (DropIndexStatement) Type() string {
+func (*DropIndexStatement) Type() string {
 	return "drop_index"
 }
 
@@ -150,7 +150,7 @@ type SelectStatement struct {
 // Ensure SelectStatement implements Expression.
 var _ Expression = (*SelectStatement)(nil)
 
-func (SelectStatement) Type() string {
+func (*SelectStatement) Type() string {
 	return "select"
 }
 
@@ -264,7 +264,7 @@ type JoinStatement struct {
 // Ensure JoinStatement implements Expression.
 var _ Expression = (*JoinStatement)(nil)
 
-func (JoinStatement) Type() string {
+func (*JoinStatement) Type() string {
 	return "join"
 }
 
@@ -294,7 +294,7 @@ type CreateStatement struct {
 // Ensure CreateStatement implements Expression.
 var _ Expression = (*CreateStatement)(nil)
 
-func (CreateStatement) Type() string {
+func (*CreateStatement) Type() string {
 	return "create"
 }
 
@@ -320,7 +320,7 @@ type UpdateStatement struct {
 // Ensure UpdateStatement implements Expression.
 var _ Expression = (*UpdateStatement)(nil)
 
-func (UpdateStatement) Type() string {
+func (*UpdateStatement) Type() string {
 	return "update"
 }
 

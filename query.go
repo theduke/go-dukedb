@@ -416,7 +416,8 @@ func (q *RelationQuery) GetJoinType() string {
 }
 
 func (q *RelationQuery) SetJoinType(typ string) {
-	return q.statement.JoinType = typ
+	q.statement.JoinType = typ
+	return q
 }
 
 func (q *RelationQuery) Build() (Query, apperror.Error) {
