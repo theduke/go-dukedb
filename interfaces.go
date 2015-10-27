@@ -87,16 +87,16 @@ type Backend interface {
 	DropAllCollections() apperror.Error
 
 	// Create a new query for a collection.
-	Q(collection string) Query
+	Q(collection string) *Query
 
 	// Perform a query.
-	Query(q Query, targetSlice ...interface{}) ([]interface{}, apperror.Error)
+	Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error)
 
 	// Perform a query and get the first result.
-	QueryOne(q Query, targetModel ...interface{}) (interface{}, apperror.Error)
+	QueryOne(q *Query, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Perform a query and get the last result.
-	Last(q Query, targetModel ...interface{}) (interface{}, apperror.Error)
+	Last(q *Query, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Find first model with primary key ID.
 	FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error)
@@ -108,15 +108,15 @@ type Backend interface {
 	FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Count by a query.
-	Count(Query) (int, apperror.Error)
+	Count(*Query) (int, apperror.Error)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
 	// The third skip parameter is true when the base query does not contain any results.
-	BuildRelationQuery(q RelationQuery) (Query, apperror.Error)
+	BuildRelationQuery(q *RelationQuery) (*Query, apperror.Error)
 
 	// Retrieve a query for a relationship.
-	Related(model interface{}, name string) (RelationQuery, apperror.Error)
+	Related(model interface{}, name string) (*RelationQuery, apperror.Error)
 
 	// Return a M2MCollection instance for a model, which allows
 	// to add/remove/clear items in the m2m relationship.
@@ -129,7 +129,7 @@ type Backend interface {
 	Save(model interface{}) apperror.Error
 	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
 	Delete(model interface{}) apperror.Error
-	DeleteQ(Query) apperror.Error
+	DeleteQ(*Query) apperror.Error
 
 	// Hooks.
 
