@@ -152,7 +152,7 @@ func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
 					joinQ.AddFields(parts[len(parts)-1])
 				} else {
 					// No join query found, maybe the backend supports nested fields.
-					joinQ.AddFields(field)
+					q.AddFields(field)
 				}
 			} else {
 				// Not nested, just add the field.
