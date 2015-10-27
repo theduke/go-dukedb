@@ -2,304 +2,26 @@ package dukedb
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/theduke/go-apperror"
 )
 
-type Filter interface {
-	Type() string
-	SetField(string) Filter
-}
-
-type MultiFilter interface {
-	Filter
-	Add(...Filter) MultiFilter
-	GetFilters() []Filter
-}
-
 /**
- * And.
+ * DbQuery.
  */
-
-type multiFilter struct {
-	Filters []Filter
-}
-
-func (m multiFilter) Type() string {
-	panic("type_method_not_overwritten")
-}
-
-func (m *multiFilter) Add(filters ...Filter) MultiFilter {
-	m.Filters = append(m.Filters, filters...)
-	return m
-}
-
-func (m *multiFilter) GetFilters() []Filter {
-	return m.Filters
-}
-
-func (m *multiFilter) SetField(field string) Filter {
-	for _, filter := range m.Filters {
-		filter.SetField(field)
-	}
-	return m
-}
-
-type AndCondition struct {
-	multiFilter
-}
-
-// Ensure AndCondition implements MultiFilter.
-var _ MultiFilter = (*AndCondition)(nil)
-
-func (a *AndCondition) Type() string {
-	return "and"
-}
-
-func And(f ...Filter) *AndCondition {
-	a := AndCondition{}
-	a.Filters = f
-	return &a
-}
-
-/**
- * Or.
- */
-
-type OrCondition struct {
-	multiFilter
-}
-
-// Ensure OrCondition implements MultiFilter.
-var _ MultiFilter = (*OrCondition)(nil)
-
-func (o *OrCondition) Type() string {
-	return "or"
-}
-
-func Or(f ...Filter) *OrCondition {
-	or := OrCondition{}
-	or.Filters = f
-	return &or
-}
-
-/**
- * NOT.
- */
-
-type NotCondition struct {
-	multiFilter
-}
-
-// Ensure NotCondition implements MultiFilter.
-var _ MultiFilter = (*NotCondition)(nil)
-
-func (n NotCondition) Type() string {
-	return "not"
-}
-
-func Not(f ...Filter) *NotCondition {
-	not := &NotCondition{}
-	not.Filters = f
-	return not
-}
-
-/**
- * Generic field condition.
- */
-
-type FieldCondition struct {
-	Typ   string
-	Field string
-	Value interface{}
-}
-
-func (f *FieldCondition) Type() string {
-	return f.Typ
-}
-
-func (f *FieldCondition) SetField(field string) Filter {
-	f.Field = field
-	return f
-}
-
-/**
- * Eq.
- */
-
-func Eq(field string, val interface{}) *FieldCondition {
-	eq := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "eq",
-	}
-	return &eq
-}
-
-/**
- * Neq.
- */
-
-func Neq(field string, val interface{}) *FieldCondition {
-	neq := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "neq",
-	}
-	return &neq
-}
-
-/**
- * Like.
- */
-
-func Like(field string, val interface{}) *FieldCondition {
-	like := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "like",
-	}
-	return &like
-}
-
-/**
- * In.
- */
-
-func In(field string, val interface{}) *FieldCondition {
-	in := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "in",
-	}
-	return &in
-}
-
-/**
- * Less than Lt.
- */
-
-func Lt(field string, val interface{}) *FieldCondition {
-	lt := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "lt",
-	}
-	return &lt
-}
-
-/**
- * Less than eqal Lte.
- */
-
-func Lte(field string, val interface{}) *FieldCondition {
-	lte := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "lte",
-	}
-	return &lte
-}
-
-/**
- * Greater than gt.
- */
-
-func Gt(field string, val interface{}) *FieldCondition {
-	gt := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "gt",
-	}
-	return &gt
-}
-
-/**
- * Greater than equal gte.
- */
-
-func Gte(field string, val interface{}) *FieldCondition {
-	gte := FieldCondition{
-		Field: field,
-		Value: val,
-		Typ:   "gte",
-	}
-	return &gte
-}
-
-func conditionToFilterType(cond string) string {
-	typ := ""
-
-	switch strings.ToLower(cond) {
-	case "==":
-		typ = "eq"
-	case "=":
-		typ = "eq"
-	case "!=":
-		typ = "neq"
-	case "<":
-		typ = "lt"
-	case "<=":
-		typ = "lte"
-	case ">":
-		typ = "gt"
-	case ">=":
-		typ = "gte"
-	case "like":
-		typ = "like"
-	case "in":
-		typ = "in"
-	default:
-		panic(fmt.Sprintf("Unknown field contidion: '%v'", cond))
-	}
-
-	return typ
-}
-
-/**
- * Query.
- */
-
-type OrderSpec struct {
-	Field     string
-	Ascending bool
-}
-
-func Order(field string, asc bool) OrderSpec {
-	return OrderSpec{Field: field, Ascending: asc}
-}
-
-func (o OrderSpec) String() string {
-	s := o.Field + " "
-	if o.Ascending {
-		s += "asc"
-	} else {
-		s += "desc"
-	}
-	return s
-}
 
 type DbQuery struct {
+	// backend can optionally hold the backend where the model resides.
+	// This must be set for the convenience functions like .Find() to work.
 	backend Backend
 
-	// name is an optional identifier for the query (for profiling, etc).
+	// name is an optional identifier for the query (for profiling, caching, etc).
 	name string
 
-	collection string
-
-	joins []RelationQuery
-
-	limit   int
-	offset  int
-	orders  []OrderSpec
-	fields  []string
-	filters []Filter
-
-	// joinType specifies the type of join that this query executes.
-	// For a regular query, it will be emptys
-	// For a query that executes a join, it will be either "m2m", "belongs-to" or "has-one".
-	joinType string
+	// statement is the SelectStatement.
+	statement SelectStatement
 
 	// joinResultAssigner can hold a function that will take care of assigning the results
 	// of a join query to the parent models. This is needed for m2m joins, since models
@@ -315,12 +37,14 @@ var _ Query = (*DbQuery)(nil)
 
 func Q(collection string) Query {
 	return &DbQuery{
-		collection: collection,
+		statement: &SelectStatement{
+			Collection: collection,
+		},
 	}
 }
 
 func (q *DbQuery) GetCollection() string {
-	return q.collection
+	return q.statement.Collection
 }
 
 func (q *DbQuery) GetName() string {
@@ -329,14 +53,6 @@ func (q *DbQuery) GetName() string {
 
 func (q *DbQuery) SetName(x string) {
 	q.name = x
-}
-
-func (q *DbQuery) GetJoinType() string {
-	return q.joinType
-}
-
-func (q *DbQuery) SetJoinType(x string) {
-	q.joinType = x
 }
 
 func (q *DbQuery) GetJoinResultAssigner() JoinAssigner {
@@ -352,12 +68,12 @@ func (q *DbQuery) SetJoinResultAssigner(x JoinAssigner) {
  */
 
 func (q *DbQuery) Limit(l int) Query {
-	q.limit = l
+	q.statement.Limit = l
 	return q
 }
 
 func (q *DbQuery) GetLimit() int {
-	return q.limit
+	return q.statement.Limit
 }
 
 /**
@@ -365,25 +81,38 @@ func (q *DbQuery) GetLimit() int {
  */
 
 func (q *DbQuery) Offset(o int) Query {
-	q.offset = o
+	q.statement.Offset = o
 	return q
 }
 
 func (q *DbQuery) GetOffset() int {
-	return q.offset
+	return q.statement.Offset
 }
 
 /**
  * Fields methods.
  */
 
-func (q *DbQuery) Fields(fields ...string) Query {
-	q.fields = fields
+func (q *DbQuery) Field(fields ...string) Query {
+	q.statement.Fields = make([]Expression, 0)
+	for _, field := range fields {
+		q.statement.AddField(Identifier(field))
+	}
 	return q
 }
 
-func (q *DbQuery) AddFields(fields ...string) Query {
-	q.fields = append(q.fields, fields...)
+func (q *DbQuery) FieldExpr(exprs ...Expression) Query {
+	q.statement.AddField(exprs...)
+	return q
+}
+
+func (q *DbQuery) SetFields(fields []string) Query {
+	q.statement.Fields = nil
+	return q.Field(fields...)
+}
+
+func (q *DbQuery) SetFieldExpressions(expressions []Expression) Query {
+	q.statement.Fields = expressions
 	return q
 }
 
@@ -392,8 +121,8 @@ func (q *DbQuery) AddFields(fields ...string) Query {
  * If fields where already specified, they will be reduced.
  */
 func (q *DbQuery) LimitFields(fields ...string) Query {
-	if q.fields == nil {
-		return q.Fields(fields...)
+	if q.statement.Fields == nil {
+		return q.Field(fields...)
 	}
 
 	allowMap := make(map[string]bool)
@@ -401,52 +130,53 @@ func (q *DbQuery) LimitFields(fields ...string) Query {
 		allowMap[field] = true
 	}
 
-	finalFields := make([]string, 0)
+	usedFields := make([]string, 0)
+	for _, expr := range q.statement.Fields {
+		usedFields = append(usedFields, expr.GetIdentifiers()...)
+	}
 
-	for _, field := range q.fields {
+	finalFields := make([]string, 0)
+	for _, identifier := range usedFields {
 		if _, ok := allowMap[field]; ok {
 			finalFields = append(finalFields, field)
 		}
 	}
 
-	q.fields = finalFields
-
-	return q
-}
-
-func (q *DbQuery) GetFields() []string {
-	return q.fields
+	return q.statement.SetFields(finalFields)
 }
 
 /**
- * Order methods.
+ * Sort methods.
  */
 
-func (q *DbQuery) Order(name string, asc bool) Query {
-	q.orders = append(q.orders, OrderSpec{Field: name, Ascending: asc})
+func (q *DbQuery) Sort(name string, asc bool) Query {
+	q.statement.AddSort(Sort(name, asc))
 	return q
 }
 
-func (q *DbQuery) SetOrders(orders ...OrderSpec) Query {
-	q.orders = orders
+func (q *DbQuery) SortExpr(expr *SortExpression) Query {
+	q.statement.AddSort(expr)
 	return q
 }
 
-func (q *DbQuery) GetOrders() []OrderSpec {
-	return q.orders
+func (q *DbQuery) SetSorts(exprs []SortExpression) Query {
+	q.statement.Sorts = exprs
+	return q
 }
 
 /**
  * Filter methods.
  */
 
-func (q *DbQuery) FilterQ(f ...Filter) Query {
-	q.filters = append(q.filters, f...)
+func (q *DbQuery) FilterExpr(expressions ...Expression) Query {
+	for _, expr := range expressions {
+		q.statement.FilterAnd(expr)
+	}
 	return q
 }
 
-func (q *DbQuery) SetFilters(f ...Filter) Query {
-	q.filters = f
+func (q *DbQuery) SetFilters(expressions ...Expression) Query {
+	q.statement.Filter = And(expressions...)
 	return q
 }
 
@@ -455,19 +185,15 @@ func (q *DbQuery) Filter(field string, val interface{}) Query {
 }
 
 func (q *DbQuery) FilterCond(field string, condition string, val interface{}) Query {
-	typ := conditionToFilterType(condition)
-
-	f := FieldCondition{
-		Typ:   typ,
-		Field: field,
-		Value: val,
+	operator := MapOperator(condition)
+	if operator == "" {
+		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-
-	return q.FilterQ(&f)
+	return q.FilterExpr(ValFilter(field, operator, val))
 }
 
-func (q *DbQuery) AndQ(filters ...Filter) Query {
-	return q.FilterQ(filters...)
+func (q *DbQuery) AndExpr(filters ...Expession) Query {
+	return q.FilterExpr(filters...)
 }
 
 func (q *DbQuery) And(field string, val interface{}) Query {
@@ -478,77 +204,42 @@ func (q *DbQuery) AndCond(field, condition string, val interface{}) Query {
 	return q.FilterCond(field, condition, val)
 }
 
-func (q *DbQuery) OrQ(filters ...Filter) Query {
-	for _, filter := range filters {
-		filterLen := 0
-		if q.filters != nil {
-			filterLen = len(q.filters)
-		}
-
-		if filterLen == 0 {
-			// No filters set, so just filter regularily.
-			return q.FilterQ(filter)
-		} else if filterLen > 1 {
-			// More than one filter.
-			// Can not do OR with multiple clauses present.
-			panic("invalid_or_with_multiple_clauses")
-		}
-
-		// One filter is already present.
-		// If it is OR, append to the or.
-		// Otherwise create a new top level Or.
-		if q.filters[0].Type() == "or" {
-			or := q.filters[0].(*OrCondition)
-			or.Filters = append(or.Filters, filter)
-		} else {
-			// Other filter is not an OR, so just OR the two together.
-			q.filters = []Filter{Or(q.filters[0], filter)}
-		}
+func (q *DbQuery) OrExpr(filters ...Expression) Query {
+	for _, f := range filters {
+		q.statement.FilterOr(f)
 	}
-
 	return q
 }
 
 func (q *DbQuery) Or(field string, val interface{}) Query {
-	return q.OrQ(Eq(field, val))
+	return q.OrExpr(Eq(field, val))
 }
 
 func (q *DbQuery) OrCond(field string, condition string, val interface{}) Query {
-	typ := conditionToFilterType(condition)
-
-	f := FieldCondition{
-		Typ:   typ,
-		Field: field,
-		Value: val,
+	operator := MapOperator(condition)
+	if operator == "" {
+		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-
-	return q.OrQ(&f)
+	return q.OrExpr(ValFilter(field, operator, val))
 }
 
-func (q *DbQuery) NotQ(filters ...Filter) Query {
-	q.filters = append(q.filters, Not(filters...))
+func (q *DbQuery) NotExpr(filters ...Filter) Query {
+	for _, f := range filters {
+		q.FilterExpr(Not(f))
+	}
 	return q
 }
 
 func (q *DbQuery) Not(field string, val interface{}) Query {
-	q.filters = append(q.filters, Neq(field, val))
-	return q
+	return q.FilterExpr(Not(Eq(field, val)))
 }
 
 func (q *DbQuery) NotCond(field string, condition string, val interface{}) Query {
-	typ := conditionToFilterType(condition)
-
-	f := FieldCondition{
-		Typ:   typ,
-		Field: field,
-		Value: val,
+	operator := MapOperator(condition)
+	if operator == "" {
+		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-
-	return q.NotQ(&f)
-}
-
-func (q *DbQuery) GetFilters() []Filter {
-	return q.filters
+	return q.NotExpr(ValFilter(field, operator, val))
 }
 
 /**
@@ -557,48 +248,43 @@ func (q *DbQuery) GetFilters() []Filter {
 
 func (q *DbQuery) JoinQ(jqs ...RelationQuery) Query {
 	for _, jq := range jqs {
-		jq.SetBaseQuery(q)
-		q.joins = append(q.joins, jq)
+		stmt := jq.GetStatement()
+		stmt.Base = q.statement
+		q.statement.AddJoin(stmt)
 	}
 	return q
 }
 
 func (q *DbQuery) Join(fieldName string) Query {
-	q.joins = append(q.joins, RelQ(q, fieldName))
+	q.statement.AddJoin(Join(fieldName, "", nil))
 	return q
 }
 
 // Retrieve a join query for the specified field.
 // Returns a *RelationQuery, or nil if not found.
-// Supports nested Joins like Parent.Tags
+// Supports nested Joins like 'Parent.Tags'.
 func (q *DbQuery) GetJoin(field string) RelationQuery {
-	if q.joins == nil {
+	stmt := q.statement.GetJoin(field)
+	if stmt == nil {
 		return nil
 	}
 
-	parts := strings.Split(field, ".")
-	if len(parts) > 1 {
-		field = parts[0]
+	return &DbRelationQuery{
+		baseQuery: q,
+		statement: stmt,
 	}
-
-	for _, join := range q.joins {
-		if join.GetRelationName() == field {
-			if len(parts) > 1 {
-				// Nested join, call GetJoin again on found join query.
-				return join.GetJoin(strings.Join(parts[1:], "."))
-			} else {
-				// Not nested, just return the join.
-				return join
-			}
-		}
-	}
-
-	// Join not found, return nil.
-	return nil
 }
 
 func (q *DbQuery) GetJoins() []RelationQuery {
-	return q.joins
+	jqs := make([]RelationQuery, 0)
+	for _, stmt := range q.statement.Joins {
+		q := &DbRelationQuery{
+			baseQuery: q,
+			statement: stmt,
+		}
+		jqs = append(jqs, q)
+	}
+	return jqs
 }
 
 /**
@@ -659,39 +345,30 @@ func (q *DbQuery) Delete() apperror.Error {
 	if q.backend == nil {
 		panic("Calling .Delete() on query without backend")
 	}
-	return q.backend.DeleteMany(q)
+	return q.backend.DeleteQ(q)
 }
 
 /**
  * RelationQuery.
  */
 
-const (
-	InnerJoin = "inner"
-	LeftJoin  = "left"
-	RightJoin = "right"
-	CrossJoin = "cross"
-)
-
 type DbRelationQuery struct {
 	DbQuery
 
-	baseQuery    Query
-	relationName string
-
-	joinType string
-
-	joinFieldName    string
-	foreignFieldName string
+	baseQuery Query
+	statement *JoinStatement
 }
 
 // Ensure DbRelationQuery implements RelationQuery.
 var _ RelationQuery = (*DbRelationQuery)(nil)
 
 func RelQ(q Query, name string) RelationQuery {
+	stmt := Join(name, "", nil)
+	stmt.Base = q.GetStatement()
+
 	relQ := DbRelationQuery{
-		baseQuery:    q,
-		relationName: name,
+		baseQuery: q,
+		statement: stmt,
 	}
 	relQ.SetBackend(q.GetBackend())
 
@@ -699,14 +376,18 @@ func RelQ(q Query, name string) RelationQuery {
 }
 
 func RelQCustom(q Query, name, collection, joinKey, foreignKey, typ string) RelationQuery {
-	relQ := &DbRelationQuery{
-		baseQuery:        q,
-		joinFieldName:    joinKey,
-		foreignFieldName: foreignKey,
-		joinType:         typ,
+	filter := &Filter{
+		Field:    ColFieldIdentifier(collection, joinKey),
+		Operator: OPERATOR_EQ,
+		Clause:   ColFieldIdentifier(q.GetCollection(), foreignKey),
 	}
-	relQ.relationName = name
-	relQ.collection = collection
+	stmt := Join(name, typ, filter)
+	stmt.Base = q.GetStatement()
+
+	relQ := DbRelationQuery{
+		baseQuery: q,
+		statement: stmt,
+	}
 	relQ.SetBackend(q.GetBackend())
 
 	return relQ
@@ -723,31 +404,19 @@ func (q *DbRelationQuery) SetBaseQuery(bq Query) {
 }
 
 func (q *DbRelationQuery) GetRelationName() string {
-	return q.relationName
+	return q.statement.RelationName
 }
 
 func (q *DbRelationQuery) SetRelationName(name string) {
-	q.relationName = name
+	q.statement.RelationName = name
 }
 
 func (q *DbRelationQuery) GetJoinType() string {
-	return q.joinType
+	return q.statement.JoinType
 }
 
-func (q *DbRelationQuery) GetJoinFieldName() string {
-	return q.joinFieldName
-}
-
-func (q *DbRelationQuery) SetJoinFieldName(x string) {
-	q.joinFieldName = x
-}
-
-func (q *DbRelationQuery) GetForeignFieldName() string {
-	return q.foreignFieldName
-}
-
-func (q *DbRelationQuery) SetForeignFieldName(x string) {
-	q.foreignFieldName = x
+func (q *DbRelationQuery) SetJoinType(typ string) {
+	return q.statement.JoinType = typ
 }
 
 func (q *DbRelationQuery) Build() (Query, apperror.Error) {
