@@ -30,6 +30,10 @@ func (*CreateCollectionStatement) Type() string {
 	return "create_collection"
 }
 
+func (CreateCollectionStatement) GetIdentifiers() []string {
+	return nil
+}
+
 /**
  * DropCollectionStatement.
  */
@@ -45,6 +49,10 @@ var _ Expression = (*DropCollectionStatement)(nil)
 
 func (*DropCollectionStatement) Type() string {
 	return "drop_collection"
+}
+
+func (DropCollectionStatement) GetIdentifiers() []string {
+	return nil
 }
 
 /**
@@ -64,6 +72,10 @@ func (*AddCollectionFieldStatement) Type() string {
 	return "add_collection_field"
 }
 
+func (AddCollectionFieldStatement) GetIdentifiers() []string {
+	return nil
+}
+
 /**
  * RenameCollectionFieldStatement.
  */
@@ -81,6 +93,10 @@ func (*RenameCollectionFieldStatement) Type() string {
 	return "add_collection_field"
 }
 
+func (RenameCollectionFieldStatement) GetIdentifiers() []string {
+	return nil
+}
+
 /**
  * DropCollectionFieldStatement.
  */
@@ -95,6 +111,10 @@ var _ Expression = (*DropCollectionFieldStatement)(nil)
 
 func (*DropCollectionFieldStatement) Type() string {
 	return "drop_collection_field"
+}
+
+func (DropCollectionFieldStatement) GetIdentifiers() []string {
+	return nil
 }
 
 /**
@@ -114,6 +134,10 @@ func (*AddIndexStatement) Type() string {
 	return "add_index"
 }
 
+func (AddIndexStatement) GetIdentifiers() []string {
+	return nil
+}
+
 /**
  * DropIndexStatement.
  */
@@ -128,6 +152,10 @@ var _ Expression = (*DropIndexStatement)(nil)
 
 func (*DropIndexStatement) Type() string {
 	return "drop_index"
+}
+
+func (DropIndexStatement) GetIdentifiers() []string {
+	return nil
 }
 
 /**

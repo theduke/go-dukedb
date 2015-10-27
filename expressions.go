@@ -30,13 +30,13 @@ type Expression interface {
  * TypedExpression.
  */
 
-// TypedExpession represents a database expression that contains or results in a value.
+// TypedExpression represents a database expression that contains or results in a value.
 // The ValueType is a a reflect.Type value
 // Examples are field expresession that result in a field value.
 //
 // * SELECT fieldname FROM table: fieldname is an IdentifierExpression and a
-// TypedExpession with the value of the field type.
-type TypedExpession interface {
+// TypedExpression with the value of the field type.
+type TypedExpression interface {
 	Expression
 	ValueType() reflect.Type
 	SetValueType(typ reflect.Type)
@@ -59,7 +59,7 @@ func (e *TypedExpr) SetValueType(typ reflect.Type) {
  */
 
 type ArgumentExpression interface {
-	TypedExpession
+	TypedExpression
 	GetArgument() interface{}
 	SetArgument(arg interface{})
 }
@@ -232,7 +232,7 @@ type IdentifierExpression struct {
 }
 
 // Make sure IdentifierExpression implements TypedExpression.
-var _ TypedExpession = (*IdentifierExpression)(nil)
+var _ TypedExpression = (*IdentifierExpression)(nil)
 
 func (*IdentifierExpression) Type() string {
 	return "identifier"
@@ -265,7 +265,7 @@ type CollectionFieldIdentifierExpression struct {
 }
 
 // Make sure CollectionFieldIdentifierExpression implements TypedExpression.
-var _ TypedExpession = (*CollectionFieldIdentifierExpression)(nil)
+var _ TypedExpression = (*CollectionFieldIdentifierExpression)(nil)
 
 func (*CollectionFieldIdentifierExpression) Type() string {
 	return "collection_field_identifier"
@@ -302,6 +302,10 @@ type ConstraintExpr struct {
 
 func (e ConstraintExpr) GetName() string {
 	return e.Name
+}
+
+func (*ConstraintExpr) GetIdentifiers() []string {
+	return nil
 }
 
 /**
@@ -476,7 +480,7 @@ type FieldExpression struct {
 	// Name is the field name.
 	Name string
 
-	Type *FieldTypeExpression
+	Typ *FieldTypeExpression
 
 	Constraints []*ConstraintExpression
 }
@@ -486,6 +490,10 @@ var _ Expression = (*FieldExpression)(nil)
 
 func (*FieldExpression) Type() string {
 	return "field"
+}
+
+func (FieldExpression) GetIdentifiers() []string {
+	return nil
 }
 
 /**
@@ -604,7 +612,7 @@ type NotExpression struct {
 }
 
 // Ensure NotCondition implements NestedExpression.
-var _ NestedExpr = (*NotExpression)(nil)
+var _ NestedExpression = (*NotExpression)(nil)
 
 func (*NotExpression) Type() string {
 	return "not"
