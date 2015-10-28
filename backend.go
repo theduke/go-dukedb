@@ -324,6 +324,9 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q *RelationQuery) (
 	}
 
 	var targetModelName, joinField, foreignFieldName string
+	if targetModelName != "" {
+
+	}
 
 	var newQuery *Query
 
@@ -969,7 +972,7 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []*Relati
 			nestedJoins = append(nestedJoins, joinQ)
 
 			// Build a new join query for the first level join.
-			joinQ = RelQ(joinQ.GetBaseQuery(), parts[0])
+			RelQ(joinQ.GetBaseQuery(), parts[0], JOIN_LEFT)
 		}
 
 		// Skip already executed joins to avoid duplicate work.
@@ -990,7 +993,7 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []*Relati
 
 	// Nested joins remain!
 	// First, group the joins by parent.
-	joinMap := make(map[string][]RelationQuery, 0)
+	joinMap := make(map[string][]*RelationQuery, 0)
 
 	for _, joinQ := range nestedJoins {
 		parts := strings.Split(joinQ.GetRelationName(), ".")
@@ -1040,7 +1043,7 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []*Relati
 		var nestedJoins []*RelationQuery
 		for _, joinQ := range joinMap[parentField] {
 			parts := strings.Split(joinQ.GetRelationName(), ".")
-			nestedQ := RelQ(Q(parentCollection), strings.Join(parts[1:], "."))
+			nestedQ := RelQ(Q(parentCollection), strings.Join(parts[1:], "."), JOIN_LEFT)
 			nestedJoins = append(nestedJoins, nestedQ)
 		}
 
@@ -1080,8 +1083,8 @@ func doJoin(b Backend, model string, objs []interface{}, joinQ *RelationQuery) a
 
 func assignJoinModels(objs, joinedModels []interface{}, joinQ *RelationQuery) {
 	targetField := joinQ.GetRelationName()
-	joinedField := joinQ.GetJoinFieldName()
-	joinField := joinQ.GetForeignFieldName()
+	joinedField := "" // joinQ.GetJoinFieldName()
+	joinField := ""   //joinQ.GetForeignFieldName()
 
 	mapper := make(map[interface{}][]interface{})
 	for _, model := range joinedModels {

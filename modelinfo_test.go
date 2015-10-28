@@ -4,73 +4,73 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	. "github.com/theduke/go-dukedb"
+	db "github.com/theduke/go-dukedb"
 	. "github.com/theduke/go-dukedb/backends/tests"
 )
 
 var _ = Describe("Modelinfo", func() {
-	Describe("ParseFieldTag", func() {
+	Describe("db.ParseFieldTag", func() {
 		It("Should parse primary_key", func() {
-			info, _ := ParseFieldTag("primary-key;")
+			info, _ := db.ParseFieldTag("primary-key;")
 			Expect(info.PrimaryKey).To(Equal(true))
 
-			info, _ = ParseFieldTag("primary-key")
+			info, _ = db.ParseFieldTag("primary-key")
 			Expect(info.PrimaryKey).To(Equal(true))
 		})
 
 		It("Should parse ignore", func() {
-			info, _ := ParseFieldTag("-")
+			info, _ := db.ParseFieldTag("-")
 			Expect(info.Ignore).To(Equal(true))
 		})
 
 		It("Should parse name", func() {
-			info, _ := ParseFieldTag("name:the_name")
+			info, _ := db.ParseFieldTag("name:the_name")
 			Expect(info.BackendName).To(Equal("the_name"))
 		})
 
 		It("Should fail on invalid name", func() {
-			_, err := ParseFieldTag("name")
+			_, err := db.ParseFieldTag("name")
 			Expect(err).To(HaveOccurred())
 			Expect(err.GetCode()).To(Equal("invalid_name"))
 		})
 
 		It("Should parse m2m", func() {
-			info, _ := ParseFieldTag("m2m")
+			info, _ := db.ParseFieldTag("m2m")
 			Expect(info.M2M).To(Equal(true))
 		})
 
 		It("Should parse has-one", func() {
-			info, _ := ParseFieldTag("has-one")
+			info, _ := db.ParseFieldTag("has-one")
 			Expect(info.HasOne).To(Equal(true))
 		})
 
 		It("Should parse explicit has-one", func() {
-			info, _ := ParseFieldTag("has-one:field1:field2;")
+			info, _ := db.ParseFieldTag("has-one:field1:field2;")
 			Expect(info.HasOne).To(Equal(true))
 			Expect(info.HasOneField).To(Equal("field1"))
 			Expect(info.HasOneForeignField).To(Equal("field2"))
 		})
 
 		It("Should fail on invalid has-one", func() {
-			_, err := ParseFieldTag("has-one:field1")
+			_, err := db.ParseFieldTag("has-one:field1")
 			Expect(err).To(HaveOccurred())
 			Expect(err.GetCode()).To(Equal("invalid_has_one"))
 		})
 
 		It("Should parse belongs-to", func() {
-			info, _ := ParseFieldTag("belongs-to")
+			info, _ := db.ParseFieldTag("belongs-to")
 			Expect(info.BelongsTo).To(Equal(true))
 		})
 
 		It("Should parse explicit belongs-to", func() {
-			info, _ := ParseFieldTag("belongs-to:field1:field2;")
+			info, _ := db.ParseFieldTag("belongs-to:field1:field2;")
 			Expect(info.BelongsTo).To(Equal(true))
 			Expect(info.BelongsToField).To(Equal("field1"))
 			Expect(info.BelongsToForeignField).To(Equal("field2"))
 		})
 
 		It("Should fail on invalid belongs-to", func() {
-			_, err := ParseFieldTag("belongs-to:field1")
+			_, err := db.ParseFieldTag("belongs-to:field1")
 			Expect(err).To(HaveOccurred())
 			Expect(err.GetCode()).To(Equal("invalid_belongs_to"))
 		})
@@ -78,7 +78,7 @@ var _ = Describe("Modelinfo", func() {
 
 	Describe("ModelInfo", func() {
 
-		Describe("CreateModelInfo", func() {
+		Describe("BuildModelInfo", func() {
 
 			It("Should fail on invalid tags", func() {
 				type InvalidTagModel struct {
@@ -86,45 +86,45 @@ var _ = Describe("Modelinfo", func() {
 					InvalidField string `db:"has-one:xxx"`
 				}
 
-				_, err := CreateModelInfo(&InvalidTagModel{})
+				_, err := db.BuildModelInfo(&InvalidTagModel{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.GetCode()).To(Equal("build_field_info_error"))
 			})
 
 			It("Should fail without primary key", func() {
 				type NoPKModel struct {
-					BaseModel
+					db.BaseModel
 					SomeField string
 				}
-				_, err := CreateModelInfo(&NoPKModel{})
+				_, err := db.BuildModelInfo(&NoPKModel{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.GetCode()).To(Equal("primary_key_not_found"))
 			})
 
 			It("Should determine ID field as primary key", func() {
-				info, err := CreateModelInfo(&TestModel{})
+				info, err := db.BuildModelInfo(&TestModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.PkField).To(Equal("ID"))
 			})
 
 			It("Should determine explicit primary key field", func() {
 				type PKModel struct {
-					BaseModel
+					db.BaseModel
 					Name string `db:"primary-key"`
 				}
 
-				info, err := CreateModelInfo(&PKModel{})
+				info, err := db.BuildModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.PkField).To(Equal("Name"))
 			})
 
 			It("Should build info for test model successfully", func() {
-				_, err := CreateModelInfo(&TestModel{})
+				_, err := db.BuildModelInfo(&TestModel{})
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("Should build info for test parent model successfully", func() {
-				_, err := CreateModelInfo(&TestParent{})
+				_, err := db.BuildModelInfo(&TestParent{})
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -133,22 +133,22 @@ var _ = Describe("Modelinfo", func() {
 
 			It("Should run .GetPkName() correctly", func() {
 				type PKModel struct {
-					BaseModel
+					db.BaseModel
 					Name string `db:"primary-key;name:custom_name"`
 				}
 
-				info, err := CreateModelInfo(&PKModel{})
+				info, err := db.BuildModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.FieldInfo[info.PkField].BackendName).To(Equal("custom_name"))
 			})
 
 			It("Should map field names correctly (.MapFieldName())", func() {
 				type PKModel struct {
-					BaseModel
+					db.BaseModel
 					Name string `db:"primary-key;name:custom_name"`
 				}
 
-				info, err := CreateModelInfo(&PKModel{})
+				info, err := db.BuildModelInfo(&PKModel{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(info.MapFieldName("custom_name")).To(Equal("Name"))
 			})
@@ -158,29 +158,29 @@ var _ = Describe("Modelinfo", func() {
 
 	Describe("Building of relationship info", func() {
 		It("Builds relationship info without errors", func() {
-			parent, _ := CreateModelInfo(&TestParent{})
-			model, _ := CreateModelInfo(&TestModel{})
+			parent, _ := db.BuildModelInfo(&TestParent{})
+			model, _ := db.BuildModelInfo(&TestModel{})
 
-			modelInfo := map[string]*ModelInfo{
+			modelInfo := map[string]*db.ModelInfo{
 				"test_parents": parent,
 				"test_models":  model,
 			}
-			Expect(BuildAllRelationInfo(modelInfo)).ToNot(HaveOccurred())
+			Expect(db.BuildAllRelationInfo(modelInfo)).ToNot(HaveOccurred())
 		})
 	})
 
 	Context("Correct relationship info", func() {
-		var modelInfo map[string]*ModelInfo
+		var modelInfo map[string]*db.ModelInfo
 
 		BeforeEach(func() {
-			parent, _ := CreateModelInfo(&TestParent{})
-			model, _ := CreateModelInfo(&TestModel{})
+			parent, _ := db.BuildModelInfo(&TestParent{})
+			model, _ := db.BuildModelInfo(&TestModel{})
 
-			modelInfo = map[string]*ModelInfo{
+			modelInfo = map[string]*db.ModelInfo{
 				"test_parents": parent,
 				"test_models":  model,
 			}
-			BuildAllRelationInfo(modelInfo)
+			db.BuildAllRelationInfo(modelInfo)
 		})
 
 		It("Finds inferred has-one", func() {
@@ -202,7 +202,7 @@ var _ = Describe("Modelinfo", func() {
 		})
 
 		It("Finds inferred belongs-to correctly on parent model", func() {
-			BuildAllRelationInfo(modelInfo)
+			db.BuildAllRelationInfo(modelInfo)
 
 			parent := modelInfo["test_parents"]
 
@@ -213,7 +213,7 @@ var _ = Describe("Modelinfo", func() {
 		})
 
 		It("Finds explicit belongs-to correctly on parent model", func() {
-			BuildAllRelationInfo(modelInfo)
+			db.BuildAllRelationInfo(modelInfo)
 
 			parent := modelInfo["test_parents"]
 
@@ -224,7 +224,7 @@ var _ = Describe("Modelinfo", func() {
 		})
 
 		It("Finds m2m on parent model", func() {
-			BuildAllRelationInfo(modelInfo)
+			db.BuildAllRelationInfo(modelInfo)
 
 			parent := modelInfo["test_parents"]
 

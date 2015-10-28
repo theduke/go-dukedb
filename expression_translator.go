@@ -64,11 +64,11 @@ func (t *ExpressionTranslator) String() string {
  * Basic SQL translater.
  */
 
-type SqlTranslater struct {
+type SqlTranslator struct {
 	ExpressionTranslator
 }
 
-func (t *SqlTranslater) Translate(expression Expression) apperror.Error {
+func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 	if err := expression.Validate(); err != nil {
 		return apperror.Wrap(err, "invalid_"+expression.Type()+"_expression")
 	}
@@ -235,7 +235,7 @@ func (t *SqlTranslater) Translate(expression Expression) apperror.Error {
 		t.W(" ")
 
 		// Join clauses.
-		for i, join := range e.Joins {
+		for _, join := range e.Joins {
 			if err := t.Translate(join); err != nil {
 				return err
 			}
@@ -498,7 +498,7 @@ func (t *SqlTranslater) Translate(expression Expression) apperror.Error {
 		if err := t.Translate(e.GetField()); err != nil {
 			return err
 		}
-		t.W(" ", e.GetOperator(), " ")
+		t.W(" ", OperatorToSql(e.GetOperator()), " ")
 		if err := t.Translate(e.GetClause()); err != nil {
 			return err
 		}
