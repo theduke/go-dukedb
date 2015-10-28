@@ -92,6 +92,47 @@ func (f FieldInfo) IsRelation() bool {
 	return f.RelationItem != nil
 }
 
+/**
+ * ModelInfos.
+ */
+
+type ModelInfos map[string]*ModelInfo
+
+func (i *ModelInfos) Add(info *ModelInfo) {
+	i[info.Collection] = i
+}
+
+func (i *ModelInfos) HasCollection(collection string) bool {
+	info, _ := i[collection]
+	return info != nil
+}
+
+func (i ModelInfos) ByCollection(collection string) *ModelInfo {
+	return i[collection]
+}
+
+// Find tries to find the ModelInfo by checking Collction, MarshalName and BackendName.
+func (i ModelInfos) Find(name string) *ModelInfo {
+	for _, info := range i {
+		if info.Collection == name || info.BackendName == name || info.MarshalName == name {
+			return info
+		}
+	}
+	return nil
+}
+
+func (i ModelInfos) FindBackendName(name string) string {
+	info := i.Find(name)
+	if info == nil {
+		return ""
+	}
+	return info.BackendName
+}
+
+/**
+ * ModelInfo.
+ */
+
 // Contains information about a Model, including field info.
 type ModelInfo struct {
 	// Name of the struct field.
