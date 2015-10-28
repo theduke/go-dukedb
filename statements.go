@@ -1,6 +1,7 @@
 package dukedb
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -264,6 +265,104 @@ func (s *SelectStatement) GetJoin(field string) *JoinStatement {
 
 	// Join not found, return nil.
 	return nil
+}
+
+func (s *SelectStatement) FixNesting() apperror.error {
+	if err := s.FixNestedJoins(); err != nil {
+		return err
+	}
+	s.FixNestedFields()
+	return nil
+}
+
+func (s *SelectStatement) FixNestedJoins() apperror.Error {
+	if len(s.Joins) < 1 {
+		return nil
+	}
+	return s.fixNestedJoinsRecursive(2, 1)
+}
+
+func (s *SelectStatement) fixNestedJoinsRecursive(lvl, maxLvl int) apperror.Error {
+	remainingJoins := make([]*JoinStatement, 0)
+
+	for index, join := range s.Joins {
+		if join.RelationName == "" {
+			// No RelationName set, so ignore this custom join.
+			remainingJoins = append(remainingJoins, join)
+			continue
+		}
+
+		parts := strings.Split(join.RelationName, ".")
+		joinLvl := len(parts)
+		if joinLvl > maxLvl {
+			maxLvl = joinLvl
+		}
+
+		if joinLvl != lvl {
+			// Join is not on the level currently processed, so skip.
+			remainingJoins = append(remainingJoins, join)
+			continue
+		}
+
+		parentJoin := s.GetJoin(strings.Join(parts[0:joinLvl-2], "."))
+		if parentJoin == nil {
+			return &apperror.Err{
+				Public:  true,
+				Code:    "invalid_join",
+				Message: fmt.Printf("Invalid nested join '%v': parent join %v not found", join.RelationName, parts[0]),
+			}
+		}
+		parentJoin.AddJoin(join)
+	}
+
+	s.Joins = remainingJoins
+
+	if lvl < maxLvl {
+		return s.fixNestedJoinsRecursive(lvl+1, maxLvl)
+	}
+	return nil
+}
+
+func (s *SelectStatement) FixNestedFields() {
+	if len(s.Fields) < 1 {
+		return nil
+	}
+
+	remainingFields := make([]Expression, 0)
+
+	for _, fieldExpr := range s.Fields {
+		if field, ok := fieldExpr.(*IdentifierExpression); !ok {
+			remainingFields = append(remainingFields, field)
+			continue
+		}
+
+		parts := strings.Split(field.Identifier, ".")
+		if len(parts) < 2 {
+			remainingFields = append(remainingFields, field)
+			continue
+		}
+
+		// Nested field, so try to find parent join.
+		joinName := strings.Join(parts[0:len(parts)-2], ".")
+		join := s.GetJoin(joinName)
+		if join == nil {
+			/*
+				return &apperror.Error{
+					Public: true,
+					Code: "invalid_nested_field",
+					Message: fmt.Printf("Invalid nested field '%v': the parent join %v does not exist", field.Identifier, joinName),
+				}
+			*/
+
+			// Maybe the backend supports nested fields, so leave the field untouched.
+			remainingFields = append(remainingFields, field)
+		} else {
+			// Found parent join, so add the field to it.
+			join.AddField(field)
+		}
+	}
+
+	s.Fields = remainingFields
 }
 
 const (
