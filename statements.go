@@ -313,22 +313,28 @@ func Join(relationName, joinType string, joinCondition Expression) *JoinStatemen
 }
 
 /**
- * CreateStatement.
+ * MutationExpression.
  */
 
-type CreateStatement struct {
+type MutationStatement interface {
+	GetCollection() string
+	GetValues() []*FieldValueExpression
+}
+
+type MutationStmt struct {
 	Collection string
 	Values     []*FieldValueExpression
 }
 
-// Ensure CreateStatement implements Expression.
-var _ Expression = (*CreateStatement)(nil)
-
-func (*CreateStatement) Type() string {
-	return "create"
+func (e MutationStmt) GetCollection() {
+	return e.Collection
 }
 
-func (s CreateStatement) GetIdentifiers() []string {
+func (e MutationStmt) GetValues() []*FieldValueExpression {
+	return e.Values
+}
+
+func (s MutationStmt) GetIdentifiers() []string {
 	ids := make([]string, 0)
 	for _, val := range s.Values {
 		ids = append(ids, val.GetIdentifiers()...)
@@ -337,27 +343,33 @@ func (s CreateStatement) GetIdentifiers() []string {
 }
 
 /**
+ * CreateStatement.
+ */
+
+type CreateStatement struct {
+	MutationStmt
+}
+
+// Ensure CreateStatement implements Expression.
+var _ MutationStatement = (*CreateStatement)(nil)
+
+func (*CreateStatement) Type() string {
+	return "create"
+}
+
+/**
  * UpdateStatement.
  */
 
 type UpdateStatement struct {
+	MutationStmt
 	// Select is the select statement to specify which models to update.
-	Select SelectStatement
-	// Values holds the field values to update.
-	Values []*FieldValueExpression
+	Select *SelectStatement
 }
 
 // Ensure UpdateStatement implements Expression.
-var _ Expression = (*UpdateStatement)(nil)
+var _ MutationStatement = (*UpdateStatement)(nil)
 
 func (*UpdateStatement) Type() string {
 	return "update"
-}
-
-func (s UpdateStatement) GetIdentifiers() []string {
-	ids := s.Select.GetIdentifiers()
-	for _, val := range s.Values {
-		ids = append(ids, val.GetIdentifiers()...)
-	}
-	return ids
 }
