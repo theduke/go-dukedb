@@ -188,7 +188,7 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.FilterExpr(ValFilter(field, operator, Val(val)))
+	return q.FilterExpr(ValFilter("", field, operator, Val(val)))
 }
 
 func (q *Query) AndExpr(filters ...Expression) *Query {
@@ -219,7 +219,7 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.OrExpr(ValFilter(field, operator, Val(val)))
+	return q.OrExpr(ValFilter("", field, operator, Val(val)))
 }
 
 func (q *Query) NotExpr(filters ...Expression) *Query {
@@ -238,7 +238,7 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.NotExpr(ValFilter(field, operator, Val(val)))
+	return q.NotExpr(ValFilter("", field, operator, Val(val)))
 }
 
 /**
