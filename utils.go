@@ -1191,7 +1191,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, in
 func ModelToJson(info *ModelInfo, model Model, includeRelations bool) ([]byte, apperror.Error) {
 	if info == nil {
 		var err apperror.Error
-		info, err = CreateModelInfo(model)
+		info, err = BuildModelInfo(model)
 		if err != nil {
 			return nil, err
 		}
@@ -1386,7 +1386,7 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Query related.
  */
 
-func NormalizeSelectStatement(stmt *SelectStatement) apperror.Error {
+func NormalizeSelectStatement(stmt *SelectStatement, info *ModelInfo, allInfo ModelInfos) apperror.Error {
 	// Fix nesting (joins and fields).
 	if err := stmt.FixNesting(); err != nil {
 		return err
@@ -1425,28 +1425,28 @@ func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelIn
 
 	switch expr := expression.(type) {
 	case *UpdateStatement:
-		if err := NormalizeExpression(expr.MutationExpr, info, allInfo); err != nil {
+		if err := NormalizeExpression(&expr.MutationStmt, info, allInfo); err != nil {
 			return err
 		}
 		if err := NormalizeExpression(expr.Select, info, allInfo); err != nil {
 			return err
 		}
 
-	case MutationExpression:
+	case MutationStatement:
 		backendName := allInfo.FindBackendName(expr.GetCollection())
 		if backendName == "" {
-			return apperror.New("unknown_collection", fmt.Printf("The collection %v does not exist", expr.GetCollection()))
+			return apperror.New("unknown_collection", fmt.Sprintf("The collection %v does not exist", expr.GetCollection()))
 		}
-		expr.Collection = backendName
+		expr.SetCollection(backendName)
 
-		for _, fieldVal := range expr.Values {
+		for _, fieldVal := range expr.GetValues() {
 			if err := NormalizeExpression(fieldVal, info, allInfo); err != nil {
 				return err
 			}
 		}
 
 	case *SelectStatement:
-		if err := NormalizeSelectStatement(expr); err != nil {
+		if err := NormalizeSelectStatement(expr, info, allInfo); err != nil {
 			return err
 		}
 
@@ -1511,28 +1511,30 @@ func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelIn
 			}
 
 			if backendName == "" {
-				return apperor.New("unknown_collection", fmt.Printf("The collection %v does not exist", expr.Collection), true)
+				return apperror.New("unknown_collection", fmt.Sprintf("The collection %v does not exist", expr.Collection), true)
 			}
 			expr.Collection = backendName
 		}
 
 		// We found a valid collection name.
 		// Now normalize the field name.
-		fieldName := colInfo.FindBackenddName(expr.Field)
+		fieldName := colInfo.FindBackendName(expr.Field)
 		if fieldName == "" {
-			return apperror.New("unknown_field", fmt.Printf("The collection %v has no field %v", colInfo.Collection, expr.Field))
+			return apperror.New("unknown_field", fmt.Sprintf("The collection %v has no field %v", colInfo.Collection, expr.Field))
 		}
 		expr.Field = fieldName
 
 	case *IdentifierExpression:
 		fieldName := info.FindBackendName(expr.Identifier)
 		if fieldName == "" {
-			return apperror.New("unknown_field", fmt.Printf("The collection %v has no field %v", info.Collection, expr.Identifier))
+			return apperror.New("unknown_field", fmt.Sprintf("The collection %v has no field %v", info.Collection, expr.Identifier))
 		}
 
 	default:
-		panic(fmt.Printf("Unhandled expression type: %v\n", typ))
+		panic(fmt.Sprintf("Unhandled expression type: %v\n", reflect.TypeOf(expr)))
 	}
+
+	return nil
 }
 
 /**

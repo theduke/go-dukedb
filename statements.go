@@ -420,7 +420,9 @@ func Join(relationName, joinType string, joinCondition Expression) *JoinStatemen
 
 type MutationStatement interface {
 	GetCollection() string
+	SetCollection(col string)
 	GetValues() []*FieldValueExpression
+	SetValues([]*FieldValueExpression)
 }
 
 type MutationStmt struct {
@@ -428,12 +430,24 @@ type MutationStmt struct {
 	Values     []*FieldValueExpression
 }
 
+func (MutationStmt) Type() string {
+	return "mutation"
+}
+
 func (e MutationStmt) GetCollection() string {
 	return e.Collection
 }
 
+func (e *MutationStmt) SetCollection(col string) {
+	e.Collection = col
+}
+
 func (e MutationStmt) GetValues() []*FieldValueExpression {
 	return e.Values
+}
+
+func (e *MutationStmt) SetValues(vals []*FieldValueExpression) {
+	e.Values = vals
 }
 
 func (s MutationStmt) GetIdentifiers() []string {
