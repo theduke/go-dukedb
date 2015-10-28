@@ -25,6 +25,7 @@ var CONSTRAINTS map[string]bool = map[string]bool{
 /**
  * Expressions.
  *
+ * NamedNestedExpr
  * TextExpression
  * FieldTypeExpression
  * ValueExpression
@@ -167,14 +168,14 @@ func (e *ArgumentsExpr) AddArguments(args ...interface{}) {
 // An example are SQL functions like MAX(...) or SUM(xxx).
 type NestedExpression interface {
 	Expression
-	GetNestedExpression() Expression
+	GetExpression() Expression
 }
 
 type NestedExpr struct {
 	Nested Expression
 }
 
-func (e *NestedExpr) GetNestedExpression() Expression {
+func (e *NestedExpr) GetExpression() Expression {
 	return e.Nested
 }
 
@@ -217,6 +218,52 @@ func (m MultiExpr) GetIdentifiers() []string {
 		ids = append(ids, expr.GetIdentifiers()...)
 	}
 	return ids
+}
+
+/**
+ * NamedNestedExpression.
+ */
+
+type NamedNestedExpression interface {
+	Expression
+	GetName() string
+	GetExpression() Expression
+}
+
+type NamedNestedExpr struct {
+	Name       string
+	Expression Expression
+}
+
+// Ensure FieldTypeExpression implements Named and NestedExpression.
+var _ Expression = (*NamedNestedExpr)(nil)
+
+func (*NamedNestedExpr) Type() string {
+	return "named_nested"
+}
+
+func (e *NamedNestedExpr) Validate() apperror.Error {
+	if e.Name == "" {
+		return apperror.New("empty_name")
+	} else if e.Expression == nil {
+		return apperror.New("empty_nested_expression")
+	}
+	return nil
+}
+
+func (e *NamedNestedExpr) IsCacheable() bool {
+	return false
+}
+
+func (e *NamedNestedExpr) GetIdentifiers() []string {
+	return e.Expression.GetIdentifiers()
+}
+
+func WrapNamedExpression(name string, expr Expression) *NamedNestedExpr {
+	return &NamedNestedExpr{
+		Name:       name,
+		Expression: expr,
+	}
 }
 
 /**
@@ -1329,7 +1376,7 @@ func (e *SortExpression) IsCacheable() bool {
 	return false
 }
 
-func (e SortExpression) GetNestedExpression() Expression {
+func (e SortExpression) GetExpression() Expression {
 	return e.Field
 }
 
