@@ -19,7 +19,7 @@ type Query struct {
 	name string
 
 	// statement is the SelectStatement.
-	statement SelectStatement
+	statement *SelectStatement
 
 	// joinResultAssigner can hold a function that will take care of assigning the results
 	// of a join query to the parent models. This is needed for m2m joins, since models
@@ -36,6 +36,10 @@ func Q(collection string) *Query {
 			Collection: collection,
 		},
 	}
+}
+
+func (q *Query) GetStatement() *SelectStatement {
+	return q.statement
 }
 
 func (q *Query) GetCollection() string {
@@ -132,12 +136,12 @@ func (q *Query) LimitFields(fields ...string) *Query {
 
 	finalFields := make([]string, 0)
 	for _, identifier := range usedFields {
-		if _, ok := allowMap[field]; ok {
-			finalFields = append(finalFields, field)
+		if _, ok := allowMap[identifier]; ok {
+			finalFields = append(finalFields, identifier)
 		}
 	}
 
-	return q.statement.SetFields(finalFields)
+	return q.SetFields(finalFields)
 }
 
 /**
@@ -154,7 +158,7 @@ func (q *Query) SortExpr(expr *SortExpression) *Query {
 	return q
 }
 
-func (q *Query) SetSorts(exprs []SortExpression) *Query {
+func (q *Query) SetSorts(exprs []*SortExpression) *Query {
 	q.statement.Sorts = exprs
 	return q
 }
@@ -176,7 +180,7 @@ func (q *Query) SetFilters(expressions ...Expression) *Query {
 }
 
 func (q *Query) Filter(field string, val interface{}) *Query {
-	return q.FilterQ(Eq(field, val))
+	return q.FilterExpr(Eq(field, val))
 }
 
 func (q *Query) FilterCond(field string, condition string, val interface{}) *Query {
@@ -184,7 +188,7 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.FilterExpr(ValFilter(field, operator, val))
+	return q.FilterExpr(ValFilter(field, operator, Val(val)))
 }
 
 func (q *Query) AndExpr(filters ...Expression) *Query {
@@ -215,10 +219,10 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.OrExpr(ValFilter(field, operator, val))
+	return q.OrExpr(ValFilter(field, operator, Val(val)))
 }
 
-func (q *Query) NotExpr(filters ...Filter) *Query {
+func (q *Query) NotExpr(filters ...Expression) *Query {
 	for _, f := range filters {
 		q.FilterExpr(Not(f))
 	}
@@ -234,7 +238,7 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.NotExpr(ValFilter(field, operator, val))
+	return q.NotExpr(ValFilter(field, operator, Val(val)))
 }
 
 /**
@@ -256,7 +260,7 @@ func (q *Query) Join(fieldName string, joinType ...string) *Query {
 		if len(joinType) > 1 {
 			panic("Called Query.Join() with more than one joinType")
 		}
-		typ = joinType
+		typ = joinType[0]
 	}
 	q.statement.AddJoin(Join(fieldName, typ, nil))
 	return q
@@ -278,7 +282,7 @@ func (q *Query) GetJoin(field string) *RelationQuery {
 }
 
 func (q *Query) GetJoins() []*RelationQuery {
-	jqs := make([]RelationQuery, 0)
+	jqs := make([]*RelationQuery, 0)
 	for _, stmt := range q.statement.Joins {
 		q := &RelationQuery{
 			baseQuery: q,
@@ -294,7 +298,7 @@ func (q *Query) GetJoins() []*RelationQuery {
  */
 
 func (q *Query) Related(name string) *RelationQuery {
-	return RelQ(q, name)
+	return RelQ(q, name, JOIN_INNER)
 }
 
 func (q *Query) RelatedCustom(name, collection, joinKey, foreignKey, typ string) *RelationQuery {
@@ -357,20 +361,18 @@ func (q *Query) Delete() apperror.Error {
 type RelationQuery struct {
 	Query
 
-	baseQuery Query
+	baseQuery *Query
 	statement *JoinStatement
 }
 
-func RelQ(q Query, name string) *RelationQuery {
-	stmt := Join(name, "", nil)
+func RelQ(q *Query, name string, joinType string) *RelationQuery {
+	stmt := Join(name, joinType, nil)
 	stmt.Base = q.GetStatement()
 
 	relQ := &RelationQuery{
 		// Duplicate statement in embedded Query to avoid having to duplicate all the methods.
 		Query: Query{
-			statement: &SelectStatement{
-				Collection: collection,
-			},
+			statement: &SelectStatement{},
 		},
 		baseQuery: q,
 		statement: stmt,
@@ -380,7 +382,7 @@ func RelQ(q Query, name string) *RelationQuery {
 	return relQ
 }
 
-func RelQCustom(q Query, name, collection, joinKey, foreignKey, typ string) *RelationQuery {
+func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *RelationQuery {
 	filter := &Filter{
 		Field:    ColFieldIdentifier(collection, joinKey),
 		Operator: OPERATOR_EQ,
@@ -410,7 +412,7 @@ func (q *RelationQuery) GetStatement() *JoinStatement {
 	stmt := q.statement
 	// Since all regular *Query methods operate on Query.statement,
 	// replace the JoinStatement base with Query.statement.
-	stmt.SelectStatement = q.Query.statement
+	stmt.SelectStatement = *q.Query.statement
 	return stmt
 }
 
@@ -434,7 +436,7 @@ func (q *RelationQuery) GetJoinType() string {
 	return q.statement.JoinType
 }
 
-func (q *RelationQuery) SetJoinType(typ string) {
+func (q *RelationQuery) SetJoinType(typ string) *RelationQuery {
 	q.statement.JoinType = typ
 	return q
 }
@@ -571,7 +573,7 @@ func (q *RelationQuery) SortExpr(expr *SortExpression) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) SetSorts(exprs []SortExpression) *RelationQuery {
+func (q *RelationQuery) SetSorts(exprs []*SortExpression) *RelationQuery {
 	q.Query.SetSorts(exprs)
 	return q
 }
@@ -597,6 +599,7 @@ func (q *RelationQuery) Filter(field string, val interface{}) *RelationQuery {
 
 func (q *RelationQuery) FilterCond(field string, condition string, val interface{}) *RelationQuery {
 	q.Query.FilterCond(field, condition, val)
+	return q
 }
 
 func (q *RelationQuery) AndExpr(filters ...Expression) *RelationQuery {
@@ -629,7 +632,7 @@ func (q *RelationQuery) OrCond(field string, condition string, val interface{}) 
 	return q
 }
 
-func (q *RelationQuery) NotExpr(filters ...Filter) *RelationQuery {
+func (q *RelationQuery) NotExpr(filters ...Expression) *RelationQuery {
 	q.Query.NotExpr(filters...)
 	return q
 }
@@ -650,6 +653,7 @@ func (q *RelationQuery) NotCond(field string, condition string, val interface{})
 
 func (q *RelationQuery) JoinQ(jqs ...*RelationQuery) *RelationQuery {
 	q.Query.JoinQ(jqs...)
+	return q
 }
 
 func (q *RelationQuery) Join(fieldName string, joinType ...string) *RelationQuery {
@@ -663,6 +667,5 @@ func (q *RelationQuery) GetJoin(field string) *RelationQuery {
 }
 
 func (q *RelationQuery) GetJoins() []*RelationQuery {
-	q.Query.GetJoins()
-	return q
+	return q.Query.GetJoins()
 }

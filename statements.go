@@ -302,7 +302,7 @@ func (s JoinStatement) GetIdentifiers() []string {
 	return ids
 }
 
-func Join(relationName, joinType string, joinCondition Expression) {
+func Join(relationName, joinType string, joinCondition Expression) *JoinStatement {
 	return &JoinStatement{
 		RelationName:  relationName,
 		JoinType:      joinType,

@@ -153,7 +153,7 @@ func (m *MultiExpr) SetExpressions(e []Expression) {
 }
 
 func (m *MultiExpr) Add(expr ...Expression) {
-	for _, e := range exrp {
+	for _, e := range expr {
 		m.Expressions = append(m.Expressions, e)
 	}
 }
@@ -215,7 +215,7 @@ func Val(value interface{}, typ ...reflect.Type) *ValueExpression {
 		if len(typ) > 1 {
 			panic("Called dukedb.Val() with more than one type")
 		}
-		e.typ = typ[0]
+		e.Typ = typ[0]
 	}
 	return e
 }
@@ -244,7 +244,9 @@ func (e IdentifierExpression) GetIdentifiers() []string {
 
 // Identifier is a convenient way to create an *IdentifierExpression.
 func Identifier(identifier string, typ ...reflect.Type) *IdentifierExpression {
-	e := &IdentifierExpression{identifier}
+	e := &IdentifierExpression{
+		Identifier: identifier,
+	}
 	if len(typ) > 0 {
 		if len(typ) > 1 {
 			panic("Called dukedb.Identifier() with more than one type")
@@ -277,7 +279,10 @@ func (e CollectionFieldIdentifierExpression) GetIdentifiers() []string {
 
 // ColFieldIdentifier is a convenient way to create an *CollectionFieldIdentifierExpression.
 func ColFieldIdentifier(collection, field string, typ ...reflect.Type) *CollectionFieldIdentifierExpression {
-	e := &CollectionFieldIdentifierExpression{collection, field}
+	e := &CollectionFieldIdentifierExpression{
+		Collection: collection,
+		Field:      field,
+	}
 	if len(typ) > 0 {
 		if len(typ) > 1 {
 			panic("Called dukedb.Val() with more than one type")
@@ -551,10 +556,11 @@ func (e FunctionExpression) Func() string {
 }
 
 func Func(function string, expr Expression) *FunctionExpression {
-	return &FunctionExpression{
+	e := &FunctionExpression{
 		Function: function,
-		Nested:   expr,
 	}
+	e.Nested = expr
+	return e
 }
 
 /**
@@ -621,7 +627,7 @@ func (*NotExpression) Type() string {
 func Not(expr ...Expression) *NotExpression {
 	not := &NotExpression{}
 	if len(expr) == 1 {
-		not.Nested = expr
+		not.Nested = expr[0]
 	} else if len(expr) > 1 {
 		not.Nested = And(expr...)
 	}
@@ -717,7 +723,7 @@ func (f FieldFilter) GetIdentifiers() []string {
 }
 
 // NewFieldFilter creates a new field filter expression.
-func NewFieldFilter(field IdentifierExpression, operator string, clause Expression) *FieldFilter {
+func NewFieldFilter(field *IdentifierExpression, operator string, clause Expression) *FieldFilter {
 	return &FieldFilter{
 		Field:    field,
 		Operator: operator,
@@ -726,7 +732,7 @@ func NewFieldFilter(field IdentifierExpression, operator string, clause Expressi
 }
 
 // FF is a convenient alias for NewFieldFilter().
-func FF(field IdentifierExpression, operator string, clause Expression) *FieldFilter {
+func FF(field *IdentifierExpression, operator string, clause Expression) *FieldFilter {
 	return NewFieldFilter(field, operator, clause)
 }
 
@@ -753,7 +759,7 @@ func (f FieldValueFilter) GetIdentifiers() []string {
 }
 
 // NewFieldFilter creates a new field filter expression.
-func ValFilter(field string, operator string, val ValueExpression) *FieldValueFilter {
+func ValFilter(field string, operator string, val *ValueExpression) *FieldValueFilter {
 	return &FieldValueFilter{
 		Field:    Identifier(field),
 		Operator: operator,
