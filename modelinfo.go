@@ -473,6 +473,10 @@ func (info *ModelInfo) buildFieldInfo(modelVal reflect.Value, embeddedName strin
 			return err
 		}
 
+		if fieldInfo.Ignore {
+			continue
+		}
+
 		fieldInfo.Name = fieldType.Name
 		fieldInfo.Type = fieldType.Type
 		fieldInfo.Embedded = embeddedName
