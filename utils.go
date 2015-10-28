@@ -1386,107 +1386,153 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Query related.
  */
 
-// NormalizeQuery perfoms multiple actions on queries to normalize them.
-// It accepts FieldInfo.BackendName, FieldInfo.Name and FieldInfo.MarshalName
-// for as field names in filters, field limitations and joins.
-// It also replaces an "id" filter with the primary key field,
-// if the model does not have an ID struct field.
-func NormalizeQuery(info *ModelInfo, query Query) apperror.Error {
-	// First, normalize field limitations.
-	fields := query.GetFields()
-	for index, fieldName := range fields {
-		// Handle join fields.
-
-		parts := strings.Split(fieldName, ".")
-		if len(parts) > 1 {
-			// Possibly a field on a joined model. Check if a parent join can be found.
-			joinQ := query.GetJoin(strings.Join(parts[:len(parts)-1], "."))
-			if joinQ != nil {
-				// Join query found, add field to the join query.
-				joinQ.AddFields(parts[len(parts)-1])
-				continue
-			}
-		}
-
-		// Try to map name.
-		backendName := info.FindBackendFieldName(fieldName)
-		if backendName != "" {
-			fieldName = backendName
-		}
-
-		fields[index] = backendName
+func NormalizeSelectStatement(stmt *SelectStatement) apperror.Error {
+	// Fix nesting (joins and fields).
+	if err := stmt.FixNesting(); err != nil {
+		return err
 	}
 
-	// Next, normalize joins.
-	joins := query.GetJoins()
-	for _, join := range joins {
-		relationName := join.GetRelationName()
-
-		if relationName != "" {
-
-			fieldName := info.FindStructFieldName(relationName)
-			if fieldName != "" {
-				join.SetRelationName(fieldName)
-			}
-		}
-	}
-
-	// Now, check filters.
-	filters := query.GetFilters()
-	for _, filter := range filters {
-		if err := NormalizeFilter(info, filter); err != nil {
+	// Normalize fields.
+	for _, field := range stmt.Fields {
+		if err := NormalizeExpression(field, info, allInfo); err != nil {
 			return err
 		}
 	}
-
-	// Finally, check orders.
-	orders := query.GetOrders()
-	for _, order := range orders {
-		// Replace id with actual primary key.
-		if order.Field == "id" && !info.HasField("id") {
-			order.Field = info.GetField(info.PkField).BackendName
-			continue
+	// Normalize filter.
+	if err := NormalizeExpression(stmt.Filter, info, allInfo); err != nil {
+		return err
+	}
+	// Normalize sorts.
+	for _, sort := range stmt.Sorts {
+		if err := NormalizeExpression(sort, info, allInfo); err != nil {
+			return err
 		}
-
-		if field := info.FindBackendFieldName(order.Field); field != "" {
-			order.Field = field
+	}
+	// Normalize joins.
+	for _, join := range stmt.Joins {
+		if err := NormalizeExpression(join, info, allInfo); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func NormalizeFilter(info *ModelInfo, filter Filter) apperror.Error {
-	// Handle multi filters, by recursively checking them.
-	if multi, ok := filter.(MultiFilter); ok {
-		for _, f := range multi.GetFilters() {
-			if err := NormalizeFilter(info, f); err != nil {
+func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelsInfo) apperror.Error {
+	if expression == nil {
+		return nil
+	}
+
+	switch expr := expression.(type) {
+	case *UpdateStatement:
+		if err := NormalizeExpression(expr.MutationExpr, info, allInfo); err != nil {
+			return err
+		}
+		if err := NormalizeExpression(expr.Select, info, allInfo); err != nil {
+			return err
+		}
+
+	case MutationExpression:
+		backendName := allInfo.FindBackendName(expr.GetCollection())
+		if backendName == "" {
+			return apperror.New("unknown_collection", fmt.Printf("The collection %v does not exist", expr.GetCollection()))
+		}
+		expr.Collection = backendName
+
+		for _, fieldVal := range expr.Values {
+			if err := NormalizeExpression(fieldVal, info, allInfo); err != nil {
 				return err
 			}
 		}
-	}
 
-	// Handle field conditions.
-	if cond, ok := filter.(*FieldCondition); ok {
-		field := cond.Field
-
-		// If the filter is for "id", but the model does not have an id field,
-		// replace it with the PkField.
-		if field == "id" && !info.HasField("id") {
-			cond.SetField(info.GetField(info.PkField).BackendName)
-			return nil
+	case *SelectStatement:
+		if err := NormalizeSelectStatement(expr); err != nil {
+			return err
 		}
 
-		backendName := info.FindBackendFieldName(field)
-		if backendName != "" {
-			cond.SetField(backendName)
+	case *JoinStatement:
+		if err := NormalizeExpression(expr.JoinCondition, info, allInfo); err != nil {
+			return err
 		}
+		if err := NormalizeExpression(&expr.SelectStatement, info, allInfo); err != nil {
+			return err
+		}
+
+	case MultiExpression:
+		for _, expr := range expr.GetExpressions() {
+			if err := NormalizeExpression(expr, info, allInfo); err != nil {
+				return err
+			}
+		}
+
+	case NestedExpression:
+		if err := NormalizeExpression(expr.GetNestedExpression(), info, allInfo); err != nil {
+			return err
+		}
+
+	case FilterExpression:
+		if err := NormalizeExpression(expr.GetField(), info, allInfo); err != nil {
+			return err
+		}
+		if err := NormalizeExpression(expr.GetClause(), info, allInfo); err != nil {
+			return err
+		}
+
+	case *SortExpression:
+		if err := NormalizeExpression(expr.Field, info, allInfo); err != nil {
+			return err
+		}
+
+	case *FieldValueExpression:
+		if err := NormalizeExpression(expr.Field, info, allInfo); err != nil {
+			return err
+		}
+
+	case *CollectionFieldIdentifierExpression:
+		colInfo := info
+
+		// First, normalize the collection name, if set.
+		if expr.Collection != "" {
+			backendName := ""
+			for _, info := range allInfo {
+				if expr.Collection == info.Collection {
+					backendName = info.BackendName
+					colInfo = info
+					break
+				} else if expr.Collection == info.BackendName {
+					backendName = info.BackendName
+					colInfo = info
+					break
+				} else if expr.Collection == info.MarshalName {
+					backendName = info.BackendName
+					colInfo = info
+					break
+				}
+			}
+
+			if backendName == "" {
+				return apperor.New("unknown_collection", fmt.Printf("The collection %v does not exist", expr.Collection), true)
+			}
+			expr.Collection = backendName
+		}
+
+		// We found a valid collection name.
+		// Now normalize the field name.
+		fieldName := colInfo.FindBackenddName(expr.Field)
+		if fieldName == "" {
+			return apperror.New("unknown_field", fmt.Printf("The collection %v has no field %v", colInfo.Collection, expr.Field))
+		}
+		expr.Field = fieldName
+
+	case *IdentifierExpression:
+		fieldName := info.FindBackendName(expr.Identifier)
+		if fieldName == "" {
+			return apperror.New("unknown_field", fmt.Printf("The collection %v has no field %v", info.Collection, expr.Identifier))
+		}
+
+	default:
+		panic(fmt.Printf("Unhandled expression type: %v\n", typ))
 	}
-
-	// Unknown filter type, so ignore.
-
-	// No errors detected, return nil.
-	return nil
 }
 
 /**
