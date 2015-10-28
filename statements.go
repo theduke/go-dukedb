@@ -1,6 +1,8 @@
 package dukedb
 
-import ()
+import (
+	"strings"
+)
 
 /**
  * Statements.
@@ -189,7 +191,7 @@ func (s SelectStatement) GetIdentifiers() []string {
 		ids = append(ids, s.GetIdentifiers()...)
 	}
 	// Filter.
-	ids = append(ids, s.Filter.GetIdentifiers())
+	ids = append(ids, s.Filter.GetIdentifiers()...)
 	// Sorts.
 	for _, sort := range s.Sorts {
 		ids = append(ids, sort.GetIdentifiers()...)
@@ -218,7 +220,7 @@ func (s *SelectStatement) FilterAnd(filter Expression) {
 func (s *SelectStatement) FilterOr(filter Expression) {
 	if s.Filter == nil {
 		s.Filter = filter
-	} else if orExpr, ok := s.Filter(*OrExpression); ok {
+	} else if orExpr, ok := s.Filter.(*OrExpression); ok {
 		orExpr.Add(filter)
 	} else {
 		s.Filter = Or(s.Filter, filter)

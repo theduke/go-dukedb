@@ -661,6 +661,17 @@ var OperatorMap map[string]bool = map[string]bool{
 }
 
 /**
+ * FilterExpression.
+ */
+
+type FilterExpression interface {
+	Expression
+	GetField() Expression
+	GetOperator() string
+	GetClause() Expression
+}
+
+/**
  * Filter.
  */
 
@@ -672,7 +683,7 @@ type Filter struct {
 }
 
 // Ensure Filter implements Expression.
-var _ Expression = (*Filter)(nil)
+var _ FilterExpression = (*Filter)(nil)
 
 func (*Filter) Type() string {
 	return "filter"
@@ -682,6 +693,18 @@ func (f Filter) GetIdentifiers() []string {
 	ids := f.Field.GetIdentifiers()
 	ids = append(ids, f.Clause.GetIdentifiers()...)
 	return ids
+}
+
+func (f Filter) GetField() Expression {
+	return f.Field
+}
+
+func (f Filter) GetOperator() string {
+	return f.Operator
+}
+
+func (f Filter) GetClause() Expression {
+	return f.Clause
 }
 
 // NewFilter creates a new filter expression.
@@ -710,7 +733,7 @@ type FieldFilter struct {
 }
 
 // Ensure FieldFilter implements Expression.
-var _ Expression = (*FieldFilter)(nil)
+var _ FilterExpression = (*FieldFilter)(nil)
 
 func (*FieldFilter) Type() string {
 	return "field_filter"
@@ -720,6 +743,18 @@ func (f FieldFilter) GetIdentifiers() []string {
 	ids := f.Field.GetIdentifiers()
 	ids = append(ids, f.Clause.GetIdentifiers()...)
 	return ids
+}
+
+func (f FieldFilter) GetField() Expression {
+	return f.Field
+}
+
+func (f FieldFilter) GetOperator() string {
+	return f.Operator
+}
+
+func (f FieldFilter) GetClause() Expression {
+	return f.Clause
 }
 
 // NewFieldFilter creates a new field filter expression.
@@ -748,7 +783,7 @@ type FieldValueFilter struct {
 }
 
 // Ensure FieldValueFilter implements Expression.
-var _ Expression = (*FieldValueFilter)(nil)
+var _ FilterExpression = (*FieldValueFilter)(nil)
 
 func (*FieldValueFilter) Type() string {
 	return "field_value_filter"
@@ -756,6 +791,18 @@ func (*FieldValueFilter) Type() string {
 
 func (f FieldValueFilter) GetIdentifiers() []string {
 	return f.Field.GetIdentifiers()
+}
+
+func (f FieldValueFilter) GetField() Expression {
+	return f.Field
+}
+
+func (f FieldValueFilter) GetOperator() string {
+	return f.Operator
+}
+
+func (f FieldValueFilter) GetClause() Expression {
+	return f.Value
 }
 
 // NewFieldFilter creates a new field filter expression.
