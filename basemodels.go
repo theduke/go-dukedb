@@ -44,13 +44,6 @@ func (m *BaseModel) Collection() string {
 	return ""
 }
 
-func (m *BaseModel) BackendName() string {
-	if m.info != nil {
-		return m.info.BackendName
-	}
-	return ""
-}
-
 func (m *BaseModel) GetID() interface{} {
 	if m.info == nil {
 		panic("Model.info is not set")

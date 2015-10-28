@@ -195,7 +195,6 @@ type MigrationBackend interface {
 
 type Model interface {
 	ModelCollectionHook
-	ModelBackendNameHook
 	ModelIDGetterHook
 	ModelIDSetterHook
 	ModelStrIDGetterHook
