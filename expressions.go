@@ -1055,6 +1055,29 @@ func MapOperator(op string) string {
 	}
 }
 
+func OperatorToSql(op string) string {
+	switch op {
+	case OPERATOR_EQ:
+		return "="
+	case OPERATOR_NEQ:
+		return "!="
+	case OPERATOR_LIKE:
+		return "LIKE"
+	case OPERATOR_IN:
+		return "IN"
+	case OPERATOR_GT:
+		return ">"
+	case OPERATOR_GTE:
+		return ">="
+	case OPERATOR_LT:
+		return "<"
+	case OPERATOR_LTE:
+		return "<="
+	}
+
+	return ""
+}
+
 /**
  * FilterExpression.
  */
@@ -1252,11 +1275,11 @@ func (f FieldValueFilter) GetClause() Expression {
 }
 
 // NewFieldFilter creates a new field filter expression.
-func ValFilter(collection, field, operator string, val *ValueExpression) *FieldValueFilter {
+func ValFilter(collection, field, operator string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
 		Field:    ColFieldIdentifier(collection, field),
 		Operator: operator,
-		Value:    val,
+		Value:    Val(val),
 	}
 }
 
