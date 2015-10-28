@@ -55,6 +55,17 @@ func (*CreateCollectionStatement) Type() string {
 	return "create_collection"
 }
 
+func (e *CreateCollectionStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	}
+	return nil
+}
+
+func (e *CreateCollectionStatement) IsCacheable() bool {
+	return false
+}
+
 func (CreateCollectionStatement) GetIdentifiers() []string {
 	return nil
 }
@@ -74,6 +85,19 @@ var _ Expression = (*RenameCollectionStatement)(nil)
 
 func (*RenameCollectionStatement) Type() string {
 	return "rename_collection"
+}
+
+func (e *RenameCollectionStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.NewCollection == "" {
+		return apperror.New("empty_new_collection_name")
+	}
+	return nil
+}
+
+func (e *RenameCollectionStatement) IsCacheable() bool {
+	return false
 }
 
 func (RenameCollectionStatement) GetIdentifiers() []string {
@@ -100,6 +124,17 @@ func (*DropCollectionStatement) Type() string {
 	return "drop_collection"
 }
 
+func (e *DropCollectionStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	}
+	return nil
+}
+
+func (e *DropCollectionStatement) IsCacheable() bool {
+	return false
+}
+
 func (DropCollectionStatement) GetIdentifiers() []string {
 	return nil
 }
@@ -121,6 +156,19 @@ func (*AddCollectionFieldStatement) Type() string {
 	return "add_collection_field"
 }
 
+func (e *AddCollectionFieldStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.Field == nil {
+		return apperror.New("empty_field")
+	}
+	return nil
+}
+
+func (e *AddCollectionFieldStatement) IsCacheable() bool {
+	return false
+}
+
 func (AddCollectionFieldStatement) GetIdentifiers() []string {
 	return nil
 }
@@ -140,6 +188,21 @@ var _ Expression = (*RenameCollectionFieldStatement)(nil)
 
 func (*RenameCollectionFieldStatement) Type() string {
 	return "add_collection_field"
+}
+
+func (e *RenameCollectionFieldStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.Field == "" {
+		return apperror.New("empty_field")
+	} else if e.NewName == "" {
+		return apperror.New("empty_new_field_name")
+	}
+	return nil
+}
+
+func (e *RenameCollectionFieldStatement) IsCacheable() bool {
+	return false
 }
 
 func (RenameCollectionFieldStatement) GetIdentifiers() []string {
@@ -164,6 +227,19 @@ func (*DropCollectionFieldStatement) Type() string {
 	return "drop_collection_field"
 }
 
+func (e *DropCollectionFieldStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.Field == "" {
+		return apperror.New("empty_field")
+	}
+	return nil
+}
+
+func (e *DropCollectionFieldStatement) IsCacheable() bool {
+	return false
+}
+
 func (DropCollectionFieldStatement) GetIdentifiers() []string {
 	return nil
 }
@@ -185,6 +261,21 @@ func (*AddIndexStatement) Type() string {
 	return "add_index"
 }
 
+func (e *AddIndexStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.Field == "" {
+		return apperror.New("empty_field")
+	} else if e.IndexName == "" {
+		return apperror.New("empty_index_name")
+	}
+	return nil
+}
+
+func (e *AddIndexStatement) IsCacheable() bool {
+	return false
+}
+
 func (AddIndexStatement) GetIdentifiers() []string {
 	return nil
 }
@@ -203,6 +294,19 @@ var _ Expression = (*DropIndexStatement)(nil)
 
 func (*DropIndexStatement) Type() string {
 	return "drop_index"
+}
+
+func (e *DropIndexStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if e.IndexName == "" {
+		return apperror.New("empty_index_name")
+	}
+	return nil
+}
+
+func (e *DropIndexStatement) IsCacheable() bool {
+	return false
 }
 
 func (DropIndexStatement) GetIdentifiers() []string {
@@ -232,6 +336,17 @@ var _ NamedExpression = (*SelectStatement)(nil)
 
 func (*SelectStatement) Type() string {
 	return "select"
+}
+
+func (e *SelectStatement) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	}
+	return nil
+}
+
+func (e *SelectStatement) IsCacheable() bool {
+	return false
 }
 
 func (s SelectStatement) GetIdentifiers() []string {
@@ -447,6 +562,21 @@ func (*JoinStatement) Type() string {
 	return "join"
 }
 
+func (e *JoinStatement) Validate() apperror.Error {
+	if err := e.SelectStatement.Validate(); err != nil {
+		return err
+	} else if e.JoinType == "" {
+		return apperror.New("empty_join_type")
+	} else if e.JoinCondition == nil {
+		return apperror.New("no_join_condition_expression")
+	}
+	return nil
+}
+
+func (e *JoinStatement) IsCacheable() bool {
+	return false
+}
+
 func (s JoinStatement) GetIdentifiers() []string {
 	ids := s.SelectStatement.GetIdentifiers()
 	ids = append(ids, s.JoinCondition.GetIdentifiers()...)
@@ -481,6 +611,19 @@ type MutationStmt struct {
 
 func (MutationStmt) Type() string {
 	return "mutation"
+}
+
+func (e *MutationStmt) Validate() apperror.Error {
+	if e.Collection == "" {
+		return apperror.New("empty_collection")
+	} else if len(e.Values) < 1 {
+		return apperror.New("no_values")
+	}
+	return nil
+}
+
+func (e *MutationStmt) IsCacheable() bool {
+	return false
 }
 
 func (e MutationStmt) GetCollection() string {
@@ -537,4 +680,17 @@ var _ MutationStatement = (*UpdateStatement)(nil)
 
 func (*UpdateStatement) Type() string {
 	return "update"
+}
+
+func (e *UpdateStatement) Validate() apperror.Error {
+	if err := e.MutationStmt.Validate(); err != nil {
+		return err
+	} else if e.Select == nil {
+		return apperror.New("empty_select")
+	}
+	return nil
+}
+
+func (e *UpdateStatement) IsCacheable() bool {
+	return false
 }

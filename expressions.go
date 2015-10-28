@@ -1,6 +1,7 @@
 package dukedb
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -13,6 +14,13 @@ const (
 	CONSTRAINT_SET_NULL    = "set_null"
 	CONSTRAINT_SET_DEFAULT = "set_default"
 )
+
+var CONSTRAINTS map[string]bool = map[string]bool{
+	"cascade":     true,
+	"restrict":    true,
+	"set_null":    true,
+	"set_default": true,
+}
 
 /**
  * Expressions.
@@ -59,15 +67,15 @@ type Expression interface {
 // NamedExpression is an expression that has a identifying name attached.
 type NamedExpression interface {
 	Expression
-	Name() string
+	GetName() string
 }
 
 type NamedExpr struct {
 	Name string
 }
 
-func (e *NamedExpr) Name() string {
-	return e.Name()
+func (e *NamedExpr) GetName() string {
+	return e.Name
 }
 
 /**
@@ -226,6 +234,17 @@ func (*FieldTypeExpression) Type() string {
 	return "field_type"
 }
 
+func (e *FieldTypeExpression) Validate() apperror.Error {
+	if e.GoType == nil && e.Typ == "" {
+		return apperror.New("empty_type")
+	}
+	return nil
+}
+
+func (e *FieldTypeExpression) IsCacheable() bool {
+	return false
+}
+
 func (e *FieldTypeExpression) GetIdentifiers() []string {
 	return nil
 }
@@ -247,6 +266,17 @@ var _ TypedExpression = (*ValueExpression)(nil)
 
 func (*ValueExpression) Type() string {
 	return "value"
+}
+
+func (e *ValueExpression) Validate() apperror.Error {
+	if e.Val == nil {
+		return apperror.New("empty_value")
+	}
+	return nil
+}
+
+func (e *ValueExpression) IsCacheable() bool {
+	return false
 }
 
 func (ValueExpression) GetIdentifiers() []string {
@@ -282,6 +312,17 @@ func (*IdentifierExpression) Type() string {
 	return "identifier"
 }
 
+func (e *IdentifierExpression) Validate() apperror.Error {
+	if e.Identifier == "" {
+		return apperror.New("empty_identifier")
+	}
+	return nil
+}
+
+func (e *IdentifierExpression) IsCacheable() bool {
+	return false
+}
+
 func (e IdentifierExpression) GetIdentifiers() []string {
 	return []string{e.Identifier}
 }
@@ -315,6 +356,17 @@ var _ TypedExpression = (*CollectionFieldIdentifierExpression)(nil)
 
 func (*CollectionFieldIdentifierExpression) Type() string {
 	return "collection_field_identifier"
+}
+
+func (e *CollectionFieldIdentifierExpression) Validate() apperror.Error {
+	if e.Field == "" {
+		return apperror.New("empty_field")
+	}
+	return nil
+}
+
+func (e *CollectionFieldIdentifierExpression) IsCacheable() bool {
+	return false
 }
 
 func (e CollectionFieldIdentifierExpression) GetIdentifiers() []string {
@@ -372,6 +424,14 @@ func (*NotNullConstraint) Type() string {
 	return "not_null"
 }
 
+func (e *NotNullConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *NotNullConstraint) IsCacheable() bool {
+	return false
+}
+
 /**
  * UniqueConstraint.
  */
@@ -382,6 +442,14 @@ type UniqueConstraint struct {
 
 // Ensure UniqueConstraint implements ConstraintExpression.
 var _ ConstraintExpression = (*UniqueConstraint)(nil)
+
+func (e *UniqueConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *UniqueConstraint) IsCacheable() bool {
+	return false
+}
 
 func (*UniqueConstraint) Type() string {
 	return "unique"
@@ -397,6 +465,14 @@ func (*UniqueConstraint) Type() string {
 type UniqueFieldsConstraint struct {
 	ConstraintExpr
 	Fields []*IdentifierExpression
+}
+
+func (e *UniqueFieldsConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *UniqueFieldsConstraint) IsCacheable() bool {
+	return false
 }
 
 // Ensure UniqueFieldsConstraint implements ConstraintExpression.
@@ -421,6 +497,14 @@ func (*PrimaryKeyConstraint) Type() string {
 	return "primary_key"
 }
 
+func (e *PrimaryKeyConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *PrimaryKeyConstraint) IsCacheable() bool {
+	return false
+}
+
 /**
  * AutoIncrementConstraint.
  */
@@ -434,6 +518,14 @@ var _ ConstraintExpression = (*AutoIncrementConstraint)(nil)
 
 func (*AutoIncrementConstraint) Type() string {
 	return "auto_increment"
+}
+
+func (e *AutoIncrementConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *AutoIncrementConstraint) IsCacheable() bool {
+	return false
 }
 
 /**
@@ -450,6 +542,14 @@ var _ ConstraintExpression = (*DefaultValueConstraint)(nil)
 
 func (*DefaultValueConstraint) Type() string {
 	return "default_value_constraint"
+}
+
+func (e *DefaultValueConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *DefaultValueConstraint) IsCacheable() bool {
+	return false
 }
 
 /**
@@ -470,6 +570,19 @@ func (*FieldUpdateConstraint) Type() string {
 	return "field_update_constraint"
 }
 
+func (e *FieldUpdateConstraint) Validate() apperror.Error {
+	if e.Action == "" {
+		return apperror.New("empty_action")
+	} else if _, ok := CONSTRAINTS[e.Action]; !ok {
+		return apperror.New("unknown_update_action", fmt.Sprintf("Unknown action for field update constraint: %v", e.Action))
+	}
+	return nil
+}
+
+func (e *FieldUpdateConstraint) IsCacheable() bool {
+	return false
+}
+
 /**
  * FieldDeleteConstraint.
  */
@@ -486,6 +599,19 @@ var _ ConstraintExpression = (*FieldDeleteConstraint)(nil)
 
 func (*FieldDeleteConstraint) Type() string {
 	return "field_delete_constraint"
+}
+
+func (e *FieldDeleteConstraint) Validate() apperror.Error {
+	if e.Action == "" {
+		return apperror.New("empty_action")
+	} else if _, ok := CONSTRAINTS[e.Action]; !ok {
+		return apperror.New("unknown_update_action", fmt.Sprintf("Unknown action for field update constraint: %v", e.Action))
+	}
+	return nil
+}
+
+func (e *FieldDeleteConstraint) IsCacheable() bool {
+	return false
 }
 
 /**
@@ -506,6 +632,14 @@ func (*IndexConstraint) Type() string {
 	return "index_constraint"
 }
 
+func (e *IndexConstraint) Validate() apperror.Error {
+	return nil
+}
+
+func (e *IndexConstraint) IsCacheable() bool {
+	return false
+}
+
 /**
  * CheckConstraint.
  */
@@ -522,6 +656,17 @@ func (*CheckConstraint) Type() string {
 	return "check_constraint"
 }
 
+func (e *CheckConstraint) Validate() apperror.Error {
+	if len(e.Checks) < 1 {
+		return apperror.New("no_check_filters")
+	}
+	return nil
+}
+
+func (e *CheckConstraint) IsCacheable() bool {
+	return false
+}
+
 /**
  * ReferenceConstraint.
  */
@@ -536,6 +681,17 @@ var _ ConstraintExpression = (*ReferenceConstraint)(nil)
 
 func (*ReferenceConstraint) Type() string {
 	return "reference_constraint"
+}
+
+func (e *ReferenceConstraint) Validate() apperror.Error {
+	if e.ForeignKey == nil {
+		return apperror.New("no_foreing_key")
+	}
+	return nil
+}
+
+func (e *ReferenceConstraint) IsCacheable() bool {
+	return false
 }
 
 /**
@@ -559,6 +715,20 @@ func (*FieldExpression) Type() string {
 	return "field"
 }
 
+func (e *FieldExpression) Validate() apperror.Error {
+	if e.Name == "" {
+		return apperror.New("empty_field")
+	} else if e.Typ == nil {
+		return apperror.New("empty_type")
+	}
+
+	return nil
+}
+
+func (e *FieldExpression) IsCacheable() bool {
+	return false
+}
+
 func (FieldExpression) GetIdentifiers() []string {
 	return nil
 }
@@ -579,6 +749,20 @@ var _ Expression = (*FieldValueExpression)(nil)
 
 func (*FieldValueExpression) Type() string {
 	return "field_value"
+}
+
+func (e *FieldValueExpression) Validate() apperror.Error {
+	if e.Field == nil {
+		return apperror.New("empty_field")
+	} else if e.Value == nil {
+		return apperror.New("empty_value")
+	}
+
+	return nil
+}
+
+func (e *FieldValueExpression) IsCacheable() bool {
+	return false
 }
 
 func (e FieldValueExpression) GetIdentifiers() []string {
@@ -609,12 +793,22 @@ func (*FunctionExpression) Type() string {
 	return "function"
 }
 
-func (e FunctionExpression) GetIdentifiers() []string {
-	return e.NestedExpr.GetIdentifiers()
+func (e *FunctionExpression) Validate() apperror.Error {
+	if e.Function == "" {
+		return apperror.New("empty_function")
+	} else if e.Nested == nil {
+		return apperror.New("empty_function_expression")
+	}
+
+	return nil
 }
 
-func (e FunctionExpression) Func() string {
-	return e.Function
+func (e *FunctionExpression) IsCacheable() bool {
+	return false
+}
+
+func (e FunctionExpression) GetIdentifiers() []string {
+	return e.NestedExpr.GetIdentifiers()
 }
 
 func Func(function string, expr Expression) *FunctionExpression {
@@ -644,6 +838,17 @@ func (a *AndExpression) Type() string {
 	return "and"
 }
 
+func (e *AndExpression) Validate() apperror.Error {
+	if len(e.Expressions) < 1 {
+		return apperror.New("no_and_expressions")
+	}
+	return nil
+}
+
+func (e *AndExpression) IsCacheable() bool {
+	return false
+}
+
 func And(exprs ...Expression) *AndExpression {
 	e := &AndExpression{}
 	e.Expressions = exprs
@@ -665,6 +870,17 @@ func (o *OrExpression) Type() string {
 	return "or"
 }
 
+func (e *OrExpression) Validate() apperror.Error {
+	if len(e.Expressions) < 1 {
+		return apperror.New("no_or_expressions")
+	}
+	return nil
+}
+
+func (e *OrExpression) IsCacheable() bool {
+	return false
+}
+
 func Or(exprs ...Expression) *OrExpression {
 	or := &OrExpression{}
 	or.Expressions = exprs
@@ -684,6 +900,17 @@ var _ NestedExpression = (*NotExpression)(nil)
 
 func (*NotExpression) Type() string {
 	return "not"
+}
+
+func (e *NotExpression) Validate() apperror.Error {
+	if e.Nested == nil {
+		return apperror.New("no_not_expression")
+	}
+	return nil
+}
+
+func (e *NotExpression) IsCacheable() bool {
+	return false
 }
 
 func Not(expr ...Expression) *NotExpression {
@@ -711,7 +938,7 @@ const (
 	OPERATOR_LTE  = "lte"
 )
 
-var OperatorMap map[string]bool = map[string]bool{
+var OPERATOR_MAP map[string]bool = map[string]bool{
 	OPERATOR_EQ:   true,
 	OPERATOR_NEQ:  true,
 	OPERATOR_LIKE: true,
@@ -720,6 +947,29 @@ var OperatorMap map[string]bool = map[string]bool{
 	OPERATOR_GTE:  true,
 	OPERATOR_LT:   true,
 	OPERATOR_LTE:  true,
+}
+
+func MapOperator(op string) string {
+	switch strings.ToLower(op) {
+	case "==", "=":
+		return OPERATOR_EQ
+	case "!=":
+		return OPERATOR_NEQ
+	case "<":
+		return OPERATOR_LT
+	case "<=":
+		return OPERATOR_LTE
+	case ">":
+		return OPERATOR_GT
+	case ">=":
+		return OPERATOR_GTE
+	case "like":
+		return OPERATOR_LIKE
+	case "in":
+		return OPERATOR_IN
+	default:
+		return ""
+	}
 }
 
 /**
@@ -749,6 +999,23 @@ var _ FilterExpression = (*Filter)(nil)
 
 func (*Filter) Type() string {
 	return "filter"
+}
+
+func (e *Filter) Validate() apperror.Error {
+	if e.Field == nil {
+		return apperror.New("empty_field")
+	} else if e.Operator == "" {
+		return apperror.New("empty_operator")
+	} else if _, ok := OPERATOR_MAP[e.Operator]; !ok {
+		return apperror.New("unknown_operator", fmt.Sprintf("Unknown operator %v", e.Operator))
+	} else if e.Clause == nil {
+		return apperror.New("empty_clause")
+	}
+	return nil
+}
+
+func (e *Filter) IsCacheable() bool {
+	return false
 }
 
 func (f Filter) GetIdentifiers() []string {
@@ -801,6 +1068,23 @@ func (*FieldFilter) Type() string {
 	return "field_filter"
 }
 
+func (e *FieldFilter) Validate() apperror.Error {
+	if e.Field == nil {
+		return apperror.New("empty_field")
+	} else if e.Operator == "" {
+		return apperror.New("empty_operator")
+	} else if _, ok := OPERATOR_MAP[e.Operator]; !ok {
+		return apperror.New("unknown_operator", fmt.Sprintf("Unknown operator %v", e.Operator))
+	} else if e.Clause == nil {
+		return apperror.New("empty_clause")
+	}
+	return nil
+}
+
+func (e *FieldFilter) IsCacheable() bool {
+	return false
+}
+
 func (f FieldFilter) GetIdentifiers() []string {
 	ids := f.Field.GetIdentifiers()
 	ids = append(ids, f.Clause.GetIdentifiers()...)
@@ -849,6 +1133,23 @@ var _ FilterExpression = (*FieldValueFilter)(nil)
 
 func (*FieldValueFilter) Type() string {
 	return "field_value_filter"
+}
+
+func (e *FieldValueFilter) Validate() apperror.Error {
+	if e.Field == nil {
+		return apperror.New("empty_field")
+	} else if e.Operator == "" {
+		return apperror.New("empty_operator")
+	} else if _, ok := OPERATOR_MAP[e.Operator]; !ok {
+		return apperror.New("unknown_operator", fmt.Sprintf("Unknown operator %v", e.Operator))
+	} else if e.Value == nil {
+		return apperror.New("empty_value")
+	}
+	return nil
+}
+
+func (e *FieldValueFilter) IsCacheable() bool {
+	return false
 }
 
 func (f FieldValueFilter) GetIdentifiers() []string {
@@ -972,29 +1273,6 @@ func Gte(field string, val interface{}) *FieldValueFilter {
 	}
 }
 
-func MapOperator(op string) string {
-	switch strings.ToLower(op) {
-	case "==", "=":
-		return OPERATOR_EQ
-	case "!=":
-		return OPERATOR_NEQ
-	case "<":
-		return OPERATOR_LT
-	case "<=":
-		return OPERATOR_LTE
-	case ">":
-		return OPERATOR_GT
-	case ">=":
-		return OPERATOR_GTE
-	case "like":
-		return OPERATOR_LIKE
-	case "in":
-		return OPERATOR_IN
-	default:
-		return ""
-	}
-}
-
 /**
  * SortExpression.
  */
@@ -1009,6 +1287,17 @@ var _ NestedExpression = (*SortExpression)(nil)
 
 func (*SortExpression) Type() string {
 	return "sort"
+}
+
+func (e *SortExpression) Validate() apperror.Error {
+	if e.Field == nil {
+		return apperror.New("empty_field")
+	}
+	return nil
+}
+
+func (e *SortExpression) IsCacheable() bool {
+	return false
 }
 
 func (e SortExpression) GetNestedExpression() Expression {
