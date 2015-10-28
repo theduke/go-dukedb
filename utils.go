@@ -1418,7 +1418,7 @@ func NormalizeSelectStatement(stmt *SelectStatement) apperror.Error {
 	return nil
 }
 
-func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelsInfo) apperror.Error {
+func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelInfos) apperror.Error {
 	if expression == nil {
 		return nil
 	}

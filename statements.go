@@ -3,6 +3,8 @@ package dukedb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 /**
@@ -267,7 +269,7 @@ func (s *SelectStatement) GetJoin(field string) *JoinStatement {
 	return nil
 }
 
-func (s *SelectStatement) FixNesting() apperror.error {
+func (s *SelectStatement) FixNesting() apperror.Error {
 	if err := s.FixNestedJoins(); err != nil {
 		return err
 	}
@@ -309,7 +311,7 @@ func (s *SelectStatement) fixNestedJoinsRecursive(lvl, maxLvl int) apperror.Erro
 			return &apperror.Err{
 				Public:  true,
 				Code:    "invalid_join",
-				Message: fmt.Printf("Invalid nested join '%v': parent join %v not found", join.RelationName, parts[0]),
+				Message: fmt.Sprintf("Invalid nested join '%v': parent join %v not found", join.RelationName, parts[0]),
 			}
 		}
 		parentJoin.AddJoin(join)
@@ -325,13 +327,14 @@ func (s *SelectStatement) fixNestedJoinsRecursive(lvl, maxLvl int) apperror.Erro
 
 func (s *SelectStatement) FixNestedFields() {
 	if len(s.Fields) < 1 {
-		return nil
+		return
 	}
 
 	remainingFields := make([]Expression, 0)
 
 	for _, fieldExpr := range s.Fields {
-		if field, ok := fieldExpr.(*IdentifierExpression); !ok {
+		field, ok := fieldExpr.(*IdentifierExpression)
+		if !ok {
 			remainingFields = append(remainingFields, field)
 			continue
 		}
@@ -425,7 +428,7 @@ type MutationStmt struct {
 	Values     []*FieldValueExpression
 }
 
-func (e MutationStmt) GetCollection() {
+func (e MutationStmt) GetCollection() string {
 	return e.Collection
 }
 

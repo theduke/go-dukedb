@@ -98,11 +98,11 @@ func (f FieldInfo) IsRelation() bool {
 
 type ModelInfos map[string]*ModelInfo
 
-func (i *ModelInfos) Add(info *ModelInfo) {
-	i[info.Collection] = i
+func (i ModelInfos) Add(info *ModelInfo) {
+	i[info.Collection] = info
 }
 
-func (i *ModelInfos) HasCollection(collection string) bool {
+func (i ModelInfos) HasCollection(collection string) bool {
 	info, _ := i[collection]
 	return info != nil
 }
@@ -183,7 +183,7 @@ func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 	if nameHook, ok := model.(ModelBackendNameHook); ok {
 		name := nameHook.BackendName()
 		if name == "" {
-			panic(fmt.Printf("%v.BackendName() returned an empty string.", info.FullName))
+			panic(fmt.Sprintf("%v.BackendName() returned an empty string.", info.FullName))
 		}
 		info.BackendName = name
 	}
@@ -193,7 +193,7 @@ func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 	if nameHook, ok := model.(ModelMarshalNameHook); ok {
 		name := nameHook.MarshalName()
 		if name == "" {
-			panic(fmt.Printf("%v.MarshalName() returned an empty string.", info.FullName))
+			panic(fmt.Sprintf("%v.MarshalName() returned an empty string.", info.FullName))
 		}
 		info.MarshalName = name
 	}

@@ -820,7 +820,7 @@ func ValFilter(collection, field, operator string, val *ValueExpression) *FieldV
 
 func Eq(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_EQ,
 		Value:    Val(val),
 	}
@@ -832,7 +832,7 @@ func Eq(field string, val interface{}) *FieldValueFilter {
 
 func Neq(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_NEQ,
 		Value:    Val(val),
 	}
@@ -844,7 +844,7 @@ func Neq(field string, val interface{}) *FieldValueFilter {
 
 func Like(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_LIKE,
 		Value:    Val(val),
 	}
@@ -856,7 +856,7 @@ func Like(field string, val interface{}) *FieldValueFilter {
 
 func In(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_IN,
 		Value:    Val(val),
 	}
@@ -868,7 +868,7 @@ func In(field string, val interface{}) *FieldValueFilter {
 
 func Lt(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_LT,
 		Value:    Val(val),
 	}
@@ -880,7 +880,7 @@ func Lt(field string, val interface{}) *FieldValueFilter {
 
 func Lte(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_LTE,
 		Value:    Val(val),
 	}
@@ -892,7 +892,7 @@ func Lte(field string, val interface{}) *FieldValueFilter {
 
 func Gt(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_GT,
 		Value:    Val(val),
 	}
@@ -904,7 +904,7 @@ func Gt(field string, val interface{}) *FieldValueFilter {
 
 func Gte(field string, val interface{}) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier("", field),
 		Operator: OPERATOR_GTE,
 		Value:    Val(val),
 	}
