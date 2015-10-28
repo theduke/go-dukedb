@@ -16,7 +16,7 @@ import (
  * AddCollectionFieldStatement
  * RenameCollectionFieldStatement
  * DropCollectionFieldStatement
- * AddIndexStatement
+ * CreateIndexStatement
  * DropIndexStatement
  * SelectStatement
  * JoinStatement
@@ -248,35 +248,38 @@ func (DropCollectionFieldStatement) GetIdentifiers() []string {
  * AddIndexStatement.
  */
 
-type AddIndexStatement struct {
-	Collection string
-	Field      string
-	IndexName  string
+type CreateIndexStatement struct {
+	Collection  string
+	Expressions []Expression
+	IndexName   string
+	Unique      bool
+	// Indexing method.
+	Method string
 }
 
 // Ensure AddIndexStatement implements Expression.
-var _ Expression = (*AddIndexStatement)(nil)
+var _ Expression = (*CreateIndexStatement)(nil)
 
-func (*AddIndexStatement) Type() string {
-	return "add_index"
+func (*CreateIndexStatement) Type() string {
+	return "create_index"
 }
 
-func (e *AddIndexStatement) Validate() apperror.Error {
+func (e *CreateIndexStatement) Validate() apperror.Error {
 	if e.Collection == "" {
 		return apperror.New("empty_collection")
-	} else if e.Field == "" {
-		return apperror.New("empty_field")
+	} else if len(e.Expressions) < 1 {
+		return apperror.New("no_index_expressions")
 	} else if e.IndexName == "" {
 		return apperror.New("empty_index_name")
 	}
 	return nil
 }
 
-func (e *AddIndexStatement) IsCacheable() bool {
+func (e *CreateIndexStatement) IsCacheable() bool {
 	return false
 }
 
-func (AddIndexStatement) GetIdentifiers() []string {
+func (CreateIndexStatement) GetIdentifiers() []string {
 	return nil
 }
 
@@ -287,6 +290,8 @@ func (AddIndexStatement) GetIdentifiers() []string {
 type DropIndexStatement struct {
 	Collection string
 	IndexName  string
+	IfExists   bool
+	Cascade    bool
 }
 
 // Ensure DropIndexStatement implements Expression.
@@ -297,9 +302,7 @@ func (*DropIndexStatement) Type() string {
 }
 
 func (e *DropIndexStatement) Validate() apperror.Error {
-	if e.Collection == "" {
-		return apperror.New("empty_collection")
-	} else if e.IndexName == "" {
+	if e.IndexName == "" {
 		return apperror.New("empty_index_name")
 	}
 	return nil
@@ -321,9 +324,11 @@ func (DropIndexStatement) GetIdentifiers() []string {
 type SelectStatement struct {
 	NamedExpr
 	Collection string
-	Fields     []Expression
-	Filter     Expression
-	Sorts      []*SortExpression
+	// Fields are arbitrary field expressions, which must be named.
+	// The name will be used as the field name in queries.
+	Fields []NamedNestedExpression
+	Filter Expression
+	Sorts  []*SortExpression
 
 	Limit  int
 	Offset int
@@ -541,9 +546,26 @@ const (
  * JoinStatement.
  */
 
+const (
+	RELATION_TYPE_HAS_ONE    = "has_one"
+	RELATION_TYPE_HAS_MANY   = "has_many"
+	RELATION_TYPE_BELONGS_TO = "belongs_to"
+	RELATION_TYPE_M2M        = "m2m"
+)
+
+var RELATION_TYPE_MAP map[string]bool = map[string]bool{
+	"has_one":    true,
+	"has_many":   true,
+	"belongs_to": true,
+	"m2m":        true,
+}
+
 // JoinStatement represents a database join.
 type JoinStatement struct {
 	SelectStatement
+
+	// One of the RELATION_TYPE_* constants.
+	RelationType string
 
 	Base *SelectStatement
 
@@ -569,6 +591,10 @@ func (e *JoinStatement) Validate() apperror.Error {
 		return apperror.New("empty_join_type")
 	} else if e.JoinCondition == nil {
 		return apperror.New("no_join_condition_expression")
+	} else if e.RelationType == "" {
+		return apperror.New("no_relation_type")
+	} else if _, ok := RELATION_TYPE_MAP[e.RelationType]; !ok {
+		return apperror.New("unknown_relation_type", fmt.Sprintf("Unknown relation type %v", e.RelationType))
 	}
 	return nil
 }
