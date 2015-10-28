@@ -110,7 +110,7 @@ type ModelInfo struct {
 
 // Builds the ModelInfo for a model and returns it.
 // Returns an error for all failures.
-func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
+func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 	typ := reflect.TypeOf(model)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
