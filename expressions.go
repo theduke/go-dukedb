@@ -3,6 +3,8 @@ package dukedb
 import (
 	"reflect"
 	"strings"
+
+	"github.com/theduke/go-apperror"
 )
 
 const (
@@ -15,15 +17,57 @@ const (
 /**
  * Expressions.
  *
- * Expressions are a way to abstract
+ * FieldTypeExpression
+ * ValueExpression
+ * IdentifierExpression
+ * CollectionFieldIdentifierExpression
+ * NotNullConstraint
+ * UniqueConstraint
+ * UniqueFieldsConstraint
+ * PrimaryKeyConstraint
+ * AutoIncrementConstraint
+ * DefaultValueConstraint
+ * FieldUpdateConstraint
+ * FieldDeleteConstraint
+ * IndexConstraint
+ * CheckConstraint
+ * ReferenceConstraint
+ * FieldExpression
+ * FieldValueExpression
+ * FunctionExpression
+ * AndExpression
+ * OrExpression
+ * NotExpression
+ * Filter
+ * FieldFilter
+ * FieldValueFilter
+ * SortExpression
  */
 
 // Expression represents an arbitrary database expression.
 type Expression interface {
+	// Type returns the type of the expression.
 	Type() string
-
+	// Validate validates the expression.
+	Validate() apperror.Error
+	// IsCacheable returns a flag indicating if this expression may be cached.
+	IsCacheable() bool
 	// GetIdentifiers returns all database identifiers contained within an expression.
 	GetIdentifiers() []string
+}
+
+// NamedExpression is an expression that has a identifying name attached.
+type NamedExpression interface {
+	Expression
+	Name() string
+}
+
+type NamedExpr struct {
+	Name string
+}
+
+func (e *NamedExpr) Name() string {
+	return e.Name()
 }
 
 /**
@@ -424,6 +468,24 @@ var _ ConstraintExpression = (*FieldUpdateConstraint)(nil)
 
 func (*FieldUpdateConstraint) Type() string {
 	return "field_update_constraint"
+}
+
+/**
+ * FieldDeleteConstraint.
+ */
+
+type FieldDeleteConstraint struct {
+	ConstraintExpr
+	// Action is the action to be taken when a field is deleted.
+	// See CONSTRAINT_* constants.
+	Action string
+}
+
+// Make sure FieldUpdateConstraint implements Expression.
+var _ ConstraintExpression = (*FieldDeleteConstraint)(nil)
+
+func (*FieldDeleteConstraint) Type() string {
+	return "field_delete_constraint"
 }
 
 /**
