@@ -12,7 +12,7 @@ import (
  * Query parser functions.
  */
 
-func ParseJsonQuery(js []byte) (Query, apperror.Error) {
+func ParseJsonQuery(js []byte) (*Query, apperror.Error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
 		return nil, &apperror.Err{
@@ -56,7 +56,7 @@ func ParseJsonQuery(js []byte) (Query, apperror.Error) {
 //  offset: 20
 // }
 //
-func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
+func ParseQuery(data map[string]interface{}) (*Query, apperror.Error) {
 	if data == nil {
 		return nil, apperror.New("empty_query_data")
 	}
@@ -149,14 +149,14 @@ func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
 				joinQ := q.GetJoin(strings.Join(parts[:len(parts)-1], "."))
 				if joinQ != nil {
 					// Join query found, add field to the join query.
-					joinQ.AddFields(parts[len(parts)-1])
+					joinQ.Field(parts[len(parts)-1])
 				} else {
 					// No join query found, maybe the backend supports nested fields.
-					q.AddFields(field)
+					q.Field(field)
 				}
 			} else {
 				// Not nested, just add the field.
-				q.AddFields(field)
+				q.Field(field)
 			}
 		}
 	}
@@ -204,7 +204,7 @@ func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
 				}
 			}
 
-			q.Order(field, ascending)
+			q.Sort(field, ascending)
 		}
 	}
 
@@ -235,7 +235,7 @@ func ParseQuery(data map[string]interface{}) (Query, apperror.Error) {
 	return q, nil
 }
 
-func parseQueryJoins(q Query, joins []string, depth int) ([]string, apperror.Error) {
+func parseQueryJoins(q *Query, joins []string, depth int) ([]string, apperror.Error) {
 	remaining := make([]string, 0)
 
 	for _, name := range joins {
@@ -269,29 +269,35 @@ func parseQueryJoins(q Query, joins []string, depth int) ([]string, apperror.Err
 	return remaining, nil
 }
 
-func parseQueryFilters(q Query, filters map[string]interface{}) apperror.Error {
+func parseQueryFilters(q *Query, filters map[string]interface{}) apperror.Error {
 	filter, err := parseQueryFilter("", filters, q)
 	if err != nil {
 		return err
 	}
-
-	// If filter is an and, add the and clauses separately to the query.
-	// Done for prettier query without top level AND.
-	if andFilter, ok := filter.(*AndCondition); ok {
-		for _, filter := range andFilter.Filters {
-			q.FilterQ(filter)
-		}
-	} else {
-		q.FilterQ(filter)
-	}
-
+	q.FilterExpr(filter)
 	return nil
+}
+
+func setExpressionIdentifier(expr Expression, identifier string) {
+	if multi, ok := expr.(MultiExpression); ok {
+		for _, expr := range multi.GetExpressions() {
+			setExpressionIdentifier(expr, identifier)
+		}
+	} else if nested, ok := expr.(NestedExpression); ok {
+		setExpressionIdentifier(nested.GetNestedExpression(), identifier)
+	} else if filter, ok := expr.(FilterExpression); ok {
+		setExpressionIdentifier(filter.GetField(), identifier)
+	} else if id, ok := expr.(*IdentifierExpression); ok {
+		id.Identifier = identifier
+	} else if id, ok := expr.(*CollectionFieldIdentifierExpression); ok {
+		id.Field = identifier
+	}
 }
 
 // Parses a mongo query filter to a Filter.
 // All mongo operators expect $nor are supported.
 // Refer to http://docs.mongodb.org/manual/reference/operator/query.
-func parseQueryFilter(name string, data interface{}, query Query) (Filter, apperror.Error) {
+func parseQueryFilter(name string, data interface{}, query *Query) (Expression, apperror.Error) {
 	// Handle
 	switch name {
 	case "$eq":
@@ -374,15 +380,16 @@ func parseQueryFilter(name string, data interface{}, query Query) (Filter, apper
 					joinQ := query.GetJoin(strings.Join(parts[:len(parts)-1], "."))
 					if joinQ != nil {
 						// Join query found, add filter to the join query.
-						filter.SetField(parts[len(parts)-1])
-						joinQ.FilterQ(filter)
+						fieldName := parts[len(parts)-1]
+						setExpressionIdentifier(filter, fieldName)
+						joinQ.FilterExpr(filter)
 						// Set flag to prevent adding to regular query.
 						doAdd = false
 					}
 				}
 
 				if doAdd {
-					filter.SetField(field)
+					setExpressionIdentifier(filter, field)
 				}
 			}
 
@@ -391,8 +398,8 @@ func parseQueryFilter(name string, data interface{}, query Query) (Filter, apper
 			}
 		}
 
-		if len(and.Filters) == 1 {
-			return and.Filters[0], nil
+		if len(and.Expressions) == 1 {
+			return and.Expressions[0], nil
 		} else {
 			return and, nil
 		}
