@@ -1466,7 +1466,7 @@ func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelIn
 		}
 
 	case NestedExpression:
-		if err := NormalizeExpression(expr.GetNestedExpression(), info, allInfo); err != nil {
+		if err := NormalizeExpression(expr.GetExpression(), info, allInfo); err != nil {
 			return err
 		}
 

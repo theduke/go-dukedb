@@ -94,7 +94,7 @@ func (b *BaseBackend) BuildLogger() {
 }
 
 func (b *BaseBackend) RegisterModel(model interface{}) {
-	info, err := CreateModelInfo(model)
+	info, err := BuildModelInfo(model)
 	if err != nil {
 		panic(fmt.Sprintf("Could not register model '%v': %v\n", reflect.TypeOf(model).Name(), err))
 	}
@@ -301,7 +301,7 @@ func (b *BaseBackend) GetHooks(hook string) []HookHandler {
 }
 
 // Relationship stuff.
-func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Query, apperror.Error) {
+func BuildRelationQuery(b Backend, baseModels []interface{}, q *RelationQuery) (*Query, apperror.Error) {
 	baseQ := q.GetBaseQuery()
 	baseInfo := b.ModelInfo(baseQ.GetCollection())
 	if baseInfo == nil {
@@ -325,83 +325,87 @@ func BuildRelationQuery(b Backend, baseModels []interface{}, q RelationQuery) (Q
 
 	var targetModelName, joinField, foreignFieldName string
 
-	var newQuery Query
+	var newQuery *Query
 
-	if q.GetCollection() != "" && q.GetJoinFieldName() != "" {
-		// Custom relation query.
-		targetModelName = q.GetCollection()
-		newQuery = b.Q(targetModelName)
+	/*
 
-		joinField = baseInfo.MapFieldName(q.GetJoinFieldName())
-		foreignFieldName = q.GetForeignFieldName()
+			if q.GetCollection() != "" && q.GetJoinFieldName() != "" {
+				// Custom relation query.
+				targetModelName = q.GetCollection()
+				newQuery = b.Q(targetModelName)
 
-		if foreignFieldName == "" {
-			// No foreign key specified, use primary key.
-			relatedInfo := b.ModelInfo(targetModelName)
-			foreignFieldName = relatedInfo.PkField
-		}
-	} else if q.GetRelationName() != "" {
-		// query for a known relationship reflected in the model struct.
-		relInfo, ok := baseInfo.FieldInfo[q.GetRelationName()]
-		if !ok {
-			panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.GetCollection(), q.GetRelationName()))
-		}
+				joinField = baseInfo.MapFieldName(q.GetJoinFieldName())
+				foreignFieldName = q.GetForeignFieldName()
 
-		if relInfo.RelationCollection == "" {
-			panic(fmt.Sprintf("Field %v.%v has no relation collection", baseInfo.Collection, relInfo.Name))
-		}
+				if foreignFieldName == "" {
+					// No foreign key specified, use primary key.
+					relatedInfo := b.ModelInfo(targetModelName)
+					foreignFieldName = relatedInfo.PkField
+				}
+			} else if q.GetRelationName() != "" {
+				// query for a known relationship reflected in the model struct.
+				relInfo, ok := baseInfo.FieldInfo[q.GetRelationName()]
+				if !ok {
+					panic(fmt.Sprintf("Model %v has no relation to %v", baseQ.GetCollection(), q.GetRelationName()))
+				}
 
-		relatedInfo := b.ModelInfo(relInfo.RelationCollection)
+				if relInfo.RelationCollection == "" {
+					panic(fmt.Sprintf("Field %v.%v has no relation collection", baseInfo.Collection, relInfo.Name))
+				}
 
-		targetModelName = relatedInfo.Collection
-		newQuery = b.Q(targetModelName)
+				relatedInfo := b.ModelInfo(relInfo.RelationCollection)
 
-		if relInfo.HasOne {
-			joinField = relInfo.HasOneField
-			foreignFieldName = relatedInfo.FieldInfo[relInfo.HasOneForeignField].Name
+				targetModelName = relatedInfo.Collection
+				newQuery = b.Q(targetModelName)
 
-			// Set field names on query so Join logic can use it.
-			// Attention: ususally these fields contain the converted names,
-			// but join logic requires the field names so we abuse those
-			// RelatedQuery fields here.
-			q.SetJoinFieldName(joinField)
-			q.SetForeignFieldName(relInfo.HasOneForeignField)
+				if relInfo.HasOne {
+					joinField = relInfo.HasOneField
+					foreignFieldName = relatedInfo.FieldInfo[relInfo.HasOneForeignField].Name
 
-			newQuery.SetJoinType("has-one")
-		} else if relInfo.BelongsTo {
-			joinField = relInfo.BelongsToField
-			foreignFieldName = relatedInfo.FieldInfo[relInfo.BelongsToForeignField].Name
+					// Set field names on query so Join logic can use it.
+					// Attention: ususally these fields contain the converted names,
+					// but join logic requires the field names so we abuse those
+					// RelatedQuery fields here.
+					q.SetJoinFieldName(joinField)
+					q.SetForeignFieldName(relInfo.HasOneForeignField)
 
-			// Set field names on query so Join logic can use it.
-			// Attention: ususally these fields contain the converted names,
-			// but join logic requires the field names so we abuse those
-			// RelatedQuery fields here.
-			q.SetJoinFieldName(joinField)
-			q.SetForeignFieldName(relInfo.BelongsToForeignField)
+					newQuery.SetJoinType("has-one")
+				} else if relInfo.BelongsTo {
+					joinField = relInfo.BelongsToField
+					foreignFieldName = relatedInfo.FieldInfo[relInfo.BelongsToForeignField].Name
 
-			newQuery.SetJoinType("belongs-to")
-		} else if relInfo.M2M {
-			joinField = baseInfo.PkField
-			foreignFieldName = relInfo.M2MCollection + "." + baseInfo.BackendName + "_" + baseInfo.GetPkField().BackendName
+					// Set field names on query so Join logic can use it.
+					// Attention: ususally these fields contain the converted names,
+					// but join logic requires the field names so we abuse those
+					// RelatedQuery fields here.
+					q.SetJoinFieldName(joinField)
+					q.SetForeignFieldName(relInfo.BelongsToForeignField)
 
-			joinTableRelationColumn := relatedInfo.BackendName + "_" + relatedInfo.GetPkField().BackendName
-			relationColumn := relatedInfo.GetPkField().BackendName
-			joinQ := RelQCustom(newQuery, q.GetRelationName(), relInfo.M2MCollection, joinTableRelationColumn, relationColumn, InnerJoin)
-			newQuery.JoinQ(joinQ)
+					newQuery.SetJoinType("belongs-to")
+				} else if relInfo.M2M {
+					joinField = baseInfo.PkField
+					foreignFieldName = relInfo.M2MCollection + "." + baseInfo.BackendName + "_" + baseInfo.GetPkField().BackendName
 
-			q.SetJoinFieldName(joinField)
-			q.SetForeignFieldName(foreignFieldName)
+					joinTableRelationColumn := relatedInfo.BackendName + "_" + relatedInfo.GetPkField().BackendName
+					relationColumn := relatedInfo.GetPkField().BackendName
+					joinQ := RelQCustom(newQuery, q.GetRelationName(), relInfo.M2MCollection, joinTableRelationColumn, relationColumn, InnerJoin)
+					newQuery.JoinQ(joinQ)
 
-			newQuery.SetJoinType("m2m")
-		}
-	}
+					q.SetJoinFieldName(joinField)
+					q.SetForeignFieldName(foreignFieldName)
 
-	// Copy over old filters, fields and orders.
-	newQuery.SetFilters(q.GetFilters()...)
-	newQuery.Fields(q.GetFields()...)
-	newQuery.SetOrders(q.GetOrders()...)
-	newQuery.JoinQ(q.GetJoins()...)
-	newQuery.SetName(q.GetName())
+					newQuery.SetJoinType("m2m")
+				}
+			}
+
+
+		// Copy over old filters, fields and orders.
+		newQuery.SetFilters(q.GetFilters()...)
+		newQuery.Fields(q.GetFields()...)
+		newQuery.SetOrders(q.GetOrders()...)
+		newQuery.JoinQ(q.GetJoins()...)
+		newQuery.SetName(q.GetName())
+	*/
 
 	vals := make([]interface{}, 0)
 	for _, m := range baseModels {
@@ -632,7 +636,7 @@ func BackendMergeModel(b Backend, model Model) {
 	model.SetInfo(info)
 }
 
-func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []interface{}, err apperror.Error) ([]interface{}, apperror.Error) {
+func BackendQuery(b Backend, query *Query, targetSlice []interface{}, models []interface{}, err apperror.Error) ([]interface{}, apperror.Error) {
 	if err != nil {
 		return nil, err
 	}
@@ -663,7 +667,7 @@ func BackendQuery(b Backend, query Query, targetSlice []interface{}, models []in
 	return models, nil
 }
 
-func BackendRelated(b Backend, model interface{}, name string) (RelationQuery, apperror.Error) {
+func BackendRelated(b Backend, model interface{}, name string) (*RelationQuery, apperror.Error) {
 	info, err := b.InfoForModel(model)
 	if err != nil {
 		return nil, err
@@ -679,7 +683,7 @@ func BackendRelated(b Backend, model interface{}, name string) (RelationQuery, a
 	return b.Q(info.Collection).Filter(info.PkField, b.MustModelID(model)).Related(name), nil
 }
 
-func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (interface{}, apperror.Error) {
+func BackendQueryOne(b Backend, q *Query, targetModels []interface{}) (interface{}, apperror.Error) {
 	res, err := b.Query(q)
 	if err != nil {
 		return nil, err
@@ -698,16 +702,16 @@ func BackendQueryOne(b Backend, q Query, targetModels []interface{}) (interface{
 	return m, nil
 }
 
-func BackendLast(b Backend, q Query, targetModels []interface{}) (interface{}, apperror.Error) {
-	orders := q.GetOrders()
-	orderLen := len(q.GetOrders())
+func BackendLast(b Backend, q *Query, targetModels []interface{}) (interface{}, apperror.Error) {
+	sorts := q.GetStatement().Sorts
+	orderLen := len(sorts)
 	if orderLen > 0 {
 		for i := 0; i < orderLen; i++ {
-			orders[i].Ascending = !orders[i].Ascending
+			sorts[i].Ascending = !sorts[i].Ascending
 		}
 	} else {
 		info := b.ModelInfo(q.GetCollection())
-		q = q.Order(info.GetPkName(), false)
+		q = q.Sort(info.GetPkName(), false)
 	}
 
 	model, err := b.QueryOne(q.Limit(1))
@@ -937,16 +941,16 @@ func BackendDelete(b Backend, model interface{}, handler func(*ModelInfo, interf
  * Join logic.
  */
 
-type JoinAssigner func(objs, joinedModels []interface{}, joinQ RelationQuery)
+type JoinAssigner func(objs, joinedModels []interface{}, joinQ *RelationQuery)
 
-func BackendDoJoins(b Backend, model string, objs []interface{}, joins []RelationQuery) apperror.Error {
+func BackendDoJoins(b Backend, model string, objs []interface{}, joins []*RelationQuery) apperror.Error {
 	if len(objs) == 0 {
 		// Nothing to do if no objects.
 		return nil
 	}
 
 	handledJoins := make(map[string]bool)
-	nestedJoins := make([]RelationQuery, 0)
+	nestedJoins := make([]*RelationQuery, 0)
 
 	modelInfo := b.ModelInfo(joins[0].GetBaseQuery().GetCollection())
 	if modelInfo == nil {
@@ -1033,7 +1037,7 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []Relatio
 		// Need to determine the collection.
 
 		// Build a list of nested joins.
-		var nestedJoins []RelationQuery
+		var nestedJoins []*RelationQuery
 		for _, joinQ := range joinMap[parentField] {
 			parts := strings.Split(joinQ.GetRelationName(), ".")
 			nestedQ := RelQ(Q(parentCollection), strings.Join(parts[1:], "."))
@@ -1047,7 +1051,7 @@ func BackendDoJoins(b Backend, model string, objs []interface{}, joins []Relatio
 	return nil
 }
 
-func doJoin(b Backend, model string, objs []interface{}, joinQ RelationQuery) apperror.Error {
+func doJoin(b Backend, model string, objs []interface{}, joinQ *RelationQuery) apperror.Error {
 	resultQuery, err := BuildRelationQuery(b, objs, joinQ)
 	if err != nil {
 		if apperror.IsCode(err, "relation_query_on_empty_result") {
@@ -1074,7 +1078,7 @@ func doJoin(b Backend, model string, objs []interface{}, joinQ RelationQuery) ap
 	return nil
 }
 
-func assignJoinModels(objs, joinedModels []interface{}, joinQ RelationQuery) {
+func assignJoinModels(objs, joinedModels []interface{}, joinQ *RelationQuery) {
 	targetField := joinQ.GetRelationName()
 	joinedField := joinQ.GetJoinFieldName()
 	joinField := joinQ.GetForeignFieldName()

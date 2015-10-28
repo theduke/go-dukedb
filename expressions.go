@@ -242,6 +242,14 @@ func (*NamedNestedExpr) Type() string {
 	return "named_nested"
 }
 
+func (e *NamedNestedExpr) GetExpression() Expression {
+	return e.Expression
+}
+
+func (e *NamedNestedExpr) GetName() string {
+	return e.Name
+}
+
 func (e *NamedNestedExpr) Validate() apperror.Error {
 	if e.Name == "" {
 		return apperror.New("empty_name")
@@ -299,8 +307,7 @@ func (e *TextExpression) GetIdentifiers() []string {
  */
 
 type FieldTypeExpression struct {
-	GoType reflect.Type
-	Typ    string
+	Typ string
 }
 
 // Ensure FieldTypeExpression implements Expression.
@@ -311,7 +318,7 @@ func (*FieldTypeExpression) Type() string {
 }
 
 func (e *FieldTypeExpression) Validate() apperror.Error {
-	if e.GoType == nil && e.Typ == "" {
+	if e.Typ == "" {
 		return apperror.New("empty_type")
 	}
 	return nil
@@ -722,7 +729,7 @@ func (e *IndexConstraint) IsCacheable() bool {
 
 type CheckConstraint struct {
 	ConstraintExpr
-	Checks []*FieldFilter
+	Check Expression
 }
 
 // Make sure CheckConstraint implements Constraint.
@@ -733,8 +740,8 @@ func (*CheckConstraint) Type() string {
 }
 
 func (e *CheckConstraint) Validate() apperror.Error {
-	if len(e.Checks) < 1 {
-		return apperror.New("no_check_filters")
+	if e.Check == nil {
+		return apperror.New("no_check_expression")
 	}
 	return nil
 }
@@ -781,7 +788,7 @@ type FieldExpression struct {
 
 	Typ *FieldTypeExpression
 
-	Constraints []*ConstraintExpression
+	Constraints []ConstraintExpression
 }
 
 // Ensure FieldExpression implements Expression.

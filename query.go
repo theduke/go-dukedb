@@ -93,14 +93,14 @@ func (q *Query) GetOffset() int {
  */
 
 func (q *Query) Field(fields ...string) *Query {
-	q.statement.Fields = make([]Expression, 0)
+	q.statement.Fields = make([]NamedNestedExpression, 0)
 	for _, field := range fields {
-		q.statement.AddField(Identifier(field))
+		q.statement.AddField(WrapNamedExpression(field, Identifier(field)))
 	}
 	return q
 }
 
-func (q *Query) FieldExpr(exprs ...Expression) *Query {
+func (q *Query) FieldExpr(exprs ...NamedNestedExpression) *Query {
 	q.statement.AddField(exprs...)
 	return q
 }
@@ -110,7 +110,7 @@ func (q *Query) SetFields(fields []string) *Query {
 	return q.Field(fields...)
 }
 
-func (q *Query) SetFieldExpressions(expressions []Expression) *Query {
+func (q *Query) SetFieldExpressions(expressions []NamedNestedExpression) *Query {
 	q.statement.Fields = expressions
 	return q
 }
@@ -539,7 +539,7 @@ func (q *RelationQuery) Field(fields ...string) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) FieldExpr(exprs ...Expression) *RelationQuery {
+func (q *RelationQuery) FieldExpr(exprs ...NamedNestedExpression) *RelationQuery {
 	q.Query.FieldExpr(exprs...)
 	return q
 }
@@ -549,7 +549,7 @@ func (q *RelationQuery) SetFields(fields []string) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) SetFieldExpressions(expressions []Expression) *RelationQuery {
+func (q *RelationQuery) SetFieldExpressions(expressions []NamedNestedExpression) *RelationQuery {
 	q.Query.SetFieldExpressions(expressions)
 	return q
 }

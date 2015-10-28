@@ -373,7 +373,7 @@ func (s SelectStatement) GetIdentifiers() []string {
 	return ids
 }
 
-func (s *SelectStatement) AddField(fields ...Expression) {
+func (s *SelectStatement) AddField(fields ...NamedNestedExpression) {
 	s.Fields = append(s.Fields, fields...)
 }
 
@@ -497,18 +497,18 @@ func (s *SelectStatement) FixNestedFields() {
 		return
 	}
 
-	remainingFields := make([]Expression, 0)
+	remainingFields := make([]NamedNestedExpression, 0)
 
 	for _, fieldExpr := range s.Fields {
-		field, ok := fieldExpr.(*IdentifierExpression)
+		field, ok := fieldExpr.GetExpression().(*IdentifierExpression)
 		if !ok {
-			remainingFields = append(remainingFields, field)
+			remainingFields = append(remainingFields, fieldExpr)
 			continue
 		}
 
 		parts := strings.Split(field.Identifier, ".")
 		if len(parts) < 2 {
-			remainingFields = append(remainingFields, field)
+			remainingFields = append(remainingFields, fieldExpr)
 			continue
 		}
 
@@ -525,10 +525,11 @@ func (s *SelectStatement) FixNestedFields() {
 			*/
 
 			// Maybe the backend supports nested fields, so leave the field untouched.
-			remainingFields = append(remainingFields, field)
+			remainingFields = append(remainingFields, fieldExpr)
 		} else {
 			// Found parent join, so add the field to it.
-			join.AddField(field)
+			field.Identifier = parts[len(parts)-1]
+			join.AddField(fieldExpr)
 		}
 	}
 
@@ -536,11 +537,37 @@ func (s *SelectStatement) FixNestedFields() {
 }
 
 const (
-	JOIN_INNER = "inner"
-	JOIN_LEFT  = "left"
-	JOIN_RIGHT = "right"
-	JOIN_CROSS = "cross"
+	JOIN_INNER       = "inner"
+	JOIN_LEFT        = "left"
+	JOIN_OUTER_LEFT  = "outer_left"
+	JOIN_RIGHT       = "right"
+	JOIN_OUTER_RIGHT = "outer_right"
+	JOIN_FULL        = "full"
+	JOIN_OUTER_FULL  = "outer_full"
+	JOIN_CROSS       = "cross"
 )
+
+var JOIN_MAP map[string]bool = map[string]bool{
+	"inner":       true,
+	"left":        true,
+	"outer_left":  true,
+	"right":       true,
+	"outer_right": true,
+	"full":        true,
+	"outer_full":  true,
+	"cross":       true,
+}
+
+var JOIN_SQL_MAP map[string]string = map[string]string{
+	"inner":       "INNER JOIN",
+	"left":        "LEFT JOIN",
+	"outer_left":  "LEFT OUTER JOIN",
+	"right":       "RIGHT JOIN",
+	"outer_right": "RIGHT OUTER JOIN",
+	"full":        "FULL JOIN",
+	"outer_full":  "FULL OUTER JOIN",
+	"cross":       "CROSS JOIN",
+}
 
 /**
  * JoinStatement.
@@ -589,6 +616,8 @@ func (e *JoinStatement) Validate() apperror.Error {
 		return err
 	} else if e.JoinType == "" {
 		return apperror.New("empty_join_type")
+	} else if _, ok := JOIN_MAP[e.JoinType]; !ok {
+		return apperror.New("unknown_join_type", fmt.Sprintf("Unknown join type %v", e.JoinType))
 	} else if e.JoinCondition == nil {
 		return apperror.New("no_join_condition_expression")
 	} else if e.RelationType == "" {

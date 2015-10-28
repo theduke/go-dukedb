@@ -284,7 +284,7 @@ func setExpressionIdentifier(expr Expression, identifier string) {
 			setExpressionIdentifier(expr, identifier)
 		}
 	} else if nested, ok := expr.(NestedExpression); ok {
-		setExpressionIdentifier(nested.GetNestedExpression(), identifier)
+		setExpressionIdentifier(nested.GetExpression(), identifier)
 	} else if filter, ok := expr.(FilterExpression); ok {
 		setExpressionIdentifier(filter.GetField(), identifier)
 	} else if id, ok := expr.(*IdentifierExpression); ok {
