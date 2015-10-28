@@ -103,6 +103,7 @@ type ModelInfo struct {
 	Collection string
 
 	BackendName string
+	MarshalName string
 
 	FieldInfo map[string]*FieldInfo
 }
@@ -135,13 +136,25 @@ func CreateModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 		FieldInfo:  make(map[string]*FieldInfo),
 	}
 
+	// Determine BackendName.
 	info.BackendName = info.Collection
 	// If model implements .BackendName() call it to determine backend name.
 	if nameHook, ok := model.(ModelBackendNameHook); ok {
 		name := nameHook.BackendName()
-		if name != "" {
-			info.BackendName = name
+		if name == "" {
+			panic(fmt.Printf("%v.BackendName() returned an empty string.", info.FullName))
 		}
+		info.BackendName = name
+	}
+
+	// Dertermine MarshalName.
+	info.MarshalName = info.Collection
+	if nameHook, ok := model.(ModelMarshalNameHook); ok {
+		name := nameHook.MarshalName()
+		if name == "" {
+			panic(fmt.Printf("%v.MarshalName() returned an empty string.", info.FullName))
+		}
+		info.MarshalName = name
 	}
 
 	err = info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")

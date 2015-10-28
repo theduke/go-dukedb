@@ -216,6 +216,10 @@ type ModelBackendNameHook interface {
 	BackendName() string
 }
 
+type ModelMarshalNameHook interface {
+	MarshalName() string
+}
+
 type ModelIDGetterHook interface {
 	GetID() interface{}
 }
