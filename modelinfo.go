@@ -245,7 +245,7 @@ func (m ModelInfo) MapMarshalName(name string) string {
 
 // Tries to determine the backend name by checking struct field names, MarshalName and
 // BackendName. Returns the backend field name, or an empty string if not found.
-func (m ModelInfo) FindBackendFieldName(name string) string {
+func (m ModelInfo) FindBackendName(name string) string {
 	if m.HasField(name) {
 		return m.GetField(name).BackendName
 	}
