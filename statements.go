@@ -358,7 +358,7 @@ func (s SelectStatement) GetIdentifiers() []string {
 	ids := make([]string, 0)
 	// Fields.
 	for _, f := range s.Fields {
-		ids = append(ids, s.GetIdentifiers()...)
+		ids = append(ids, f.GetIdentifiers()...)
 	}
 	// Filter.
 	ids = append(ids, s.Filter.GetIdentifiers()...)
@@ -454,7 +454,7 @@ func (s *SelectStatement) FixNestedJoins() apperror.Error {
 func (s *SelectStatement) fixNestedJoinsRecursive(lvl, maxLvl int) apperror.Error {
 	remainingJoins := make([]*JoinStatement, 0)
 
-	for index, join := range s.Joins {
+	for _, join := range s.Joins {
 		if join.RelationName == "" {
 			// No RelationName set, so ignore this custom join.
 			remainingJoins = append(remainingJoins, join)
