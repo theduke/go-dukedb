@@ -25,6 +25,7 @@ var CONSTRAINTS map[string]bool = map[string]bool{
 /**
  * Expressions.
  *
+ * TextExpression
  * FieldTypeExpression
  * ValueExpression
  * IdentifierExpression
@@ -216,6 +217,34 @@ func (m MultiExpr) GetIdentifiers() []string {
 		ids = append(ids, expr.GetIdentifiers()...)
 	}
 	return ids
+}
+
+/**
+ * TextExpression.
+ */
+
+// TextExpression is plain text that will be used directly in the database.
+type TextExpression struct {
+	Text string
+}
+
+// Ensure FieldTypeExpression implements Expression.
+var _ Expression = (*TextExpression)(nil)
+
+func (*TextExpression) Type() string {
+	return "text"
+}
+
+func (e *TextExpression) Validate() apperror.Error {
+	return nil
+}
+
+func (e *TextExpression) IsCacheable() bool {
+	return false
+}
+
+func (e *TextExpression) GetIdentifiers() []string {
+	return nil
 }
 
 /**
