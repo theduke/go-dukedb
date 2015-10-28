@@ -8,17 +8,37 @@ import (
 )
 
 /**
+ * List of statements:
+ *
+ * CreateCollectionStatement
+ * RenameCollectionStatement
+ * DropCollectionStatement
+ * AddCollectionFieldStatement
+ * RenameCollectionFieldStatement
+ * DropCollectionFieldStatement
+ * AddIndexStatement
+ * DropIndexStatement
+ * SelectStatement
+ * JoinStatement
+ * MutationStatement
+ * CreateStatement
+ * UpdateStatement
+* /
+
+/**
  * Statements.
- */
+*/
 
 /**
  * CreateCollectionStatement.
  */
 
-// CollectionExpression represents the definition for a collection.
+// CollectionStatement represents the definition for a collection.
 type CreateCollectionStatement struct {
 	// Name is the collection name.
 	Collection string
+
+	IfNotExists bool
 
 	// Fields are the collection fields.
 	Fields []*FieldExpression
@@ -40,6 +60,27 @@ func (CreateCollectionStatement) GetIdentifiers() []string {
 }
 
 /**
+ * RenameCollectionStatement.
+ */
+
+type RenameCollectionStatement struct {
+	// Collection is the current name of the collection.
+	Collection    string
+	NewCollection string
+}
+
+// Ensure RenameCollectionStatement implements Expression.
+var _ Expression = (*RenameCollectionStatement)(nil)
+
+func (*RenameCollectionStatement) Type() string {
+	return "rename_collection"
+}
+
+func (RenameCollectionStatement) GetIdentifiers() []string {
+	return nil
+}
+
+/**
  * DropCollectionStatement.
  */
 
@@ -47,6 +88,9 @@ func (CreateCollectionStatement) GetIdentifiers() []string {
 type DropCollectionStatement struct {
 	// Name is the collection name.
 	Collection string
+
+	IfExists bool
+	Cascade  bool
 }
 
 // Ensure DropCollectionStatement implements Expression.
@@ -109,6 +153,8 @@ func (RenameCollectionFieldStatement) GetIdentifiers() []string {
 type DropCollectionFieldStatement struct {
 	Collection string
 	Field      string
+	IfExists   bool
+	Cascasde   bool
 }
 
 // Ensure DropCollectionFieldStatement implements Expression.
@@ -169,6 +215,7 @@ func (DropIndexStatement) GetIdentifiers() []string {
 
 // SelectStatement represents a database select.
 type SelectStatement struct {
+	NamedExpr
 	Collection string
 	Fields     []Expression
 	Filter     Expression
@@ -180,8 +227,8 @@ type SelectStatement struct {
 	Joins []*JoinStatement
 }
 
-// Ensure SelectStatement implements Expression.
-var _ Expression = (*SelectStatement)(nil)
+// Ensure SelectStatement implements NamedExpression.
+var _ NamedExpression = (*SelectStatement)(nil)
 
 func (*SelectStatement) Type() string {
 	return "select"
@@ -419,6 +466,7 @@ func Join(relationName, joinType string, joinCondition Expression) *JoinStatemen
  */
 
 type MutationStatement interface {
+	NamedExpression
 	GetCollection() string
 	SetCollection(col string)
 	GetValues() []*FieldValueExpression
@@ -426,6 +474,7 @@ type MutationStatement interface {
 }
 
 type MutationStmt struct {
+	NamedExpr
 	Collection string
 	Values     []*FieldValueExpression
 }
