@@ -727,7 +727,7 @@ func F(field Expression, operator string, clause Expression) *Filter {
 
 // FieldFilter is a filter that filters a database field by an expression.
 type FieldFilter struct {
-	Field    *IdentifierExpression
+	Field    *CollectionFieldIdentifierExpression
 	Operator string
 	Clause   Expression
 }
@@ -758,7 +758,7 @@ func (f FieldFilter) GetClause() Expression {
 }
 
 // NewFieldFilter creates a new field filter expression.
-func NewFieldFilter(field *IdentifierExpression, operator string, clause Expression) *FieldFilter {
+func NewFieldFilter(field *CollectionFieldIdentifierExpression, operator string, clause Expression) *FieldFilter {
 	return &FieldFilter{
 		Field:    field,
 		Operator: operator,
@@ -767,8 +767,8 @@ func NewFieldFilter(field *IdentifierExpression, operator string, clause Express
 }
 
 // FF is a convenient alias for NewFieldFilter().
-func FF(field *IdentifierExpression, operator string, clause Expression) *FieldFilter {
-	return NewFieldFilter(field, operator, clause)
+func FF(collection, field, operator string, clause Expression) *FieldFilter {
+	return NewFieldFilter(ColFieldIdentifier(collection, field), operator, clause)
 }
 
 /**
@@ -777,7 +777,7 @@ func FF(field *IdentifierExpression, operator string, clause Expression) *FieldF
 
 // FieldFilter is a filter that filters a database field by an expression.
 type FieldValueFilter struct {
-	Field    *IdentifierExpression
+	Field    *CollectionFieldIdentifierExpression
 	Operator string
 	Value    *ValueExpression
 }
@@ -806,9 +806,9 @@ func (f FieldValueFilter) GetClause() Expression {
 }
 
 // NewFieldFilter creates a new field filter expression.
-func ValFilter(field string, operator string, val *ValueExpression) *FieldValueFilter {
+func ValFilter(collection, field, operator string, val *ValueExpression) *FieldValueFilter {
 	return &FieldValueFilter{
-		Field:    Identifier(field),
+		Field:    ColFieldIdentifier(collection, field),
 		Operator: operator,
 		Value:    val,
 	}
@@ -943,10 +943,14 @@ type SortExpression struct {
 }
 
 // Ensure SortExpression implements Expression.
-var _ Expression = (*SortExpression)(nil)
+var _ NestedExpression = (*SortExpression)(nil)
 
 func (*SortExpression) Type() string {
 	return "sort"
+}
+
+func (e SortExpression) GetNestedExpression() Expression {
+	return e.Field
 }
 
 func (e *SortExpression) GetIdentifiers() []string {
