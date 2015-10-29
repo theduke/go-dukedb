@@ -190,7 +190,7 @@ func (s *dropCollectionStmt) Cascade() bool {
 	return s.cascade
 }
 
-func (e *DropCollectionStatement) Validate() apperror.Error {
+func (e *dropCollectionStmt) Validate() apperror.Error {
 	if e.Collection == "" {
 		return apperror.New("empty_collection")
 	}
@@ -354,7 +354,7 @@ func (s *dropFieldStmt) IfExists() bool {
 	return s.ifExists
 }
 
-func (s *dropFieldStmt) Cascase() bool {
+func (s *dropFieldStmt) Cascade() bool {
 	return s.cascasde
 }
 
@@ -431,7 +431,7 @@ func (e *createIndexStmt) Validate() apperror.Error {
 	return nil
 }
 
-func CreateIndexStmt(name string, expressions []Expression, unique book, method string) CreateIndexStatement {
+func CreateIndexStmt(name string, expressions []Expression, unique bool, method string) CreateIndexStatement {
 	return &createIndexStmt{
 		name:        name,
 		expressions: expressions,
@@ -467,7 +467,7 @@ func (*dropIndexStmt) Type() string {
 	return "drop_index"
 }
 
-func (s *dropIndexStmt) Name() string {
+func (s *dropIndexStmt) IndexName() string {
 	return s.name
 }
 
@@ -850,46 +850,46 @@ const (
 	JOIN_FULL        = "full"
 	JOIN_OUTER_FULL  = "outer_full"
 	JOIN_CROSS       = "cross"
-
-	JOIN_MAP = map[string]string{
-		"inner":       "INNER JOIN",
-		"left":        "LEFT JOIN",
-		"outer_left":  "LEFT OUTER JOIN",
-		"right":       "RIGHT JOIN",
-		"outer_right": "RIGHT OUTER JOIN",
-		"full":        "FULL JOIN",
-		"outer_full":  "FULL OUTER JOIN",
-		"cross":       "CROSS JOIN",
-	}
 )
+
+var JOIN_MAP map[string]string = map[string]string{
+	"inner":       "INNER JOIN",
+	"left":        "LEFT JOIN",
+	"outer_left":  "LEFT OUTER JOIN",
+	"right":       "RIGHT JOIN",
+	"outer_right": "RIGHT OUTER JOIN",
+	"full":        "FULL JOIN",
+	"outer_full":  "FULL OUTER JOIN",
+	"cross":       "CROSS JOIN",
+}
 
 const (
 	RELATION_TYPE_HAS_ONE    = "has_one"
 	RELATION_TYPE_HAS_MANY   = "has_many"
 	RELATION_TYPE_BELONGS_TO = "belongs_to"
 	RELATION_TYPE_M2M        = "m2m"
-
-	RELATION_TYPE_MAP = map[string]bool{
-		"has_one":    true,
-		"has_many":   true,
-		"belongs_to": true,
-		"m2m":        true,
-	}
 )
+
+var RELATION_TYPE_MAP map[string]bool = map[string]bool{
+	"has_one":    true,
+	"has_many":   true,
+	"belongs_to": true,
+	"m2m":        true,
+}
 
 type JoinStatement interface {
 	SelectStatement
 
 	// The parent select statement.
 	ParentSelect() SelectStatement
-	SetParentSelet(stmt SelectStatement)
+	SetParentSelect(stmt SelectStatement)
 
 	RelationName() string
 	SetRelationName(name string)
 
 	// One of the RELATION_TPYE_* constants.
 	RelationType() string
-	SetRelationType(typ string) string
+	SetRelationType(typ string)
 
 	// One of the JOIN_* constants.
 	JoinType() string
@@ -1029,7 +1029,7 @@ func (e *mutationStmt) Validate() apperror.Error {
 	return nil
 }
 
-func (e mutationStmt) GetCollection() string {
+func (e mutationStmt) Collection() string {
 	return e.collection
 }
 
@@ -1037,7 +1037,7 @@ func (e *mutationStmt) SetCollection(col string) {
 	e.collection = col
 }
 
-func (e mutationStmt) GetValues() []FieldValueExpression {
+func (e mutationStmt) Values() []FieldValueExpression {
 	return e.values
 }
 
@@ -1068,7 +1068,7 @@ type createStmt struct {
 // Ensure CreateStatement implements Expression.
 var _ CreateStatement = (*createStmt)(nil)
 
-func (*CreateStatement) Type() string {
+func (*createStmt) Type() string {
 	return "create"
 }
 
