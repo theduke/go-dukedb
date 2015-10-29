@@ -83,7 +83,7 @@ func (s *createCollectionStmt) Constraints() []Expression {
 }
 
 func (e *createCollectionStmt) Validate() apperror.Error {
-	if e.Collection == "" {
+	if e.collection == "" {
 		return apperror.New("empty_collection")
 	}
 	return nil
@@ -143,8 +143,8 @@ func (e *renameCollectionStmt) Validate() apperror.Error {
 
 func RenameColStmt(collection, newName string) RenameCollectionStatement {
 	return &renameCollectionStmt{
-		collection:    collection,
-		newCollection: newName,
+		collection: collection,
+		newName:    newName,
 	}
 }
 
@@ -191,7 +191,7 @@ func (s *dropCollectionStmt) Cascade() bool {
 }
 
 func (e *dropCollectionStmt) Validate() apperror.Error {
-	if e.Collection == "" {
+	if e.collection == "" {
 		return apperror.New("empty_collection")
 	}
 	return nil
@@ -240,7 +240,7 @@ func (s *createFieldStmt) Field() FieldExpression {
 }
 
 func (e *createFieldStmt) Validate() apperror.Error {
-	if e.Collection == "" {
+	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.Field == nil {
 		return apperror.New("empty_field")
@@ -305,7 +305,7 @@ func (e *renameFieldStmt) Validate() apperror.Error {
 	return nil
 }
 
-func RenameFieldStmt(collection, fied, newName string) RenameFieldStatement {
+func RenameFieldStmt(collection, field, newName string) RenameFieldStatement {
 	return &renameFieldStmt{
 		collection: collection,
 		field:      field,
@@ -332,7 +332,7 @@ type dropFieldStmt struct {
 	collection string
 	field      string
 	ifExists   bool
-	cascasde   bool
+	cascade    bool
 }
 
 // Ensure DropCollectionFieldStatement implements Expression.
@@ -355,13 +355,13 @@ func (s *dropFieldStmt) IfExists() bool {
 }
 
 func (s *dropFieldStmt) Cascade() bool {
-	return s.cascasde
+	return s.cascade
 }
 
 func (e *dropFieldStmt) Validate() apperror.Error {
-	if e.Collection == "" {
+	if e.collection == "" {
 		return apperror.New("empty_collection")
-	} else if e.Field == "" {
+	} else if e.field == "" {
 		return apperror.New("empty_field")
 	}
 	return nil
@@ -749,7 +749,7 @@ func (s *selectStmt) FixNesting() apperror.Error {
 }
 
 func (s *selectStmt) fixNestedJoins() apperror.Error {
-	if len(s.Joins) < 1 {
+	if len(s.joins) < 1 {
 		return nil
 	}
 	return s.fixNestedJoinsRecursive(2, 1)
@@ -806,11 +806,11 @@ func (s *selectStmt) fixNestedFields() {
 	for _, fieldExpr := range s.fields {
 		fieldName := ""
 
-		if field, ok := fieldExpr.(*IdentifierExpression); ok {
-			fieldName = field.Identifier
-		} else if field, ok := fieldExpr.(*CollectionFieldIdentifierExpression); ok {
-			if field.Collection != s.Collection {
-				fieldName = field.Collection + "." + field.Field
+		if field, ok := fieldExpr.(IdentifierExpression); ok {
+			fieldName = field.Identifier()
+		} else if field, ok := fieldExpr.(CollectionFieldIdentifierExpression); ok {
+			if field.Collection() != s.collection {
+				fieldName = field.Collection() + "." + field.Field()
 			}
 		}
 
@@ -841,7 +841,7 @@ func (s *selectStmt) fixNestedFields() {
 			remainingFields = append(remainingFields, fieldExpr)
 		} else {
 			// Found parent join, so add the field to it.
-			join.AddField(ColFieldIdExpr(join.Collection, fieldName))
+			join.AddField(ColFieldIdExpr(join.Collection(), fieldName))
 		}
 	}
 
@@ -918,7 +918,7 @@ type JoinStatement interface {
 type joinStmt struct {
 	selectStmt
 
-	parent *SelectStatement
+	parent SelectStatement
 
 	// One of the RELATION_TYPE_* constants.
 	relationType string
@@ -1058,7 +1058,7 @@ func (e *mutationStmt) SetValues(vals []FieldValueExpression) {
 
 func (s mutationStmt) GetIdentifiers() []string {
 	ids := make([]string, 0)
-	for _, val := range s.Values {
+	for _, val := range s.values {
 		ids = append(ids, val.GetIdentifiers()...)
 	}
 	return ids
