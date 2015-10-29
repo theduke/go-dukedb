@@ -17,7 +17,7 @@ import (
  * ValueExpression
  * IdentifierExpression
  * CollectionFieldIdentifierExpression
- * Constraint
+ * ConstraintExpression
  * ActionConstraint
  * DefaultValueConstraint
  * CheckConstraint
@@ -200,7 +200,7 @@ func (e *namedNestedExpr) Validate() apperror.Error {
 }
 
 func (e *namedNestedExpr) GetIdentifiers() []string {
-	return e.Expression.GetIdentifiers()
+	return e.expression.GetIdentifiers()
 }
 
 // NameExpr attaches a name to another expression.
@@ -282,6 +282,7 @@ func FieldTypeExpr(fieldType string, goType reflect.Type) FieldTypeExpression {
 	e := &fieldTypeExpr{}
 	e.fieldType = fieldType
 	e.valueType = goType
+	return e
 }
 
 /**
@@ -453,30 +454,30 @@ var CONSTRAINT_MAP map[string]string = map[string]string{
 	"auto_increment": "AUTO_INCREMENT",
 }
 
-type Constraint interface {
+type ConstraintExpression interface {
 	Expression
 
 	Constraint() string
 }
 
-type constraint struct {
+type constraintExpr struct {
 	noIdentifiersMixin
 
 	constraint string
 }
 
 // Ensure NotNullConstraint implements ConstraintExpression.
-var _ Constraint = (*constraint)(nil)
+var _ ConstraintExpression = (*constraintExpr)(nil)
 
-func (*constraint) Type() string {
+func (*constraintExpr) Type() string {
 	return "constraint"
 }
 
-func (e *constraint) Constraint() string {
+func (e *constraintExpr) Constraint() string {
 	return e.constraint
 }
 
-func (e *constraint) Validate() apperror.Error {
+func (e *constraintExpr) Validate() apperror.Error {
 	if e.constraint == "" {
 		return apperror.New("empty_constraint")
 	} else if _, ok := CONSTRAINT_MAP[e.constraint]; !ok {
@@ -485,11 +486,11 @@ func (e *constraint) Validate() apperror.Error {
 	return nil
 }
 
-func Constr(constraint string) Constraint {
+func Constr(constraint string) ConstraintExpression {
 	if _, ok := CONSTRAINT_MAP[constraint]; !ok {
 		panic(fmt.Sprintf("Unknown constraint: %v", constraint))
 	}
-	return &constraint{
+	return &constraintExpr{
 		constraint: constraint,
 	}
 }
@@ -499,8 +500,8 @@ func Constr(constraint string) Constraint {
  */
 
 const (
-	ACTION_CONSTRAINT_UPDATE = "update"
-	ACTION_CONSTRAINT_DELETE = "delete"
+	EVENT_UPDATE = "update"
+	EVENT_DELETE = "delete"
 
 	ACTION_CASCADE     = "cascade"
 	ACTION_RESTRICT    = "restrict"
@@ -509,56 +510,55 @@ const (
 )
 
 var ACTIONS_MAP map[string]string = map[string]string{
-	"cascade":     "CASCADE",
-	"restrict":    "RESTRICT",
-	"set_null":    "SET NULL",
-	"set_default": "SET DEFAULT",
+	ACTION_CASCADE:     "CASCADE",
+	ACTION_RESTRICT:    "RESTRICT",
+	ACTION_SET_NULL:    "SET NULL",
+	ACTION_SET_DEFAULT: "SET DEFAULT",
 }
 
 type ActionConstraint interface {
 	Expression
 
-	// May either be ACTION_CONSTRAINT_UPDATE or ACTION_CONSTRAINT_DELETE.
+	Event() string
 	Action() string
-	Constraint() string
 }
 
 type actionConstraint struct {
 	noIdentifiersMixin
 
-	action     string
-	constraint string
+	event  string
+	action string
 }
 
 func (*actionConstraint) Type() string {
 	return "action_constraint"
 }
 
+func (e *actionConstraint) Event() string {
+	return e.event
+}
+
 func (e *actionConstraint) Action() string {
 	return e.action
 }
 
-func (e *actionConstraint) Constraint() string {
-	return e.constraint
-}
-
 func (e *actionConstraint) Validate() apperror.Error {
-	if e.action == "" {
+	if e.event == "" {
+		return apperror.New("empty_event")
+	} else if !(e.event == EVENT_UPDATE || e.event == EVENT_DELETE) {
+		return apperror.New("unknown_event", "Event must either be dukedb.EVENT_UPDATE or dukedb.EVENT_DELETE")
+	} else if e.action == "" {
 		return apperror.New("empty_action")
-	} else if !(e.action == ACTION_CONSTRAINT_UPDATE || e.action == ACTION_CONSTRAINT_DELETE) {
-		return apperror.New("unknown_action", "Action must either be dukedb.ACTION_CONSTRAINT_UPDATE or dukedb.ACTION_CONSTRAINT_DELETE")
-	} else if e.constraint == "" {
-		return apperror.New("empty_constraint")
-	} else if _, ok := ACTIONS_MAP[e.constraint]; !ok {
+	} else if _, ok := ACTIONS_MAP[e.action]; !ok {
 		return apperror.New("unknown_action", fmt.Sprintf("Unknown action %v", e.action))
 	}
 	return nil
 }
 
-func ActionConstr(action, constraint string) ActionConstraint {
+func ActionConstr(event, action string) ActionConstraint {
 	return &actionConstraint{
-		action:     action,
-		constraint: constraint,
+		event:  event,
+		action: action,
 	}
 }
 
@@ -627,7 +627,7 @@ func (e *checkConstraint) Validate() apperror.Error {
 }
 
 func (e *checkConstraint) GetIdentifiers() []string {
-	return e.check
+	return e.check.GetIdentifiers()
 }
 
 func CheckConstr(check Expression) CheckConstraint {
@@ -727,7 +727,7 @@ func (e *fieldExpr) Validate() apperror.Error {
 	return nil
 }
 
-func FieldExpr(name string, fieldType string, constraints ...Expression) FieldTypeExpression {
+func FieldExpr(name string, fieldType FieldTypeExpression, constraints ...Expression) FieldExpression {
 	return &fieldExpr{
 		name:        name,
 		fieldType:   fieldType,
@@ -791,7 +791,10 @@ func (e fieldValueExpr) GetIdentifiers() []string {
 }
 
 func FieldValExpr(field, value Expression) FieldValueExpression {
-	return &fieldValue
+	return &fieldValueExpr{
+		field: field,
+		value: value,
+	}
 }
 
 /**
@@ -821,9 +824,9 @@ func (e *functionExpr) Function() string {
 }
 
 func (e *functionExpr) Validate() apperror.Error {
-	if e.Function == "" {
+	if e.function == "" {
 		return apperror.New("empty_function")
-	} else if e.Nested == nil {
+	} else if e.expression == nil {
 		return apperror.New("empty_function_expression")
 	}
 
@@ -862,7 +865,7 @@ func (a *AndExpression) Type() string {
 }
 
 func (e *AndExpression) Validate() apperror.Error {
-	if len(e.Expressions) < 1 {
+	if len(e.expressions) < 1 {
 		return apperror.New("no_and_expressions")
 	}
 	return nil
@@ -1034,8 +1037,8 @@ func (e *filter) Validate() apperror.Error {
 }
 
 func (f filter) GetIdentifiers() []string {
-	ids := f.Field.GetIdentifiers()
-	ids = append(ids, f.Clause.GetIdentifiers()...)
+	ids := f.field.GetIdentifiers()
+	ids = append(ids, f.clause.GetIdentifiers()...)
 	return ids
 }
 
@@ -1049,7 +1052,7 @@ func FilterExpr(field Expression, operator string, clause Expression) FilterExpr
 }
 
 func FieldFilter(collection, field, operator string, clause Expression) FilterExpression {
-	var fieldExpr interface{}
+	var fieldExpr Expression
 	if collection != "" {
 		fieldExpr = ColFieldIdExpr(collection, field)
 	} else {
@@ -1058,11 +1061,11 @@ func FieldFilter(collection, field, operator string, clause Expression) FilterEx
 	return &filter{
 		field:    fieldExpr,
 		operator: operator,
-		clause:   filter,
+		clause:   clause,
 	}
 }
 
-func FieldValFilter(collection, field, operator, value interface{}) FilterExpression {
+func FieldValFilter(collection, field, operator string, value interface{}) FilterExpression {
 	return FieldFilter(collection, field, operator, ValueExpr(value))
 }
 
@@ -1156,17 +1159,18 @@ func (s *sortExpr) Ascending() bool {
 }
 
 func (e *sortExpr) Validate() apperror.Error {
-	if e.field == nil {
-		return apperror.New("empty_field")
+	if e.expression == nil {
+		return apperror.New("empty_field_expression")
 	}
 	return nil
 }
 
 func SortExpr(expr Expression, ascending bool) SortExpression {
-	return &sortExpr{
-		expression: expr,
-		ascending:  ascending,
+	e := &sortExpr{
+		ascending: ascending,
 	}
+	e.expression = expr
+	return e
 }
 
 func Sort(collection, field string, ascending bool) SortExpression {
