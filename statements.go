@@ -535,8 +535,6 @@ type SelectStatement interface {
 	SetJoins(joins []JoinStatement)
 	GetJoin(name string) JoinStatement
 	AddJoin(join JoinStatement)
-
-	FixNesting() apperror.Error
 }
 
 // SelectStatement represents a database select.
@@ -738,114 +736,6 @@ func (s selectStmt) GetIdentifiers() []string {
 		ids = append(ids, join.GetIdentifiers()...)
 	}
 	return ids
-}
-
-func (s *selectStmt) FixNesting() apperror.Error {
-	if err := s.fixNestedJoins(); err != nil {
-		return err
-	}
-	s.fixNestedFields()
-	return nil
-}
-
-func (s *selectStmt) fixNestedJoins() apperror.Error {
-	if len(s.joins) < 1 {
-		return nil
-	}
-	return s.fixNestedJoinsRecursive(2, 1)
-}
-
-func (s *selectStmt) fixNestedJoinsRecursive(lvl, maxLvl int) apperror.Error {
-	remainingJoins := make([]JoinStatement, 0)
-
-	for _, join := range s.joins {
-		if join.RelationName() == "" {
-			// No RelationName set, so ignore this custom join.
-			remainingJoins = append(remainingJoins, join)
-			continue
-		}
-
-		parts := strings.Split(join.RelationName(), ".")
-		joinLvl := len(parts)
-		if joinLvl > maxLvl {
-			maxLvl = joinLvl
-		}
-
-		if joinLvl != lvl {
-			// Join is not on the level currently processed, so skip.
-			remainingJoins = append(remainingJoins, join)
-			continue
-		}
-
-		parentJoin := s.GetJoin(strings.Join(parts[0:joinLvl-2], "."))
-		if parentJoin == nil {
-			return &apperror.Err{
-				Public:  true,
-				Code:    "invalid_join",
-				Message: fmt.Sprintf("Invalid nested join '%v': parent join %v not found", join.RelationName, parts[0]),
-			}
-		}
-		parentJoin.AddJoin(join)
-	}
-
-	s.joins = remainingJoins
-
-	if lvl < maxLvl {
-		return s.fixNestedJoinsRecursive(lvl+1, maxLvl)
-	}
-	return nil
-}
-
-func (s *selectStmt) fixNestedFields() {
-	if len(s.fields) < 1 {
-		return
-	}
-
-	remainingFields := make([]Expression, 0)
-
-	for _, fieldExpr := range s.fields {
-		fieldName := ""
-
-		if field, ok := fieldExpr.(IdentifierExpression); ok {
-			fieldName = field.Identifier()
-		} else if field, ok := fieldExpr.(CollectionFieldIdentifierExpression); ok {
-			if field.Collection() != s.collection {
-				fieldName = field.Collection() + "." + field.Field()
-			}
-		}
-
-		if fieldName == "" {
-			remainingFields = append(remainingFields, fieldExpr)
-			continue
-		}
-
-		parts := strings.Split(fieldName, ".")
-		if len(parts) < 2 {
-			remainingFields = append(remainingFields, fieldExpr)
-			continue
-		}
-
-		// Nested field, so try to find parent join.
-		joinName := strings.Join(parts[0:len(parts)-2], ".")
-		join := s.GetJoin(joinName)
-		if join == nil {
-			/*
-				return &apperror.Error{
-					Public: true,
-					Code: "invalid_nested_field",
-					Message: fmt.Printf("Invalid nested field '%v': the parent join %v does not exist", field.Identifier, joinName),
-				}
-			*/
-
-			// Maybe the backend supports nested fields, so leave the field untouched.
-			remainingFields = append(remainingFields, fieldExpr)
-		} else {
-			// Found parent join, so add the field to it.
-			join.AddField(ColFieldIdExpr(join.Collection(), fieldName))
-		}
-	}
-
-	s.fields = remainingFields
 }
 
 /**
