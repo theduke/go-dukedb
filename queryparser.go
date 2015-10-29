@@ -278,19 +278,21 @@ func parseQueryFilters(q *Query, filters map[string]interface{}) apperror.Error 
 	return nil
 }
 
-func setExpressionIdentifier(expr Expression, identifier string) {
+func setExpressionIdentifier(expr interface{}, forCollection, identifier string) {
 	if multi, ok := expr.(MultiExpression); ok {
-		for _, expr := range multi.GetExpressions() {
-			setExpressionIdentifier(expr, identifier)
+		for _, expr := range multi.Expressions() {
+			setExpressionIdentifier(expr, forCollection, identifier)
 		}
 	} else if nested, ok := expr.(NestedExpression); ok {
-		setExpressionIdentifier(nested.GetExpression(), identifier)
+		setExpressionIdentifier(nested.Expression(), forCollection, identifier)
 	} else if filter, ok := expr.(FilterExpression); ok {
-		setExpressionIdentifier(filter.GetField(), identifier)
-	} else if id, ok := expr.(*IdentifierExpression); ok {
-		id.Identifier = identifier
-	} else if id, ok := expr.(*CollectionFieldIdentifierExpression); ok {
-		id.Field = identifier
+		setExpressionIdentifier(filter.Field(), forCollection, identifier)
+	} else if id, ok := expr.(IdentifierExpression); ok {
+		id.SetIdentifier(identifier)
+	} else if id, ok := expr.(CollectionFieldIdentifierExpression); ok {
+		if id.Collection() == forCollection {
+			id.SetField(identifier)
+		}
 	}
 }
 
@@ -301,23 +303,23 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 	// Handle
 	switch name {
 	case "$eq":
-		return Eq("placeholder", data), nil
+		return Eq("", "placeholder", data), nil
 	case "$ne":
-		return Neq("placeholder", data), nil
+		return Neq("", "placeholder", data), nil
 	case "$in":
-		return In("placeholder", data), nil
+		return In("", "placeholder", data), nil
 	case "$like":
-		return Like("placeholder", data), nil
+		return Like("", "placeholder", data), nil
 	case "$gt":
-		return Gt("placeholder", data), nil
+		return Gt("", "placeholder", data), nil
 	case "$gte":
-		return Gte("placeholder", data), nil
+		return Gte("", "placeholder", data), nil
 	case "$lt":
-		return Lt("placeholder", data), nil
+		return Lt("", "placeholder", data), nil
 	case "$lte":
-		return Lte("placeholder", data), nil
+		return Lte("", "placeholder", data), nil
 	case "$nin":
-		return Not(In("placeholder", data)), nil
+		return NotExpr(In("", "placeholder", data)), nil
 	}
 
 	if name == "$nor" {
@@ -334,7 +336,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 			return nil, &apperror.Err{Code: "invalid_or_data"}
 		}
 
-		or := Or()
+		or := OrExpr()
 		for _, rawClause := range orClauses {
 			clause, ok := rawClause.(map[string]interface{})
 			if !ok {
@@ -355,7 +357,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 		// Nested dict with multipe AND clauses.
 
 		// Build an AND filter.
-		and := And()
+		and := AndExpr()
 		for key := range nestedData {
 			filter, err := parseQueryFilter(key, nestedData[key], query)
 			if err != nil {
@@ -381,7 +383,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 					if joinQ != nil {
 						// Join query found, add filter to the join query.
 						fieldName := parts[len(parts)-1]
-						setExpressionIdentifier(filter, fieldName)
+						setExpressionIdentifier(filter, joinQ.GetCollection(), fieldName)
 						joinQ.FilterExpr(filter)
 						// Set flag to prevent adding to regular query.
 						doAdd = false
@@ -389,7 +391,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 				}
 
 				if doAdd {
-					setExpressionIdentifier(filter, field)
+					setExpressionIdentifier(filter, "", field)
 				}
 			}
 
@@ -398,8 +400,8 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 			}
 		}
 
-		if len(and.Expressions) == 1 {
-			return and.Expressions[0], nil
+		if len(and.Expressions()) == 1 {
+			return and.Expressions()[0], nil
 		} else {
 			return and, nil
 		}
@@ -407,5 +409,5 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 
 	// If execution reaches this point, the filter must be a simple equals filter
 	// with a value.
-	return Eq(name, data), nil
+	return Eq("", name, data), nil
 }
