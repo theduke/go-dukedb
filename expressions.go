@@ -72,6 +72,7 @@ func (*noIdentifiersMixin) GetIdentifiers() []string {
 type NamedExpression interface {
 	Expression
 	Name() string
+	SetName(name string)
 }
 
 type namedExprMixin struct {
@@ -80,6 +81,10 @@ type namedExprMixin struct {
 
 func (e *namedExprMixin) Name() string {
 	return e.name
+}
+
+func (e *namedExprMixin) SetName(name string) {
+	e.name = name
 }
 
 /**
@@ -910,6 +915,7 @@ func OrExpr(exprs ...Expression) *OrExpression {
  */
 
 type NotExpression interface {
+	Expression
 	Not() Expression
 }
 
@@ -933,6 +939,10 @@ func (e *notExpr) Validate() apperror.Error {
 		return apperror.New("no_not_expression")
 	}
 	return nil
+}
+
+func (e *notExpr) GetIdentifiers() []string {
+	return e.not.GetIdentifiers()
 }
 
 func NotExpr(expr ...Expression) NotExpression {
@@ -1073,64 +1083,64 @@ func FieldValFilter(collection, field, operator string, value interface{}) Filte
  * Eq.
  */
 
-func Eq(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_EQ, val)
+func Eq(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_EQ, val)
 }
 
 /**
  * Neq.
  */
 
-func Neq(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_NEQ, val)
+func Neq(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_NEQ, val)
 }
 
 /**
  * Like.
  */
 
-func Like(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_LIKE, val)
+func Like(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_LIKE, val)
 }
 
 /**
  * In.
  */
 
-func In(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_IN, val)
+func In(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_IN, val)
 }
 
 /**
  * Less than Lt.
  */
 
-func Lt(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_LT, val)
+func Lt(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_LT, val)
 }
 
 /**
  * Less than eqal Lte.
  */
 
-func Lte(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_LTE, val)
+func Lte(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_LTE, val)
 }
 
 /**
  * Greater than gt.
  */
 
-func Gt(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_GT, val)
+func Gt(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_GT, val)
 }
 
 /**
  * Greater than equal gte.
  */
 
-func Gte(field string, val interface{}) FilterExpression {
-	return FieldValFilter("", field, OPERATOR_GTE, val)
+func Gte(collection, field string, val interface{}) FilterExpression {
+	return FieldValFilter(collection, field, OPERATOR_GTE, val)
 }
 
 /**
