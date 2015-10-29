@@ -465,13 +465,15 @@ const (
 	CONSTRAINT_UNIQUE         = "unique"
 	CONSTRAINT_PRIMARY_KEY    = "pk"
 	CONSTRAINT_AUTO_INCREMENT = "auto_increment"
+	CONSTRAINT_INDEX          = "index"
 )
 
 var CONSTRAINT_MAP map[string]string = map[string]string{
-	"not_null":       "NOT NULL",
-	"unique":         "UNIQUE",
-	"pk":             "PRIMARY KEY",
-	"auto_increment": "AUTO_INCREMENT",
+	CONSTRAINT_NOT_NULL:       "NOT NULL",
+	CONSTRAINT_UNIQUE:         "UNIQUE",
+	CONSTRAINT_PRIMARY_KEY:    "PRIMARY KEY",
+	CONSTRAINT_AUTO_INCREMENT: "AUTO_INCREMENT",
+	CONSTRAINT_INDEX:          "",
 }
 
 type ConstraintExpression interface {
@@ -588,14 +590,14 @@ func ActionConstr(event, action string) ActionConstraint {
 
 type DefaultValueConstraint interface {
 	Expression
-	DefaultValue() ValueExpression
+	DefaultValue() Expression
 }
 
 type defaultValueConstraint struct {
 	noIdentifiersMixin
 	noValidatationMixin
 
-	defaultValue ValueExpression
+	defaultValue Expression
 }
 
 // Ensure DefaultValueConstraint implements ConstraintExpression.
@@ -605,13 +607,13 @@ func (*defaultValueConstraint) Type() string {
 	return "default_value_constraint"
 }
 
-func (c *defaultValueConstraint) DefaultValue() ValueExpression {
+func (c *defaultValueConstraint) DefaultValue() Expression {
 	return c.defaultValue
 }
 
-func DefaultValConstr(val interface{}) DefaultValueConstraint {
+func DefaultValConstr(expr Expression) DefaultValueConstraint {
 	return &defaultValueConstraint{
-		defaultValue: ValueExpr(val),
+		defaultValue: expr,
 	}
 }
 
@@ -690,9 +692,45 @@ func (e *referenceConstraint) Validate() apperror.Error {
 	return nil
 }
 
-func ReferenceConstr(foreignKey CollectionFieldIdentifierExpression) ReferenceConstraint {
+func ReferenceConstr(collection, field string) ReferenceConstraint {
 	return &referenceConstraint{
-		foreignKey: foreignKey,
+		foreignKey: ColFieldIdExpr(collection, field),
+	}
+}
+
+/**
+ * UniqueFieldsConstraint.
+ */
+
+type UniqueFieldsConstraint interface {
+	Expression
+	UniqueFields() []Expression
+}
+
+type uniqueFieldsConstr struct {
+	noIdentifiersMixin
+
+	fields []Expression
+}
+
+func (*uniqueFieldsConstr) Type() string {
+	return "unique_fields"
+}
+
+func (c *uniqueFieldsConstr) UniqueFields() []Expression {
+	return c.fields
+}
+
+func (c *uniqueFieldsConstr) Validate() apperror.Error {
+	if len(c.fields) < 1 {
+		return apperror.New("no_unique_fields")
+	}
+	return nil
+}
+
+func UniqueFieldsConstr(fields ...Expression) UniqueFieldsConstraint {
+	return &uniqueFieldsConstr{
+		fields: fields,
 	}
 }
 
@@ -1165,6 +1203,7 @@ func Gte(collection, field string, val interface{}) FilterExpression {
 type SortExpression interface {
 	NestedExpression
 	Ascending() bool
+	SetAscending(asc bool)
 }
 
 type sortExpr struct {
@@ -1181,6 +1220,10 @@ func (*sortExpr) Type() string {
 
 func (s *sortExpr) Ascending() bool {
 	return s.ascending
+}
+
+func (s *sortExpr) SetAscending(asc bool) {
+	s.ascending = asc
 }
 
 func (e *sortExpr) Validate() apperror.Error {

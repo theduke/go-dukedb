@@ -1505,11 +1505,7 @@ func NormalizeExpression(expression Expression, info *ModelInfo, allInfo ModelIn
 
 		// First, normalize the collection name, if set.
 		if expr.Collection() != "" {
-			backendName := ""
-			for _, info := range allInfo {
-				backendName = allInfo.FindBackendName(expr.Collection())
-			}
-
+			backendName := allInfo.FindBackendName(expr.Collection())
 			if backendName == "" {
 				return apperror.New("unknown_collection", fmt.Sprintf("The collection %v does not exist", expr.Collection), true)
 			}

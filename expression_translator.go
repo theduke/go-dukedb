@@ -120,20 +120,18 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 	case ActionConstraint:
 		t.W("ON ", strings.ToUpper(e.Event()), " ", ACTIONS_MAP[e.Action()])
 
-	/*
-		case UniqueFieldsConstraint:
-			t.W("UNIQUE(")
-			lastIndex := len(e.Fields()) - 1
-			for i, field := range e.Fields {
-				if err := t.Translate(field); err != nil {
-					return err
-				}
-				if i < lastIndex {
-					t.W(", ")
-				}
+	case UniqueFieldsConstraint:
+		t.W("UNIQUE(")
+		lastIndex := len(e.UniqueFields()) - 1
+		for i, field := range e.UniqueFields() {
+			if err := t.Translate(field); err != nil {
+				return err
 			}
-			t.W(")")
-	*/
+			if i < lastIndex {
+				t.W(", ")
+			}
+		}
+		t.W(")")
 
 	case DefaultValueConstraint:
 		t.W("DEFAULT ")
@@ -195,7 +193,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 
 	case *AndExpression:
 		lastIndex := len(e.Expressions()) - 1
-		if lastIndex > 1 {
+		if lastIndex > 0 {
 			t.W("(")
 		}
 		for i, expr := range e.Expressions() {
@@ -206,7 +204,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 				t.W(" AND ")
 			}
 		}
-		if lastIndex > 1 {
+		if lastIndex > 0 {
 			t.W(")")
 		}
 
@@ -214,7 +212,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		lastIndex := len(e.Expressions()) - 1
 
 		// Wrap in parantheses if more than one filter.
-		if lastIndex > 1 {
+		if lastIndex > 0 {
 			t.W("(")
 		}
 		for i, expr := range e.Expressions() {
@@ -225,7 +223,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 				t.W(" OR ")
 			}
 		}
-		if lastIndex > 1 {
+		if lastIndex > 0 {
 			t.W(")")
 		}
 
@@ -293,6 +291,20 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		t.W(" RENAME TO ")
 		t.WQ(e.NewName())
 
+	// Warning: this NEEDS to appear before DropCollectionStatement,
+	// since otherwise the interfaces get mixed up.
+	case DropFieldStatement:
+		t.W("ALTER TABLE ")
+		t.WQ(e.Collection())
+		t.W(" DROP COLUMN ")
+		if e.IfExists() {
+			t.W("IF EXISTS ")
+		}
+		t.WQ(e.Field())
+		if e.Cascade() {
+			t.W(" CASCADE")
+		}
+
 	case DropCollectionStatement:
 		t.W("DROP TABLE ")
 		if e.IfExists() {
@@ -319,18 +331,6 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		t.W(" TO ")
 		t.WQ(e.NewName())
 
-	case DropFieldStatement:
-		t.W("ALTER TABLE ")
-		t.WQ(e.Collection())
-		t.W(" DROP COLUMN ")
-		if e.IfExists() {
-			t.W("IF EXISTS ")
-		}
-		t.WQ(e.Field())
-		if e.Cascade() {
-			t.W(" CASCADE")
-		}
-
 	case CreateIndexStatement:
 		t.W("CREATE ")
 		if e.Unique() {
@@ -343,7 +343,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 		if e.Method() != "" {
-			t.W("USING ", e.Method(), " ")
+			t.W(" USING ", e.Method(), " ")
 		}
 
 		t.W("(")
@@ -384,6 +384,10 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			if err := t.Translate(expr); err != nil {
 				return err
 			}
+			if named, ok := expr.(NamedExpression); ok {
+				t.W(" AS ")
+				t.WQ(named.Name())
+			}
 			if i < lastIndex {
 				t.W(", ")
 			}
@@ -399,6 +403,10 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			for i, field := range join.Fields() {
 				if err := t.Translate(field); err != nil {
 					return err
+				}
+				if named, ok := field.(NamedExpression); ok {
+					t.W(" AS ")
+					t.WQ(named.Name())
 				}
 				if i < lastIndex {
 					t.W(", ")

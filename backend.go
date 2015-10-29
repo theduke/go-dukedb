@@ -706,11 +706,11 @@ func BackendQueryOne(b Backend, q *Query, targetModels []interface{}) (interface
 }
 
 func BackendLast(b Backend, q *Query, targetModels []interface{}) (interface{}, apperror.Error) {
-	sorts := q.GetStatement().Sorts
+	sorts := q.GetStatement().Sorts()
 	orderLen := len(sorts)
 	if orderLen > 0 {
 		for i := 0; i < orderLen; i++ {
-			sorts[i].Ascending = !sorts[i].Ascending
+			sorts[i].SetAscending(!sorts[i].Ascending())
 		}
 	} else {
 		info := b.ModelInfo(q.GetCollection())
