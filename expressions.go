@@ -344,6 +344,7 @@ type IdentifierExpression interface {
 	Expression
 
 	Identifier() string
+	SetIdentifier(id string)
 }
 
 type identifierExpr struct {
@@ -359,6 +360,10 @@ func (*identifierExpr) Type() string {
 
 func (s *identifierExpr) Identifier() string {
 	return s.identifier
+}
+
+func (s *identifierExpr) SetIdentifier(id string) {
+	s.identifier = id
 }
 
 func (e *identifierExpr) Validate() apperror.Error {
@@ -387,7 +392,9 @@ type CollectionFieldIdentifierExpression interface {
 	Expression
 
 	Collection() string
+	SetCollection(collection string)
 	Field() string
+	SetField(field string)
 }
 
 type colFieldIdentifierExpr struct {
@@ -406,8 +413,16 @@ func (s *colFieldIdentifierExpr) Collection() string {
 	return s.collection
 }
 
+func (s *colFieldIdentifierExpr) SetCollection(collection string) {
+	s.collection = collection
+}
+
 func (s *colFieldIdentifierExpr) Field() string {
 	return s.field
+}
+
+func (s *colFieldIdentifierExpr) SetField(field string) {
+	s.field = field
 }
 
 func (e *colFieldIdentifierExpr) Validate() apperror.Error {
