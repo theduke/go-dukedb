@@ -50,7 +50,7 @@ type Expression interface {
 // validations.
 type noValidatationMixin struct{}
 
-func (*noValidatationExpr) Validate() apperror.Error {
+func (*noValidatationMixin) Validate() apperror.Error {
 	return nil
 }
 
@@ -173,8 +173,9 @@ func (m multiExprMixin) GetIdentifiers() []string {
  */
 
 type NamedNestedExpression interface {
-	NamedExpression
-	NestedExpression
+	Expression
+	Name() string
+	Expression() Expression
 }
 
 type namedNestedExpr struct {
@@ -260,10 +261,14 @@ type fieldTypeExpr struct {
 }
 
 // Ensure FieldTypeExpression implements FieldTypeExpression.
-var _ FieldTypeExpression = (*FieldTypeExpression)(nil)
+var _ FieldTypeExpression = (*fieldTypeExpr)(nil)
 
 func (*fieldTypeExpr) Type() string {
 	return "field_type"
+}
+
+func (e *fieldTypeExpr) FieldType() string {
+	return e.fieldType
 }
 
 func (e *fieldTypeExpr) Validate() apperror.Error {
@@ -346,6 +351,10 @@ func (*identifierExpr) Type() string {
 	return "identifier"
 }
 
+func (s *identifierExpr) Identifier() string {
+	return s.identifier
+}
+
 func (e *identifierExpr) Validate() apperror.Error {
 	if e.identifier == "" {
 		return apperror.New("empty_identifier")
@@ -385,6 +394,14 @@ var _ CollectionFieldIdentifierExpression = (*colFieldIdentifierExpr)(nil)
 
 func (*colFieldIdentifierExpr) Type() string {
 	return "collection_field_identifier"
+}
+
+func (s *colFieldIdentifierExpr) Collection() string {
+	return s.collection
+}
+
+func (s *colFieldIdentifierExpr) Field() string {
+	return s.field
 }
 
 func (e *colFieldIdentifierExpr) Validate() apperror.Error {
@@ -427,14 +444,14 @@ const (
 	CONSTRAINT_UNIQUE         = "unique"
 	CONSTRAINT_PRIMARY_KEY    = "pk"
 	CONSTRAINT_AUTO_INCREMENT = "auto_increment"
-
-	CONSTRAINT_MAP = map[string]string{
-		"not_null":       "NOT NULL",
-		"unique":         "UNIQUE",
-		"pk":             "PRIMARY KEY",
-		"auto_increment": "AUTO_INCREMENT",
-	}
 )
+
+var CONSTRAINT_MAP map[string]string = map[string]string{
+	"not_null":       "NOT NULL",
+	"unique":         "UNIQUE",
+	"pk":             "PRIMARY KEY",
+	"auto_increment": "AUTO_INCREMENT",
+}
 
 type Constraint interface {
 	Expression
@@ -489,14 +506,14 @@ const (
 	ACTION_RESTRICT    = "restrict"
 	ACTION_SET_NULL    = "set_null"
 	ACTION_SET_DEFAULT = "set_default"
-
-	ACTIONS_MAP = map[string]string{
-		"cascade":     "CASCADE",
-		"restrict":    "RESTRICT",
-		"set_null":    "SET NULL",
-		"set_default": "SET DEFAULT",
-	}
 )
+
+var ACTIONS_MAP map[string]string = map[string]string{
+	"cascade":     "CASCADE",
+	"restrict":    "RESTRICT",
+	"set_null":    "SET NULL",
+	"set_default": "SET DEFAULT",
+}
 
 type ActionConstraint interface {
 	Expression
@@ -568,6 +585,10 @@ func (*defaultValueConstraint) Type() string {
 	return "default_value_constraint"
 }
 
+func (c *defaultValueConstraint) DefaultValue() ValueExpression {
+	return c.defaultValue
+}
+
 func DefaultValConstr(val interface{}) DefaultValueConstraint {
 	return &defaultValueConstraint{
 		defaultValue: ValueExpr(val),
@@ -590,7 +611,7 @@ type checkConstraint struct {
 // Make sure CheckConstraint implements Constraint.
 var _ CheckConstraint = (*checkConstraint)(nil)
 
-func (*CheckConstraint) Type() string {
+func (*checkConstraint) Type() string {
 	return "check_constraint"
 }
 
@@ -603,6 +624,10 @@ func (e *checkConstraint) Validate() apperror.Error {
 		return apperror.New("no_check_expression")
 	}
 	return nil
+}
+
+func (e *checkConstraint) GetIdentifiers() []string {
+	return e.check
 }
 
 func CheckConstr(check Expression) CheckConstraint {
@@ -638,7 +663,7 @@ func (e *referenceConstraint) ForeignKey() CollectionFieldIdentifierExpression {
 	return e.foreignKey
 }
 
-func (e *ReferenceConstraint) Validate() apperror.Error {
+func (e *referenceConstraint) Validate() apperror.Error {
 	if e.foreignKey == nil {
 		return apperror.New("no_foreign_key")
 	}
@@ -930,18 +955,18 @@ const (
 	OPERATOR_GTE  = ">="
 	OPERATOR_LT   = "<"
 	OPERATOR_LTE  = "<="
-
-	OPERATOR_MAP = map[string]string{
-		OPERATOR_EQ:   "eq",
-		OPERATOR_NEQ:  "neq",
-		OPERATOR_LIKE: "like",
-		OPERATOR_IN:   "in",
-		OPERATOR_GT:   "gt",
-		OPERATOR_GTE:  "gte",
-		OPERATOR_LT:   "lt",
-		OPERATOR_LTE:  "lte",
-	}
 )
+
+var OPERATOR_MAP map[string]string = map[string]string{
+	OPERATOR_EQ:   "eq",
+	OPERATOR_NEQ:  "neq",
+	OPERATOR_LIKE: "like",
+	OPERATOR_IN:   "in",
+	OPERATOR_GT:   "gt",
+	OPERATOR_GTE:  "gte",
+	OPERATOR_LT:   "lt",
+	OPERATOR_LTE:  "lte",
+}
 
 func MapOperator(op string) string {
 	switch strings.ToLower(op) {
@@ -983,15 +1008,15 @@ func (*filter) Type() string {
 	return "filter"
 }
 
-func (f Filter) Field() Expression {
+func (f filter) Field() Expression {
 	return f.field
 }
 
-func (f Filter) Operator() string {
+func (f filter) Operator() string {
 	return f.operator
 }
 
-func (f Filter) GetClause() Expression {
+func (f filter) Clause() Expression {
 	return f.clause
 }
 
@@ -1008,7 +1033,7 @@ func (e *filter) Validate() apperror.Error {
 	return nil
 }
 
-func (f Filter) GetIdentifiers() []string {
+func (f filter) GetIdentifiers() []string {
 	ids := f.Field.GetIdentifiers()
 	ids = append(ids, f.Clause.GetIdentifiers()...)
 	return ids
@@ -1045,7 +1070,7 @@ func FieldValFilter(collection, field, operator, value interface{}) FilterExpres
  * Eq.
  */
 
-func Eq(field string, val interface{}) *FieldValueFilter {
+func Eq(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_EQ, val)
 }
 
@@ -1053,7 +1078,7 @@ func Eq(field string, val interface{}) *FieldValueFilter {
  * Neq.
  */
 
-func Neq(field string, val interface{}) *FieldValueFilter {
+func Neq(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_NEQ, val)
 }
 
@@ -1061,7 +1086,7 @@ func Neq(field string, val interface{}) *FieldValueFilter {
  * Like.
  */
 
-func Like(field string, val interface{}) *FieldValueFilter {
+func Like(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_LIKE, val)
 }
 
@@ -1069,7 +1094,7 @@ func Like(field string, val interface{}) *FieldValueFilter {
  * In.
  */
 
-func In(field string, val interface{}) *FieldValueFilter {
+func In(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_IN, val)
 }
 
@@ -1077,7 +1102,7 @@ func In(field string, val interface{}) *FieldValueFilter {
  * Less than Lt.
  */
 
-func Lt(field string, val interface{}) *FieldValueFilter {
+func Lt(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_LT, val)
 }
 
@@ -1085,7 +1110,7 @@ func Lt(field string, val interface{}) *FieldValueFilter {
  * Less than eqal Lte.
  */
 
-func Lte(field string, val interface{}) *FieldValueFilter {
+func Lte(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_LTE, val)
 }
 
@@ -1093,7 +1118,7 @@ func Lte(field string, val interface{}) *FieldValueFilter {
  * Greater than gt.
  */
 
-func Gt(field string, val interface{}) *FieldValueFilter {
+func Gt(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_GT, val)
 }
 
@@ -1101,7 +1126,7 @@ func Gt(field string, val interface{}) *FieldValueFilter {
  * Greater than equal gte.
  */
 
-func Gte(field string, val interface{}) *FieldValueFilter {
+func Gte(field string, val interface{}) FilterExpression {
 	return FieldValFilter("", field, OPERATOR_GTE, val)
 }
 
@@ -1124,6 +1149,10 @@ var _ SortExpression = (*sortExpr)(nil)
 
 func (*sortExpr) Type() string {
 	return "sort"
+}
+
+func (s *sortExpr) Ascending() bool {
+	return s.ascending
 }
 
 func (e *sortExpr) Validate() apperror.Error {
