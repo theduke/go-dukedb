@@ -384,6 +384,8 @@ type CreateIndexStatement interface {
 	Expression
 
 	IndexName() string
+	IndexExpression() Expression
+
 	Expressions() []Expression
 	Unique() bool
 	Method() string
@@ -392,9 +394,10 @@ type CreateIndexStatement interface {
 type createIndexStmt struct {
 	noIdentifiersMixin
 
-	name        string
-	expressions []Expression
-	unique      bool
+	name            string
+	indexExpression Expression
+	expressions     []Expression
+	unique          bool
 	// Indexing method.
 	method string
 }
@@ -408,6 +411,10 @@ func (*createIndexStmt) Type() string {
 
 func (s *createIndexStmt) IndexName() string {
 	return s.name
+}
+
+func (s *createIndexStmt) IndexExpression() Expression {
+	return s.indexExpression
 }
 
 func (s *createIndexStmt) Expressions() []Expression {
@@ -431,12 +438,13 @@ func (e *createIndexStmt) Validate() apperror.Error {
 	return nil
 }
 
-func CreateIndexStmt(name string, expressions []Expression, unique bool, method string) CreateIndexStatement {
+func CreateIndexStmt(name string, indexExpr Expression, expressions []Expression, unique bool, method string) CreateIndexStatement {
 	return &createIndexStmt{
-		name:        name,
-		expressions: expressions,
-		unique:      unique,
-		method:      method,
+		name:            name,
+		indexExpression: indexExpr,
+		expressions:     expressions,
+		unique:          unique,
+		method:          method,
 	}
 }
 
@@ -666,11 +674,14 @@ func (s *selectStmt) Joins() []JoinStatement {
 }
 
 func (s *selectStmt) SetJoins(joins []JoinStatement) {
+	for _, join := range joins {
+		join.SetParentSelect(s)
+	}
 	s.joins = joins
 }
 
 func (s *selectStmt) AddJoin(join JoinStatement) {
-	join.base = s
+	join.SetParentSelect(s)
 	s.joins = append(s.joins, join)
 }
 
