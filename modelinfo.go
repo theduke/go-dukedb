@@ -9,10 +9,28 @@ import (
 	"github.com/theduke/go-apperror"
 )
 
+const (
+	RELATION_TYPE_HAS_ONE    = "has_one"
+	RELATION_TYPE_HAS_MANY   = "has_many"
+	RELATION_TYPE_BELONGS_TO = "belongs_to"
+	RELATION_TYPE_M2M        = "m2m"
+)
+
+var RELATION_TYPE_MAP map[string]bool = map[string]bool{
+	"has_one":    true,
+	"has_many":   true,
+	"belongs_to": true,
+	"m2m":        true,
+}
+
+/**
+ * Relationship related fields
+ */
+
 /**
  * ModelInfo struct and methods
  */
-
+/*
 // Contains information about a single field of a Model.
 type FieldInfo struct {
 	Name       string
@@ -56,8 +74,8 @@ type FieldInfo struct {
 
 	/**
 	 * Relationship related fields
-	 */
-
+*/
+/*
 	// Instance of the related struct.
 	RelationItem interface{}
 
@@ -91,70 +109,255 @@ func NewFieldInfo() *FieldInfo {
 func (f FieldInfo) IsRelation() bool {
 	return f.RelationItem != nil
 }
-
+*/
 /**
  * ModelInfos.
  */
 
-type ModelInfos map[string]*ModelInfo
+// ModelInfos is a container collecting ModelInfo for a backend with some
+// convenience methods.
+type ModelInfos interface {
+	Get(collection string) ModelInfo
+	Add(info ModelInfo)
+	Has(collection string) bool
 
-func (i ModelInfos) Add(info *ModelInfo) {
-	i[info.Collection] = info
+	// Find looks for a model by checking Collection,
+	// BackendName and MarshalName.
+	Find(name string) ModelInfo
+
+	// FindBackendName tries to return the backend name for a model by checking
+	// Collection, BackendName and MarshalName.
+	FindBackendName(name string) string
 }
 
-func (i ModelInfos) HasCollection(collection string) bool {
-	info, _ := i[collection]
-	return info != nil
-}
+type modelInfos map[string]ModelInfo
 
-func (i ModelInfos) ByCollection(collection string) *ModelInfo {
+// Ensure modelInfos implements ModelInfos.
+var _ ModelInfos = (*modelInfos)(nil)
+
+func (i *modelInfos) Get(collection string) ModelInfo {
 	return i[collection]
 }
 
-// Find tries to find the ModelInfo by checking Collction, MarshalName and BackendName.
-func (i ModelInfos) Find(name string) *ModelInfo {
+func (i *modelInfos) Add(info ModelInfo) {
+	i[info.Collection()] = info
+}
+
+func (i *modelInfos) Has(collection string) bool {
+	_, ok := i[collection]
+	return ok
+}
+
+func (i *modelInfos) Find(name string) ModelInfo {
 	for _, info := range i {
-		if info.Collection == name || info.BackendName == name || info.MarshalName == name {
+		if info.Collection() == name || info.BackendName() == name || info.MarshalName() == name {
 			return info
 		}
 	}
 	return nil
 }
 
-func (i ModelInfos) FindBackendName(name string) string {
+func (i *modelInfos) FindBackendName(name string) string {
 	info := i.Find(name)
 	if info == nil {
 		return ""
 	}
-	return info.BackendName
+	return info.BackendName()
 }
 
 /**
  * ModelInfo.
  */
 
-// Contains information about a Model, including field info.
-type ModelInfo struct {
-	// Name of the struct field.
-	PkField string
+// ModelInfo describes a model managed by DukeDB.
+type ModelInfo interface {
+	// Item returns an instance of the model struct.
+	Item() interface{}
 
-	Item       interface{}
-	FullName   string
-	Name       string
-	Collection string
+	// StructName returns the unqualified struct name.
+	StructName() string
 
-	BackendName string
-	MarshalName string
+	// FullStructName returns the fully qualified name of the struct.
+	// For example: mypackage.MyModel.
+	FullStructName() string
 
-	FieldInfo map[string]*FieldInfo
+	// Collection returns the collection name.
+	Collection() string
+
+	// BackendName returns the collection name used by the backend.
+	BackendName() string
+
+	// MarshalName returns the model name to be used when marshalling.
+	MarshalName() string
+
+	FieldInfo() FieldInfos
+
+	HasField(name string) bool
+	Field(name string) FieldInfo
+	PkField() FieldInfo
+	PkFieldName() string
+
+	// FindField tries to find a field by checking its Name, BackendName and MarshalName.
+	FindField(name string) FieldInfo
+
+	FindFieldName(name string) string
 }
 
+/**
+ * modelInfo.
+ */
+
+type modelInfo struct {
+	item           interface{}
+	structName     string
+	fullStructName string
+	collection     string
+	backendName    string
+	marshalName    string
+	fieldInfo      map[string]FieldInfo
+}
+
+/**
+ * Item.
+ */
+
+func (m *modelInfo) Item() interface{} {
+	return m.item
+}
+
+func (m *modelInfo) SetItem(val interface{}) {
+	m.item = val
+}
+
+/**
+ * StructName.
+ */
+
+func (m *modelInfo) StructName() string {
+	return m.structName
+}
+
+func (m *modelInfo) SetStructName(val string) {
+	m.structName = val
+}
+
+/**
+ * FullStructName.
+ */
+
+func (m *modelInfo) FullStructName() string {
+	return m.fullStructName
+}
+
+func (m *modelInfo) SetFullStructName(val string) {
+	m.fullStructName = val
+}
+
+/**
+ * Collection.
+ */
+
+func (m *modelInfo) Collection() string {
+	return m.collection
+}
+
+func (m *modelInfo) SetCollection(val string) {
+	m.collection = val
+}
+
+/**
+ * BackendName.
+ */
+
+func (m *modelInfo) BackendName() string {
+	return m.backendName
+}
+
+func (m *modelInfo) SetBackendName(val string) {
+	m.backendName = val
+}
+
+/**
+ * MarshalName.
+ */
+
+func (m *modelInfo) MarshalName() string {
+	return m.marshalName
+}
+
+func (m *modelInfo) SetMarshalName(val string) {
+	m.marshalName = val
+}
+
+/**
+ * FieldInfo.
+ */
+
+func (m *modelInfo) FieldInfo() map[string]FieldInfo {
+	return m.fieldInfo
+}
+
+func (m *modelInfo) SetFieldInfo(val map[string]FieldInfo) {
+	m.fieldInfo = val
+}
+
+func (m *modelInfo) HasField(name string) bool {
+	_, ok := m.fieldInfo[name]
+	return ok
+}
+
+func (m *modelInfo) Field(name string) FieldInfo {
+	return m.fieldInfo[name]
+}
+
+func (m *modelInfo) PkField() FieldInfo {
+	for _, f := range m.fieldInfo {
+		if f.IsPrimaryKey() {
+			return f
+		}
+	}
+
+	return nil
+}
+
+func (m *modelInfo) PkFieldName() string {
+	field := m.PkField()
+	if field == nil {
+		return ""
+	}
+	return field.Name()
+}
+
+// FindField tries to find a field by checking its Name, BackendName and MarshalName.
+func (m *modelInfo) FindField(name string) FieldInfo {
+	for _, field := range m.fieldInfo {
+		if field.Name() == name || field.BackendName() == name || field.MarshalName() == name {
+			return field
+		}
+	}
+
+	return nil
+}
+
+func (m *modelInfo) FindFieldName(name string) string {
+	field := m.FindField(name)
+	if field == nil {
+		return ""
+	}
+	return field.Name()
+}
+
+/**
+ * ModelInfo.
+ */
+
 // Builds the ModelInfo for a model and returns it.
-// Returns an error for all failures.
-func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
+func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 	typ := reflect.TypeOf(model)
+	modelVal := reflect.ValueOf(model)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
+		modelVal = modelVal.Elem()
 	}
 
 	if typ.Kind() != reflect.Struct {
@@ -162,185 +365,75 @@ func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 			fmt.Sprintf("Must use pointer to struct or struct, got %v", typ))
 	}
 
-	//backendModel, isBackendModel := model.(Model)
-
 	collection, err := GetModelCollection(model)
 	if err != nil {
 		return nil, err
 	}
 
-	info := &ModelInfo{
-		Item:       reflect.New(typ).Interface(),
-		FullName:   typ.PkgPath() + "." + typ.Name(),
-		Name:       typ.Name(),
-		Collection: collection,
-		FieldInfo:  make(map[string]*FieldInfo),
+	info := &modelInfo{
+		item:       reflect.New(typ).Interface(),
+		fullName:   typ.PkgPath() + "." + typ.Name(),
+		name:       typ.Name(),
+		follection: collection,
+		fieldInfo:  make(map[string]FieldInfo),
 	}
 
 	// Determine BackendName.
-	info.BackendName = info.Collection
+	info.backendName = info.collection
 	// If model implements .BackendName() call it to determine backend name.
 	if nameHook, ok := model.(ModelBackendNameHook); ok {
 		name := nameHook.BackendName()
 		if name == "" {
 			panic(fmt.Sprintf("%v.BackendName() returned an empty string.", info.FullName))
 		}
-		info.BackendName = name
+		info.backendName = name
 	}
 
 	// Dertermine MarshalName.
-	info.MarshalName = info.Collection
+	info.marshalName = info.collection
 	if nameHook, ok := model.(ModelMarshalNameHook); ok {
 		name := nameHook.MarshalName()
 		if name == "" {
 			panic(fmt.Sprintf("%v.MarshalName() returned an empty string.", info.FullName))
 		}
-		info.MarshalName = name
+		info.marshalName = name
 	}
 
-	err = info.buildFieldInfo(reflect.ValueOf(model).Elem(), "")
+	err = info.buildFieldInfo(modelVal, "")
 	if err != nil {
 		return nil, apperror.Wrap(err, "build_field_info_error",
 			fmt.Sprintf("Could not build field info for %v", info.Name))
 	}
 
 	// Ensure primary key exists.
-	if info.PkField == "" {
+	if info.PkField() == nil {
 		// No explicit primary key found, check for ID field.
-		if field, ok := info.FieldInfo["ID"]; ok {
-			info.PkField = "ID"
-			field.PrimaryKey = true
+		if field := info.Field("ID"); field != nil {
+			field.SetIsPrimaryKey(true)
+		} else if field := info.Field("Id"); field != nil {
+			field.SetIsPrimaryKey(true)
 		}
 	}
 
-	for name := range info.FieldInfo {
-		fieldInfo := info.FieldInfo[name]
-		if fieldInfo.PrimaryKey {
-			fieldInfo.NotNull = true
-			fieldInfo.IgnoreIfZero = true
+	for name, fieldInfo := range info.fieldInfo {
+		if fieldInfo.IsPrimaryKey() {
+			fieldInfo.SetIsRequired(true)
+			fieldInfo.SetIgnoreIfZero(true)
 
 			// Only set unique to true if no unique-with was specified.
-			if fieldInfo.UniqueWith == nil {
-				fieldInfo.Unique = true
+			if fieldInfo.IsUniqueWith() == nil {
+				fieldInfo.SetIsUnique(true)
 			}
 
 			// On numeric fields, activate autoincrement.
 			// TODO: allow a way to disable autoincrement with a tag.
-			switch fieldInfo.Type.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				fieldInfo.AutoIncrement = true
-			}
-
-			if info.PkField == "" {
-				info.PkField = name
+			if IsNumericKind(fieldInfo.Type().Kind()) {
+				fieldInfo.SetAutoIncrement(true)
 			}
 		}
-	}
-
-	if info.PkField == "" {
-		return nil, apperror.New("primary_key_not_found",
-			fmt.Sprintf("Primary key could not be determined for model %v", info.Name))
 	}
 
 	return info, nil
-}
-
-func (m ModelInfo) HasField(name string) bool {
-	_, ok := m.FieldInfo[name]
-	return ok
-}
-
-func (m ModelInfo) GetField(name string) *FieldInfo {
-	return m.FieldInfo[name]
-}
-
-func (m ModelInfo) GetPkField() *FieldInfo {
-	return m.FieldInfo[m.PkField]
-}
-
-func (m ModelInfo) GetPkName() string {
-	return m.FieldInfo[m.PkField].Name
-}
-
-// Given a database field name, return the struct field name.
-func (m ModelInfo) MapFieldName(name string) string {
-	for key := range m.FieldInfo {
-		if m.FieldInfo[key].BackendName == name {
-			return key
-		}
-	}
-
-	return ""
-}
-
-// Given a the field.MarshalName, return the struct field name.
-func (m ModelInfo) MapMarshalName(name string) string {
-	for key := range m.FieldInfo {
-		if m.FieldInfo[key].MarshalName == name {
-			return key
-		}
-	}
-
-	return ""
-}
-
-// Tries to determine the backend name by checking struct field names, MarshalName and
-// BackendName. Returns the backend field name, or an empty string if not found.
-func (m ModelInfo) FindBackendName(name string) string {
-	if m.HasField(name) {
-		return m.GetField(name).BackendName
-	}
-
-	for _, fieldInfo := range m.FieldInfo {
-		if fieldInfo.BackendName == name {
-			return name
-		}
-		if fieldInfo.MarshalName == name {
-			return fieldInfo.BackendName
-		}
-	}
-
-	return ""
-}
-
-// Tries to determine the struct field name by checking struct field names, MarshalName and
-// BackendName. Returns the struct field name, or an empty string if not found.
-func (m ModelInfo) FindStructFieldName(name string) string {
-	if m.HasField(name) {
-		return name
-	}
-
-	for _, fieldInfo := range m.FieldInfo {
-		if fieldInfo.BackendName == name {
-			return fieldInfo.Name
-		}
-		if fieldInfo.MarshalName == name {
-			return fieldInfo.Name
-		}
-	}
-
-	return ""
-}
-
-// Return the field info for a given name.
-func (m ModelInfo) FieldByBackendName(name string) *FieldInfo {
-	for key := range m.FieldInfo {
-		if m.FieldInfo[key].BackendName == name {
-			return m.FieldInfo[key]
-		}
-	}
-
-	return nil
-}
-
-func (m ModelInfo) FieldByMarshalName(name string) *FieldInfo {
-	for key := range m.FieldInfo {
-		if m.FieldInfo[key].MarshalName == name {
-			return m.FieldInfo[key]
-		}
-	}
-
-	return nil
 }
 
 // Parse the information contained in a 'db:"xxx"' field tag.

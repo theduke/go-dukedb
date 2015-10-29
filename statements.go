@@ -764,20 +764,6 @@ var JOIN_MAP map[string]string = map[string]string{
 	"cross":       "CROSS JOIN",
 }
 
-const (
-	RELATION_TYPE_HAS_ONE    = "has_one"
-	RELATION_TYPE_HAS_MANY   = "has_many"
-	RELATION_TYPE_BELONGS_TO = "belongs_to"
-	RELATION_TYPE_M2M        = "m2m"
-)
-
-var RELATION_TYPE_MAP map[string]bool = map[string]bool{
-	"has_one":    true,
-	"has_many":   true,
-	"belongs_to": true,
-	"m2m":        true,
-}
-
 type JoinStatement interface {
 	SelectStatement
 
