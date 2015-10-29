@@ -19,7 +19,7 @@ type Query struct {
 	name string
 
 	// statement is the SelectStatement.
-	statement *SelectStatement
+	statement SelectStatement
 
 	// joinResultAssigner can hold a function that will take care of assigning the results
 	// of a join query to the parent models. This is needed for m2m joins, since models
@@ -32,18 +32,18 @@ type Query struct {
 
 func Q(collection string) *Query {
 	return &Query{
-		statement: &SelectStatement{
-			Collection: collection,
+		statement: &selectStmt{
+			collection: collection,
 		},
 	}
 }
 
-func (q *Query) GetStatement() *SelectStatement {
+func (q *Query) GetStatement() SelectStatement {
 	return q.statement
 }
 
 func (q *Query) GetCollection() string {
-	return q.statement.Collection
+	return q.statement.Collection()
 }
 
 func (q *Query) GetName() string {
@@ -51,6 +51,7 @@ func (q *Query) GetName() string {
 }
 
 func (q *Query) SetName(x string) {
+	q.statement.SetName(x)
 	q.name = x
 }
 
@@ -66,26 +67,26 @@ func (q *Query) SetJoinResultAssigner(x JoinAssigner) {
  * Limit methods.
  */
 
-func (q *Query) Limit(l int) *Query {
-	q.statement.Limit = l
+func (q *Query) Limit(limit int) *Query {
+	q.statement.SetLimit(limit)
 	return q
 }
 
 func (q *Query) GetLimit() int {
-	return q.statement.Limit
+	return q.statement.Limit()
 }
 
 /**
  * Offset methods.
  */
 
-func (q *Query) Offset(o int) *Query {
-	q.statement.Offset = o
+func (q *Query) Offset(offset int) *Query {
+	q.statement.SetOffset(offset)
 	return q
 }
 
 func (q *Query) GetOffset() int {
-	return q.statement.Offset
+	return q.statement.Offset()
 }
 
 /**
@@ -93,73 +94,47 @@ func (q *Query) GetOffset() int {
  */
 
 func (q *Query) Field(fields ...string) *Query {
-	q.statement.Fields = make([]NamedNestedExpression, 0)
+	q.statement.SetFields(make([]Expression, 0))
 	for _, field := range fields {
-		q.statement.AddField(WrapNamedExpression(field, Identifier(field)))
+		// Use a named expression to allow join queries without extra work.
+		// Named queries will construct a SQL query with '"collection"."field" AS "collection.field"'
+		expr := NameExpr(q.GetCollection()+"."+field, ColFieldIdExpr(q.GetCollection(), field))
+		q.statement.AddField(expr)
 	}
 	return q
 }
 
-func (q *Query) FieldExpr(exprs ...NamedNestedExpression) *Query {
+func (q *Query) FieldExpr(exprs ...Expression) *Query {
 	q.statement.AddField(exprs...)
 	return q
 }
 
 func (q *Query) SetFields(fields []string) *Query {
-	q.statement.Fields = nil
+	q.statement.SetFields(nil)
 	return q.Field(fields...)
 }
 
-func (q *Query) SetFieldExpressions(expressions []NamedNestedExpression) *Query {
-	q.statement.Fields = expressions
+func (q *Query) SetFieldExpressions(expressions []Expression) *Query {
+	q.statement.SetFields(expressions)
 	return q
-}
-
-/**
- * Limit the query to specified fields.
- * If fields where already specified, they will be reduced.
- */
-func (q *Query) LimitFields(fields ...string) *Query {
-	if q.statement.Fields == nil {
-		return q.Field(fields...)
-	}
-
-	allowMap := make(map[string]bool)
-	for _, field := range fields {
-		allowMap[field] = true
-	}
-
-	usedFields := make([]string, 0)
-	for _, expr := range q.statement.Fields {
-		usedFields = append(usedFields, expr.GetIdentifiers()...)
-	}
-
-	finalFields := make([]string, 0)
-	for _, identifier := range usedFields {
-		if _, ok := allowMap[identifier]; ok {
-			finalFields = append(finalFields, identifier)
-		}
-	}
-
-	return q.SetFields(finalFields)
 }
 
 /**
  * Sort methods.
  */
 
-func (q *Query) Sort(name string, asc bool) *Query {
-	q.statement.AddSort(Sort(name, asc))
+func (q *Query) Sort(field string, asc bool) *Query {
+	q.statement.AddSort(SortExpr(ColFieldIdExpr(q.GetCollection(), field), asc))
 	return q
 }
 
-func (q *Query) SortExpr(expr *SortExpression) *Query {
+func (q *Query) SortExpr(expr SortExpression) *Query {
 	q.statement.AddSort(expr)
 	return q
 }
 
-func (q *Query) SetSorts(exprs []*SortExpression) *Query {
-	q.statement.Sorts = exprs
+func (q *Query) SetSorts(exprs []SortExpression) *Query {
+	q.statement.SetSorts(exprs)
 	return q
 }
 
@@ -175,12 +150,21 @@ func (q *Query) FilterExpr(expressions ...Expression) *Query {
 }
 
 func (q *Query) SetFilters(expressions ...Expression) *Query {
-	q.statement.Filter = And(expressions...)
+	if len(expressions) == 0 {
+		// No Filter.
+		q.statement.SetFilter(nil)
+	} else if len(expressions) == 1 {
+		// Single filter.
+		q.statement.SetFilter(expressions[0])
+	} else {
+		// Multiple filters, so create an AndExpr wrapper.
+		q.statement.SetFilter(AndExpr(expressions...))
+	}
 	return q
 }
 
 func (q *Query) Filter(field string, val interface{}) *Query {
-	return q.FilterExpr(Eq(field, val))
+	return q.FilterExpr(Eq(q.GetCollection(), field, val))
 }
 
 func (q *Query) FilterCond(field string, condition string, val interface{}) *Query {
@@ -188,7 +172,7 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.FilterExpr(ValFilter("", field, operator, Val(val)))
+	return q.FilterExpr(FieldValFilter(q.GetCollection(), field, operator, val))
 }
 
 func (q *Query) AndExpr(filters ...Expression) *Query {
@@ -211,7 +195,7 @@ func (q *Query) OrExpr(filters ...Expression) *Query {
 }
 
 func (q *Query) Or(field string, val interface{}) *Query {
-	return q.OrExpr(Eq(field, val))
+	return q.OrExpr(Eq(q.GetCollection(), field, val))
 }
 
 func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
@@ -219,18 +203,18 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.OrExpr(ValFilter("", field, operator, Val(val)))
+	return q.OrExpr(FieldValFilter(q.GetCollection(), field, operator, val))
 }
 
 func (q *Query) NotExpr(filters ...Expression) *Query {
 	for _, f := range filters {
-		q.FilterExpr(Not(f))
+		q.FilterExpr(NotExpr(f))
 	}
 	return q
 }
 
 func (q *Query) Not(field string, val interface{}) *Query {
-	return q.FilterExpr(Not(Eq(field, val)))
+	return q.FilterExpr(NotExpr(Eq(q.GetCollection(), field, val)))
 }
 
 func (q *Query) NotCond(field string, condition string, val interface{}) *Query {
@@ -238,7 +222,7 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.NotExpr(ValFilter("", field, operator, Val(val)))
+	return q.NotExpr(FieldValFilter(q.GetCollection(), field, operator, val))
 }
 
 /**
@@ -247,9 +231,7 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 
 func (q *Query) JoinQ(jqs ...*RelationQuery) *Query {
 	for _, jq := range jqs {
-		stmt := jq.GetStatement()
-		stmt.Base = q.statement
-		q.statement.AddJoin(stmt)
+		q.statement.AddJoin(jq.GetStatement())
 	}
 	return q
 }
@@ -262,7 +244,7 @@ func (q *Query) Join(fieldName string, joinType ...string) *Query {
 		}
 		typ = joinType[0]
 	}
-	q.statement.AddJoin(Join(fieldName, typ, nil))
+	q.statement.AddJoin(JoinStmt(fieldName, typ, nil))
 	return q
 }
 
@@ -283,7 +265,7 @@ func (q *Query) GetJoin(field string) *RelationQuery {
 
 func (q *Query) GetJoins() []*RelationQuery {
 	jqs := make([]*RelationQuery, 0)
-	for _, stmt := range q.statement.Joins {
+	for _, stmt := range q.statement.Joins() {
 		q := &RelationQuery{
 			baseQuery: q,
 			statement: stmt,
@@ -362,45 +344,37 @@ type RelationQuery struct {
 	Query
 
 	baseQuery *Query
-	statement *JoinStatement
+	statement JoinStatement
 }
 
 func RelQ(q *Query, name string, joinType string) *RelationQuery {
-	stmt := Join(name, joinType, nil)
-	stmt.Base = q.GetStatement()
+	stmt := JoinStmt(name, joinType, nil)
+	stmt.SetParentSelect(q.GetStatement())
 
 	relQ := &RelationQuery{
-		// Duplicate statement in embedded Query to avoid having to duplicate all the methods.
-		Query: Query{
-			statement: &SelectStatement{},
-		},
 		baseQuery: q,
 		statement: stmt,
 	}
+	relQ.Query.statement = stmt.SelectStatement()
 	relQ.SetBackend(q.GetBackend())
 
 	return relQ
 }
 
 func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *RelationQuery {
-	filter := &Filter{
-		Field:    ColFieldIdentifier(collection, joinKey),
-		Operator: OPERATOR_EQ,
-		Clause:   ColFieldIdentifier(q.GetCollection(), foreignKey),
-	}
-	stmt := Join(name, typ, filter)
-	stmt.Base = q.GetStatement()
+	filter := FilterExpr(
+		ColFieldIdExpr(q.GetCollection(), joinKey),
+		OPERATOR_EQ,
+		ColFieldIdExpr(collection, foreignKey))
+
+	stmt := JoinStmt(name, typ, filter)
+	stmt.SetParentSelect(q.GetStatement())
 
 	relQ := &RelationQuery{
-		// Duplicate statement in embedded Query to avoid having to duplicate all the methods.
-		Query: Query{
-			statement: &SelectStatement{
-				Collection: collection,
-			},
-		},
 		baseQuery: q,
 		statement: stmt,
 	}
+	relQ.Query.statement = stmt.SelectStatement()
 	relQ.SetBackend(q.GetBackend())
 
 	return relQ
@@ -408,12 +382,8 @@ func RelQCustom(q *Query, name, collection, joinKey, foreignKey, typ string) *Re
 
 // RelationQuery specific methods.
 
-func (q *RelationQuery) GetStatement() *JoinStatement {
-	stmt := q.statement
-	// Since all regular *Query methods operate on Query.statement,
-	// replace the JoinStatement base with Query.statement.
-	stmt.SelectStatement = *q.Query.statement
-	return stmt
+func (q *RelationQuery) GetStatement() JoinStatement {
+	return q.statement
 }
 
 func (q *RelationQuery) GetBaseQuery() *Query {
@@ -425,19 +395,19 @@ func (q *RelationQuery) SetBaseQuery(bq *Query) {
 }
 
 func (q *RelationQuery) GetRelationName() string {
-	return q.statement.RelationName
+	return q.statement.RelationName()
 }
 
 func (q *RelationQuery) SetRelationName(name string) {
-	q.statement.RelationName = name
+	q.statement.SetRelationName(name)
 }
 
 func (q *RelationQuery) GetJoinType() string {
-	return q.statement.JoinType
+	return q.statement.JoinType()
 }
 
 func (q *RelationQuery) SetJoinType(typ string) *RelationQuery {
-	q.statement.JoinType = typ
+	q.statement.SetJoinType(typ)
 	return q
 }
 
@@ -539,7 +509,7 @@ func (q *RelationQuery) Field(fields ...string) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) FieldExpr(exprs ...NamedNestedExpression) *RelationQuery {
+func (q *RelationQuery) FieldExpr(exprs ...Expression) *RelationQuery {
 	q.Query.FieldExpr(exprs...)
 	return q
 }
@@ -549,15 +519,17 @@ func (q *RelationQuery) SetFields(fields []string) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) SetFieldExpressions(expressions []NamedNestedExpression) *RelationQuery {
+func (q *RelationQuery) SetFieldExpressions(expressions []Expression) *RelationQuery {
 	q.Query.SetFieldExpressions(expressions)
 	return q
 }
 
+/*
 func (q *RelationQuery) LimitFields(fields ...string) *RelationQuery {
 	q.Query.LimitFields(fields...)
 	return q
 }
+*/
 
 /**
  * Sort methods.
@@ -568,12 +540,12 @@ func (q *RelationQuery) Sort(name string, asc bool) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) SortExpr(expr *SortExpression) *RelationQuery {
+func (q *RelationQuery) SortExpr(expr SortExpression) *RelationQuery {
 	q.Query.SortExpr(expr)
 	return q
 }
 
-func (q *RelationQuery) SetSorts(exprs []*SortExpression) *RelationQuery {
+func (q *RelationQuery) SetSorts(exprs []SortExpression) *RelationQuery {
 	q.Query.SetSorts(exprs)
 	return q
 }
