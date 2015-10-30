@@ -193,20 +193,6 @@ type MigrationBackend interface {
 	NewMigrationAttempt() MigrationAttempt
 }
 
-type Model interface {
-	ModelCollectionHook
-	ModelIDGetterHook
-	ModelIDSetterHook
-	ModelStrIDGetterHook
-	ModelStrIDSetterHook
-
-	Info() *ModelInfo
-	SetInfo(info *ModelInfo)
-
-	Backend() Backend
-	SetBackend(backend Backend)
-}
-
 type ModelCollectionHook interface {
 	Collection() string
 }
