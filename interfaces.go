@@ -55,9 +55,6 @@ type Backend interface {
 	// Same as CreateModel(), but panics on error.
 	MustCreateModel(collection string) interface{}
 
-	// "Merge" a model that implements Model interface by setting backend and info data.
-	MergeModel(model Model)
-
 	// Build a slice of a model for model Collection.
 	CreateModelSlice(collection string) (interface{}, apperror.Error)
 

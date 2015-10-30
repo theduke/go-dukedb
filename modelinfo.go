@@ -3,7 +3,6 @@ package dukedb
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/theduke/go-apperror"
@@ -39,13 +38,13 @@ type ModelInfo interface {
 	 */
 
 	Attributes() map[string]Attribute
-	SetAttributes(attrs map[string]attribute)
+	SetAttributes(attrs map[string]Attribute)
 
-	Attribute(name string) Field
+	Attribute(name string) Attribute
 	HasAttribute(name string) bool
-	PkAttribute() Field
+	PkAttribute() Attribute
 	// FindAttribute tries to find a field by checking its Name, BackendName and MarshalName.
-	FindAttribute(name string) Field
+	FindAttribute(name string) Attribute
 
 	/**
 	 * Relations.
@@ -215,7 +214,7 @@ func (m *modelInfo) Relation(name string) Relation {
 }
 
 func (m *modelInfo) FindRelation(name string) Relation {
-	for relName, relation := range m.relations {
+	for _, relation := range m.relations {
 		if relation.Name() == name || relation.BackendName() == name || relation.MarshalName() == name {
 			return relation
 		}
@@ -247,10 +246,10 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 	}
 
 	info := &modelInfo{
-		item:       reflect.New(typ).Interface(),
-		fullName:   typ.PkgPath() + "." + typ.Name(),
-		name:       typ.Name(),
-		collection: collection,
+		item:           reflect.New(typ).Interface(),
+		fullStructName: typ.PkgPath() + "." + typ.Name(),
+		structName:     typ.Name(),
+		collection:     collection,
 
 		transientFields: make(map[string]*field),
 		attributes:      make(map[string]Attribute),
@@ -263,7 +262,7 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 	if nameHook, ok := model.(ModelBackendNameHook); ok {
 		name := nameHook.BackendName()
 		if name == "" {
-			panic(fmt.Sprintf("%v.BackendName() returned an empty string.", info.FullName))
+			panic(fmt.Sprintf("%v.BackendName() returned an empty string.", info.FullStructName()))
 		}
 		info.backendName = name
 	}
@@ -273,7 +272,7 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 	if nameHook, ok := model.(ModelMarshalNameHook); ok {
 		name := nameHook.MarshalName()
 		if name == "" {
-			panic(fmt.Sprintf("%v.MarshalName() returned an empty string.", info.FullName))
+			panic(fmt.Sprintf("%v.MarshalName() returned an empty string.", info.FullStructName()))
 		}
 		info.marshalName = name
 	}
@@ -281,20 +280,20 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 	err = info.buildFields(modelVal, "")
 	if err != nil {
 		return nil, apperror.Wrap(err, "build_field_info_error",
-			fmt.Sprintf("Could not build field info for %v", info.Name))
+			fmt.Sprintf("Could not build field info for %v", info.StructName()))
 	}
 
 	// Ensure primary key exists.
 	if info.PkAttribute() == nil {
 		// No explicit primary key found, check for ID field.
-		if attr := info.Attribute("ID"); field != nil {
+		if attr := info.Attribute("ID"); attr != nil {
 			attr.SetIsPrimaryKey(true)
-		} else if attr := info.Attribute("Id"); field != nil {
+		} else if attr := info.Attribute("Id"); attr != nil {
 			attr.SetIsPrimaryKey(true)
 		}
 	}
 
-	for name, attr := range info.attributes {
+	for _, attr := range info.attributes {
 		if attr.IsPrimaryKey() {
 			attr.SetIsRequired(true)
 			attr.SetIgnoreIfZero(true)
@@ -330,7 +329,7 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 
 		if fieldKind == reflect.Struct && fieldType.Anonymous {
 			// Embedded struct. Find nested fields.
-			if err := info.buildFieldInfo(field, fieldType.Name); err != nil {
+			if err := info.buildFields(field, fieldType.Name); err != nil {
 				return err
 			}
 		}
@@ -361,10 +360,10 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 
 		if fieldKind == reflect.Struct {
 			// Field is a direct struct.
-			structType = fieldType
+			structType = fieldType.Type
 		} else if fieldKind == reflect.Ptr {
 			// Field is a pointer.
-			ptrType := fieldType.Elem()
+			ptrType := fieldType.Type.Elem()
 
 			// Only process pointers to structs.
 			if ptrType.Kind() == reflect.Struct {
@@ -373,7 +372,7 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 		} else if fieldKind == reflect.Slice {
 			// Field is slice.
 			// Check if slice items are structs or pointers to structs.
-			sliceType := fieldType.Elem()
+			sliceType := fieldType.Type.Elem()
 			sliceKind := sliceType.Kind()
 
 			if sliceKind == reflect.Struct {
@@ -392,18 +391,18 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 
 		// Build the base field.
 		field := &field{
-			typ:                 fieldType,
+			typ:                 fieldType.Type,
 			name:                fieldType.Name,
 			structType:          structType,
 			embeddingStructName: embeddedName,
 			backendName:         CamelCaseToUnderscore(fieldType.Name),
-			marshalName:         LowerCaseFirst(fieldInfo.Name),
+			marshalName:         LowerCaseFirst(fieldType.Name),
 		}
 		if structType != nil {
 			field.structName = structType.PkgPath() + "." + structType.Name()
 		}
 
-		if err := field.parseTag(); err != nil {
+		if err := field.parseTag(fieldType.Tag.Get("db")); err != nil {
 			return apperror.Wrap(err, "invalid_field_tag", fmt.Sprintf("The field %v has an invalid db tag", field.name))
 		}
 
@@ -417,7 +416,7 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 			// relation and must be an attribute.
 			// Construct attribute now.
 
-			attr := buildAttribute(field)
+			attr := buildAttribute(*field)
 			// Add the attribute to attributes map.
 			info.attributes[attr.Name()] = attr
 		} else {
@@ -459,20 +458,20 @@ type modelInfos map[string]ModelInfo
 // Ensure modelInfos implements ModelInfos.
 var _ ModelInfos = (*modelInfos)(nil)
 
-func (i *modelInfos) Get(collection string) ModelInfo {
+func (i modelInfos) Get(collection string) ModelInfo {
 	return i[collection]
 }
 
-func (i *modelInfos) Add(info ModelInfo) {
+func (i modelInfos) Add(info ModelInfo) {
 	i[info.Collection()] = info
 }
 
-func (i *modelInfos) Has(collection string) bool {
+func (i modelInfos) Has(collection string) bool {
 	_, ok := i[collection]
 	return ok
 }
 
-func (i *modelInfos) Find(name string) ModelInfo {
+func (i modelInfos) Find(name string) ModelInfo {
 	for _, info := range i {
 		if info.Collection() == name || info.BackendName() == name || info.MarshalName() == name {
 			return info
@@ -485,19 +484,20 @@ func (i *modelInfos) Find(name string) ModelInfo {
  * Functions for analyzing the relationships between model structs.
  */
 
-func (m *modelInfos) AnalyzeRelations() apperror.Error {
+func (m modelInfos) AnalyzeRelations() apperror.Error {
 	for _, info := range m {
-		if err := m.analyzeModelRelations(info); err != nil {
+		if err := m.analyzeModelRelations(info.(*modelInfo)); err != nil {
 			return err
 		}
 	}
+	return nil
 }
 
 // Recursive helper for building the relationship information.
 // Will properly analyze all embedded structs as well.
 // All transientFields will be checked, and split intro attributes or
 // relations.
-func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
+func (m modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 	for fieldName, field := range model.transientFields {
 		relatedItem := reflect.New(field.structType)
 
@@ -514,27 +514,25 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 			// We need to build the attribute now and add it to the attributes
 			// map.
 
-			attr := buildAttribute(field)
+			attr := buildAttribute(*field)
 			model.attributes[attr.Name()] = attr
 			continue
 		}
 
 		// Field is a relation, so build the relation struct.
-		relation := buildRelation(field)
+		relation := buildRelation(*field)
 		relation.SetModel(model)
 		relation.SetRelatedModel(relatedInfo)
 
 		modelName := model.StructName()
 		relatedName := relatedInfo.StructName()
 
-		relatedFields := relatedInfo.Attributes()
-
 		// If an explicit relation type was specified, verify the fields.
-		if relation.Type() != "" {
+		if relation.RelationType() != "" {
 			// Relation was set explicitly. Verify fields.
 
 			// Check m2m.
-			if relation.Type() == RELATION_TYPE_M2M {
+			if relation.RelationType() == RELATION_TYPE_M2M {
 				if relation.LocalField() == "" || relation.ForeignField() == "" {
 					// Set fields to respective PKs.
 					relation.SetLocalField(model.PkAttribute().Name())
@@ -550,13 +548,13 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 			if !model.HasAttribute(relation.LocalField()) {
 				return apperror.New(
 					"invalid_relation_local_field",
-					fmt.Sprintf("Invalid %v relation spec: field %v.%v does not exist", relation.Type(), modelName, relation.LocalField()))
+					fmt.Sprintf("Invalid %v relation spec: field %v.%v does not exist", relation.RelationType(), modelName, relation.LocalField()))
 			}
 
 			if !relatedInfo.HasAttribute(relation.ForeignField()) {
 				return apperror.New(
 					"invalid_relation_foreign_field",
-					fmt.Sprintf("Invalid %v relation spec: field %v.%v does not exist", relation.Type(), relatedName, relation.ForeignField()))
+					fmt.Sprintf("Invalid %v relation spec: field %v.%v does not exist", relation.RelationType(), relatedName, relation.ForeignField()))
 			}
 
 			// All is verified, nothing more to do.
@@ -568,7 +566,7 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 		if relation.IsMany() {
 			// Since relation is many, it must be has-many, since m2m needs
 			// to be set explicitly.
-			relation.SetType(RELATION_TYPE_HAS_MANY)
+			relation.SetRelationType(RELATION_TYPE_HAS_MANY)
 			// TODO: determine fields.
 			continue
 		}
@@ -580,9 +578,9 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 
 		// Try to fiend ID field.
 		// we check: fieldNameID, fieldNameId, relationNameID and relationNameId
-		relField := name + "ID"
+		relField := fieldName + "ID"
 		if !model.HasAttribute(relField) {
-			relfield = name + "Id"
+			relField = fieldName + "Id"
 			if !model.HasAttribute(relField) {
 				relField = relatedName + "ID"
 				if !model.HasAttribute(relField) {
@@ -597,7 +595,7 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 
 		if relField != "" {
 			// Found a appropriate field for has-one.
-			relation.SetType(RELATION_TYPE_HAS_ONE)
+			relation.SetRelationType(RELATION_TYPE_HAS_ONE)
 			relation.SetLocalField(relField)
 			relation.SetForeignField(relatedInfo.PkAttribute().Name())
 			// Valid has-one, all done.
@@ -617,7 +615,7 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 
 		if relField != "" {
 			// Found an appropriate field for belongs-to!
-			relation.SetType(RELATION_TYPE_BELONGS_TO)
+			relation.SetRelationType(RELATION_TYPE_BELONGS_TO)
 			relation.SetForeignField(relField)
 			relation.SetLocalField(model.PkAttribute().Name())
 
@@ -626,7 +624,7 @@ func (m *modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 		}
 
 		// If code reaches this point, relationship type could nto be determined.
-		msg := fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the relationship type. Specify explicitly with has-one/has-many/belongs-to/m2m", modelName, relatedName, name)
+		msg := fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the relationship type. Specify explicitly with has-one/has-many/belongs-to/m2m", modelName, relatedName, fieldName)
 		return apperror.New("relationship_not_determined", msg)
 	}
 

@@ -35,11 +35,11 @@ func (n *expressionNormalizer) Normalize(expression Expression) apperror.Error {
 		}
 
 		// Same as for CreateStatement.
-		backendName := n.info.FindBackendName(expr.Collection())
-		if backendName == "" {
+		info := n.info.Find(expr.Collection())
+		if info == nil {
 			return apperror.New("unknown_collection", fmt.Sprintf("The collection %v does not exist", expr.Collection()))
 		}
-		expr.SetCollection(backendName)
+		expr.SetCollection(info.BackendName())
 
 		for _, fieldVal := range expr.Values() {
 			if err := n.Normalize(fieldVal); err != nil {
@@ -48,11 +48,11 @@ func (n *expressionNormalizer) Normalize(expression Expression) apperror.Error {
 		}
 
 	case CreateStatement:
-		backendName := n.info.FindBackendName(expr.Collection())
-		if backendName == "" {
+		info := n.info.Find(expr.Collection())
+		if info == nil {
 			return apperror.New("unknown_collection", fmt.Sprintf("The collection %v does not exist", expr.Collection()))
 		}
-		expr.SetCollection(backendName)
+		expr.SetCollection(info.BackendName())
 
 		for _, fieldVal := range expr.Values() {
 			if err := n.Normalize(fieldVal); err != nil {
@@ -114,15 +114,15 @@ func (n *expressionNormalizer) Normalize(expression Expression) apperror.Error {
 		if info == nil {
 			return apperror.New("unknown_collection", fmt.Sprintf("The collection '%v' does not exist", expr.Collection()), true)
 		}
-		expr.SetCollection(info.Collection)
+		expr.SetCollection(info.BackendName())
 
 		// We found a valid collection.
 		// Now check the field name.
-		fieldName := info.FindBackendName(expr.Field())
-		if fieldName == "" {
+		field := info.FindAttribute(expr.Field())
+		if field == nil {
 			return apperror.New("unknown_field", fmt.Sprintf("The collection '%v' has no field '%v'", info.Collection, expr.Field))
 		}
-		expr.SetField(fieldName)
+		expr.SetField(field.BackendName())
 
 	case IdentifierExpression:
 		// Ignore.

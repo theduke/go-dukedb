@@ -1,7 +1,6 @@
 package dukedb
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 )
@@ -12,7 +11,6 @@ import (
 
 // Base model with a string ID.
 type StrIDModel struct {
-	BaseModel
 	ID string
 }
 
@@ -49,7 +47,6 @@ func (m *StrIDModel) SetStrID(rawId string) error {
 
 // Base model with a integer ID.
 type IntIDModel struct {
-	BaseModel
 	ID uint64
 }
 

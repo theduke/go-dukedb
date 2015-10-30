@@ -1,7 +1,9 @@
 package dukedb
 
 import (
+	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/theduke/go-apperror"
@@ -81,7 +83,7 @@ type fieldTag struct {
 	hasMany      bool
 	belongsTo    bool
 	localField   string
-	foreingField string
+	foreignField string
 
 	autoPersist bool
 	autoCreate  bool
@@ -110,15 +112,9 @@ type field struct {
 var _ Field = (*field)(nil)
 
 // Parse the information contained in a 'db:"xxx"' field tag.
-func (f *field) parseTag() apperror.Error {
-	if f.typ == nil {
-		panic("Can't read tag when field.typ is not set!")
-	}
-
+func (f *field) parseTag(tagContent string) apperror.Error {
 	tag := &fieldTag{}
 	f.tag = tag
-
-	tagContent := f.typ.Tag.Get("db")
 
 	parts := strings.Split(strings.TrimSpace(tagContent), ";")
 	for _, part := range parts {
@@ -181,9 +177,10 @@ func (f *field) parseTag() apperror.Error {
 
 		case "index":
 			tag.index = true
-			if value != "" {
-				tag.indexName = value
+			if value == "" {
+				return apperror.New("invalid_index_tag", "index must be in format: index:index_name")
 			}
+			tag.indexName = value
 
 		case "default":
 			if value == "" {
@@ -201,7 +198,7 @@ func (f *field) parseTag() apperror.Error {
 		case "max":
 			x, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				return nil, apperror.New("invalid_max", "max:xx must be a valid number")
+				return apperror.New("invalid_max", "max:xx must be a valid number")
 			}
 			tag.max = x
 
@@ -219,7 +216,7 @@ func (f *field) parseTag() apperror.Error {
 			} else if len(parts) == 3 {
 				tag.m2mName = parts[0]
 				tag.localField = parts[1]
-				tag.foreingField = parts[2]
+				tag.foreignField = parts[2]
 			} else {
 				return apperror.New("invalid_m2m_tag", "Invalid m2m tag, must be either 'm2m' or 'm2m:m2mCollectionName' or 'm2m:colName:localField:foreignField'")
 			}
@@ -231,7 +228,7 @@ func (f *field) parseTag() apperror.Error {
 					"Explicit has-one needs to be in format 'has-one:localField:foreignField'")
 			}
 			tag.localField = itemParts[1]
-			tag.foreingField = itemParts[2]
+			tag.foreignField = itemParts[2]
 
 		case "has-many":
 			tag.hasMany = true
@@ -454,12 +451,6 @@ func buildAttribute(field field) Attribute {
 	// Read information from tag into attribute.
 	attr.readTag()
 
-	// If tag specifies field as index, but no index name is set,
-	// construct a default index name.
-	if attr.IsIndex() && attr.IndexName() == "" {
-		attr.indexName = info.BackendName() + "_" + info.BackendName()
-	}
-
 	return attr
 }
 
@@ -609,10 +600,6 @@ func (a *attribute) SetIsIndex(x bool) {
  * IndexName.
  */
 
-func (a *attribute) IsIndex() bool {
-	return a.indexName != ""
-}
-
 func (a *attribute) IndexName() string {
 	return a.indexName
 }
@@ -687,14 +674,14 @@ type Relation interface {
 
 	// Type returns the type of the relation as one of the
 	// RELATION_TYPE* constants.
-	Type() string
-	SetType(typ string)
+	RelationType() string
+	SetRelationType(typ string)
 
 	// RelationIsMany returns true if the relation type is has_many or m2m.
 	IsMany() bool
 
 	InversingField() string
-	SetInverSingField(name string)
+	SetInversingField(name string)
 
 	// AutoCreate returns true if the relationship should be automatically
 	// created when the parent model is created.
@@ -720,7 +707,7 @@ type Relation interface {
 
 	// ForeignField returns the field name of the related struct to be used
 	// for the relation.
-	ForeignField()
+	ForeignField() string
 	SetForeignField(field string)
 }
 
@@ -732,14 +719,15 @@ type relation struct {
 	// Embed field.
 	field
 
-	model        ModelInfo
-	relatedModel ModelInfo
-	typ          string
-	autoCreate   bool
-	autoUpdate   bool
-	autoDelete   bool
-	localField   string
-	foreignField string
+	model          ModelInfo
+	relatedModel   ModelInfo
+	relationType   string
+	autoCreate     bool
+	autoUpdate     bool
+	autoDelete     bool
+	localField     string
+	foreignField   string
+	inversingField string
 }
 
 // Ensure relation implements Relation.
@@ -753,7 +741,7 @@ func buildRelation(field field) Relation {
 	// Read information from tag into relation.
 	relation.readTag()
 
-	return attr
+	return relation
 }
 
 func (r *relation) readTag() {
@@ -763,20 +751,20 @@ func (r *relation) readTag() {
 	}
 
 	if tag.m2m {
-		r.typ = RELATION_TYPE_M2M
-		if tag.m2mName {
+		r.relationType = RELATION_TYPE_M2M
+		if tag.m2mName != "" {
 			r.backendName = tag.m2mName
 		}
 	} else if tag.hasMany {
-		r.typ = RELATION_TYPE_HAS_MANY
+		r.relationType = RELATION_TYPE_HAS_MANY
 	} else if tag.hasOne {
-		r.typ = RELATION_TYPE_HAS_ONE
+		r.relationType = RELATION_TYPE_HAS_ONE
 	} else if tag.belongsTo {
-		r.typ = RELATION_TYPE_BELONGS_TO
+		r.relationType = RELATION_TYPE_BELONGS_TO
 	}
 
 	r.localField = tag.localField
-	r.foreignField = tag.foreingField
+	r.foreignField = tag.foreignField
 
 	r.autoCreate = tag.autoCreate
 	r.autoUpdate = tag.autoUpdate
@@ -816,17 +804,17 @@ func (r *relation) SetRelatedModel(val ModelInfo) {
  * Type.
  */
 
-func (r *relation) Type() string {
-	return r.typ
+func (r *relation) RelationType() string {
+	return r.relationType
 }
 
-func (r *relation) SetType(val string) {
-	r.typ = val
+func (r *relation) SetRelationType(val string) {
+	r.relationType = val
 }
 
 func (f *relation) IsMany() bool {
-	if f.typ != "" {
-		return f.typ == RELATION_TYPE_HAS_MANY || f.typ == RELATION_TYPE_M2M
+	if f.relationType != "" {
+		return f.relationType == RELATION_TYPE_HAS_MANY || f.relationType == RELATION_TYPE_M2M
 	} else {
 		// Type not determined yet.
 		// Assume that a many relationship requires a slice.

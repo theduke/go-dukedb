@@ -785,6 +785,7 @@ func InterfaceToTypedSlice(itemType reflect.Type, slice []interface{}) interface
 	return newSlice.Interface()
 }
 
+/*
 // Convert a slice of type interface{} to a []Model slice.
 func InterfaceToModelSlice(slice interface{}) ([]Model, error) {
 	reflSlice := reflect.ValueOf(slice)
@@ -827,6 +828,8 @@ func ModelToInterfaceSlice(models []Model) []interface{} {
 
 	return slice
 }
+
+*/
 
 /**
  * Sorter for sorting structs by field.
@@ -1016,8 +1019,8 @@ func MustGetModelCollection(model interface{}) string {
 	return collection
 }
 
-func GetModelID(info *ModelInfo, m interface{}) (interface{}, apperror.Error) {
-	val, err := GetStructFieldValue(m, info.PkField)
+func GetModelID(info ModelInfo, m interface{}) (interface{}, apperror.Error) {
+	val, err := GetStructFieldValue(m, info.PkAttribute().Name())
 	if err != nil {
 		return nil, err
 	}
@@ -1122,20 +1125,12 @@ func SetStructModelField(obj interface{}, fieldName string, models []interface{}
 	return nil
 }
 
-func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
+func ModelToMap(info ModelInfo, model interface{}, forBackend, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
 	data := make(map[string]interface{})
 
-	for fieldName := range info.FieldInfo {
-		field := info.FieldInfo[fieldName]
-		if field.Ignore {
-			continue
-		}
-
-		if field.IsRelation() && !includeRelations {
-			continue
-		}
-
-		// Todo: avoid repeated work by GetStructFieldValue()
+	// Handle regular fields.
+	for fieldName, field := range info.Attributes() {
+		// TODO: avoid repeated work by GetStructFieldValue()
 		val, err := GetStructFieldValue(model, fieldName)
 		if err != nil {
 			return nil, err
@@ -1144,23 +1139,28 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, in
 		// Ignore zero values if specified.
 		// Note that numeric fields are not included, since 0 is their zero value.
 		// Also, primary keys are ignored.
-		if field.IgnoreIfZero && !field.PrimaryKey && !IsNumericKind(field.Type.Kind()) && IsZero(val) {
+		if field.IgnoreIfZero() && !field.IsPrimaryKey() && !IsNumericKind(field.Type().Kind()) && IsZero(val) {
 			continue
 		}
 
 		reflVal := reflect.ValueOf(val)
 		if reflVal.IsValid() {
 			reflType := reflVal.Type()
+
+			// When creating the map for the backend,
+			// dereference pointers.
 			if reflType.Kind() == reflect.Ptr && forBackend {
 				if reflVal.IsNil() {
+					// Set val to nil if pointer is nil.
 					val = nil
 				} else {
+					// Pointer not nil, so dereference it.
 					val = reflVal.Elem().Interface()
 				}
 			}
 		}
 
-		if forBackend && field.Marshal {
+		if forBackend && field.BackendMarshal() {
 			if IsZero(val) {
 				continue
 			}
@@ -1169,7 +1169,7 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, in
 			if err != nil {
 				return nil, &apperror.Err{
 					Code:    "marshal_error",
-					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.Name, fieldName, err),
+					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.StructName(), fieldName, err),
 				}
 			}
 			val = js
@@ -1177,18 +1177,29 @@ func ModelToMap(info *ModelInfo, model interface{}, forBackend, marshal bool, in
 
 		name := fieldName
 		if forBackend {
-			name = field.BackendName
+			name = field.BackendName()
 		} else if marshal {
-			name = field.MarshalName
+			name = field.MarshalName()
 		}
 
 		data[name] = val
 	}
 
+	if !includeRelations {
+		return data, nil
+	}
+
+	// TODO: write code for including relation data!
+	/*
+		for fieldName, relation := range info.Relations() {
+
+		}
+	*/
+
 	return data, nil
 }
 
-func ModelToJson(info *ModelInfo, model Model, includeRelations bool) ([]byte, apperror.Error) {
+func ModelToJson(info ModelInfo, model interface{}, includeRelations bool) ([]byte, apperror.Error) {
 	if info == nil {
 		var err apperror.Error
 		info, err = BuildModelInfo(model)
@@ -1214,7 +1225,7 @@ func ModelToJson(info *ModelInfo, model Model, includeRelations bool) ([]byte, a
 }
 
 // ModelFieldDiff compares two models and returns a list of fields that are different.
-func ModelFieldDiff(info *ModelInfo, m1, m2 interface{}) []string {
+func ModelFieldDiff(info ModelInfo, m1, m2 interface{}) []string {
 	m1Data, _ := ModelToMap(info, m1, false, false, false)
 	m2Data, _ := ModelToMap(info, m2, false, false, false)
 
@@ -1230,7 +1241,7 @@ func ModelFieldDiff(info *ModelInfo, m1, m2 interface{}) []string {
 	return diff
 }
 
-func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{}, apperror.Error) {
+func BuildModelFromMap(info ModelInfo, data map[string]interface{}) (interface{}, apperror.Error) {
 	model, err := NewStruct(info.Item)
 	if err != nil {
 		return nil, &apperror.Err{
@@ -1250,7 +1261,7 @@ func BuildModelFromMap(info *ModelInfo, data map[string]interface{}) (interface{
 	return model, nil
 }
 
-func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]interface{}) apperror.Error {
+func UpdateModelFromData(info ModelInfo, obj interface{}, data map[string]interface{}) apperror.Error {
 	ptrVal := reflect.ValueOf(obj)
 	if ptrVal.Type().Kind() != reflect.Ptr {
 		return &apperror.Err{
@@ -1266,27 +1277,14 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 
 	for key := range data {
 		// Try to find field by backend name.
-		fieldInfo := info.FieldByBackendName(key)
-		if fieldInfo == nil {
-			// Does not match a backend name.
-			// Try to find field by marshal name to support unmarshalled data.
-			fieldInfo = info.FieldByMarshalName(key)
-
-			// If key does not match a marshal name either, just assume it to be a plain struct field name.
-			if fieldInfo == nil {
-				fieldInfo = info.FieldInfo[key]
-			}
-		}
+		fieldInfo := info.FindAttribute(key)
 
 		if fieldInfo == nil {
-			continue
-		}
-		if fieldInfo.Ignore {
 			continue
 		}
 
 		// Need special handling for point type.
-		if strings.HasSuffix(fieldInfo.StructType, "go-dukedb.Point") {
+		if strings.HasSuffix(fieldInfo.StructName(), "go-dukedb.Point") {
 			p := new(Point)
 			_, err := fmt.Sscanf(data[key].(string), "(%f,%f)", &p.Lat, &p.Lon)
 			if err != nil {
@@ -1295,7 +1293,7 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 					Message: fmt.Sprintf("Could not parse point specification: %v", data[key]),
 				}
 			}
-			if fieldInfo.Type.Kind() == reflect.Ptr {
+			if fieldInfo.Type().Kind() == reflect.Ptr {
 				data[key] = p
 			} else {
 				data[key] = *p
@@ -1303,7 +1301,7 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 		}
 
 		// Handle marshalled fields.
-		if fieldInfo.Marshal {
+		if fieldInfo.BackendMarshal() {
 			var marshalledData []byte
 
 			if strVal, ok := data[key].(string); ok {
@@ -1317,7 +1315,7 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 			}
 
 			if marshalledData != nil {
-				itemVal := reflect.New(fieldInfo.Type)
+				itemVal := reflect.New(fieldInfo.Type())
 				itemPtr := itemVal.Interface()
 
 				if err := json.Unmarshal(marshalledData, itemPtr); err != nil {
@@ -1332,13 +1330,13 @@ func UpdateModelFromData(info *ModelInfo, obj interface{}, data map[string]inter
 			}
 		}
 
-		SetModelValue(fieldInfo, val.FieldByName(fieldInfo.Name), data[key])
+		SetModelValue(fieldInfo, val.FieldByName(fieldInfo.Name()), data[key])
 	}
 
 	return nil
 }
 
-func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
+func SetModelValue(info Field, field reflect.Value, rawValue interface{}) {
 	val := reflect.ValueOf(rawValue)
 
 	// Skip invalid.
@@ -1347,7 +1345,7 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	}
 
 	valKind := val.Type().Kind()
-	fieldKind := info.Type.Kind()
+	fieldKind := info.Type().Kind()
 
 	// For the same type, skip complicated comparison/casting.
 	if valKind == fieldKind {
@@ -1356,7 +1354,7 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	}
 
 	// Try to convert using Convert() method.
-	convertedVal, err := Convert(rawValue, info.Type)
+	convertedVal, err := Convert(rawValue, info.Type())
 	if err == nil {
 		field.Set(reflect.ValueOf(convertedVal))
 		return
@@ -1366,8 +1364,8 @@ func SetModelValue(info *FieldInfo, field reflect.Value, rawValue interface{}) {
 	panic(fmt.Sprintf("Could not convert type %v (%v) to type %v: %v", valKind, rawValue, fieldKind, err))
 }
 
-func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (interface{}, apperror.Error) {
-	slice := NewSlice(info.Item)
+func BuildModelSliceFromMap(info ModelInfo, items []map[string]interface{}) (interface{}, apperror.Error) {
+	slice := NewSlice(info.Item())
 
 	sliceVal := reflect.ValueOf(slice)
 
@@ -1386,23 +1384,16 @@ func BuildModelSliceFromMap(info *ModelInfo, items []map[string]interface{}) (in
  * Model hooks.
  */
 
-func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
+func ValidateModel(info ModelInfo, m interface{}) apperror.Error {
 	val := reflect.ValueOf(m).Elem()
 
-	for fieldName, fieldInfo := range info.FieldInfo {
+	for fieldName, fieldInfo := range info.Attributes() {
 
 		// Fill in default values.
-		if fieldInfo.Default != "" {
+		if fieldInfo.DefaultValue() != nil {
 			fieldVal := val.FieldByName(fieldName)
 			if IsZero(fieldVal.Interface()) {
-				convertedVal, err := Convert(fieldInfo.Default, fieldInfo.Type)
-				if err != nil {
-					msg := fmt.Sprintf("Could not convert the default value '%v' for field %v to type %v",
-						fieldInfo.Default, fieldName, fieldInfo.Type.Kind())
-					return apperror.Wrap(err, "default_value_conversion_error", msg)
-				}
-
-				fieldVal.Set(reflect.ValueOf(convertedVal))
+				fieldVal.Set(reflect.ValueOf(fieldInfo.DefaultValue()))
 			}
 		}
 
@@ -1410,7 +1401,7 @@ func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
 		// not zero.
 		// Note: numeric fields will not be checked, since their zero value is "0", which might
 		// be a valid field value.
-		if fieldInfo.NotNull && !fieldInfo.PrimaryKey && !IsNumericKind(fieldInfo.Type.Kind()) {
+		if fieldInfo.IsRequired() && !fieldInfo.IsPrimaryKey() && !IsNumericKind(fieldInfo.Type().Kind()) {
 			fieldVal := val.FieldByName(fieldName)
 
 			if IsZero(fieldVal.Interface()) {
@@ -1420,30 +1411,30 @@ func ValidateModel(info *ModelInfo, m interface{}) apperror.Error {
 					Public:  true,
 				}
 			}
-		} else if fieldInfo.Min > 0 || fieldInfo.Max > 0 {
+		} else if fieldInfo.Min() > 0 || fieldInfo.Max() > 0 {
 			// Either min or max is set, so check length.
 			fieldVal := val.FieldByName(fieldName)
 
 			var length float64
 
-			if fieldInfo.Type.Kind() == reflect.String {
+			if fieldInfo.Type().Kind() == reflect.String {
 				length = float64(fieldVal.Len())
-			} else if IsNumericKind(fieldInfo.Type.Kind()) {
+			} else if IsNumericKind(fieldInfo.Type().Kind()) {
 				length = fieldVal.Convert(reflect.TypeOf(float64(0))).Interface().(float64)
 			} else {
 				// Not string or numeric, so can't check.
 				continue
 			}
 
-			if fieldInfo.Min > 0 && length < fieldInfo.Min {
+			if fieldInfo.Min() > 0 && length < fieldInfo.Min() {
 				return &apperror.Err{
 					Code:    "shorter_than_min_length",
-					Message: fmt.Sprintf("The field %v is shorter than the minimum length %v", fieldName, fieldInfo.Min),
+					Message: fmt.Sprintf("The field %v is shorter than the minimum length %v", fieldName, fieldInfo.Min()),
 				}
-			} else if fieldInfo.Max > 0 && length > fieldInfo.Max {
+			} else if fieldInfo.Max() > 0 && length > fieldInfo.Max() {
 				return &apperror.Err{
 					Code:    "longer_than_max_length",
-					Message: fmt.Sprintf("The field %v is longer than the maximum length %v", fieldName, fieldInfo.Max),
+					Message: fmt.Sprintf("The field %v is longer than the maximum length %v", fieldName, fieldInfo.Max()),
 				}
 			}
 		}
