@@ -855,6 +855,10 @@ func FieldValExpr(field, value Expression) FieldValueExpression {
 	}
 }
 
+func FieldVal(field string, value interface{}, typ ...reflect.Type) FieldValueExpression {
+	return FieldValExpr(IdExpr(field), ValueExpr(value, typ...))
+}
+
 /**
  * FunctionExpression.
  */

@@ -395,9 +395,6 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 
 		// Join fields.
 		for _, join := range e.Joins() {
-			if join.RelationType() != RELATION_TYPE_HAS_ONE {
-				continue
-			}
 			t.W(", ")
 			lastIndex := len(join.Fields()) - 1
 			for i, field := range join.Fields() {
@@ -459,7 +456,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		}
 
 	case JoinStatement:
-		name := e.RelationName()
+		name := e.Name()
 		if name == "" {
 			name = e.Collection()
 		}

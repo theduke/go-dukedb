@@ -13,14 +13,13 @@ import (
  * CreateCollectionStatement
  * RenameCollectionStatement
  * DropCollectionStatement
- * AddCollectionFieldStatement
- * RenameCollectionFieldStatement
- * DropCollectionFieldStatement
+ * CreateFieldStatement
+ * RenameFieldStatement
+ * DropFieldStatement
  * CreateIndexStatement
  * DropIndexStatement
  * SelectStatement
  * JoinStatement
- * MutationStatement
  * CreateStatement
  * UpdateStatement
 * /
@@ -672,14 +671,10 @@ func (s *selectStmt) Joins() []JoinStatement {
 }
 
 func (s *selectStmt) SetJoins(joins []JoinStatement) {
-	for _, join := range joins {
-		join.SetParentSelect(s)
-	}
 	s.joins = joins
 }
 
 func (s *selectStmt) AddJoin(join JoinStatement) {
-	join.SetParentSelect(s)
 	s.joins = append(s.joins, join)
 }
 
@@ -694,18 +689,6 @@ func (s *selectStmt) GetJoin(field string) JoinStatement {
 	parts := strings.Split(field, ".")
 	if len(parts) > 1 {
 		field = parts[0]
-	}
-
-	for _, join := range s.joins {
-		if join.RelationName() == field {
-			if len(parts) > 1 {
-				// Nested join, call GetJoin again on found join query.
-				return join.GetJoin(strings.Join(parts[1:], "."))
-			} else {
-				// Not nested, just return the join.
-				return join
-			}
-		}
 	}
 
 	// Join not found, return nil.
@@ -767,17 +750,6 @@ var JOIN_MAP map[string]string = map[string]string{
 type JoinStatement interface {
 	SelectStatement
 
-	// The parent select statement.
-	ParentSelect() SelectStatement
-	SetParentSelect(stmt SelectStatement)
-
-	RelationName() string
-	SetRelationName(name string)
-
-	// One of the RELATION_TPYE_* constants.
-	RelationType() string
-	SetRelationType(typ string)
-
 	// One of the JOIN_* constants.
 	JoinType() string
 	SetJoinType(typ string)
@@ -794,13 +766,6 @@ type JoinStatement interface {
 type joinStmt struct {
 	selectStmt
 
-	parent SelectStatement
-
-	// One of the RELATION_TYPE_* constants.
-	relationType string
-
-	relationName string
-
 	// One of the JOIN_* constants.
 	joinType string
 
@@ -812,30 +777,6 @@ var _ JoinStatement = (*joinStmt)(nil)
 
 func (*joinStmt) Type() string {
 	return "join"
-}
-
-func (s *joinStmt) ParentSelect() SelectStatement {
-	return s.parent
-}
-
-func (s *joinStmt) SetParentSelect(stmt SelectStatement) {
-	s.parent = stmt
-}
-
-func (s *joinStmt) RelationName() string {
-	return s.relationName
-}
-
-func (s *joinStmt) SetRelationName(n string) {
-	s.relationName = n
-}
-
-func (s *joinStmt) RelationType() string {
-	return s.relationType
-}
-
-func (s *joinStmt) SetRelationType(typ string) {
-	s.relationType = typ
 }
 
 func (s *joinStmt) JoinType() string {
@@ -867,10 +808,6 @@ func (e *joinStmt) Validate() apperror.Error {
 		return apperror.New("unknown_join_type", fmt.Sprintf("Unknown join type %v", e.joinType))
 	} else if e.joinCondition == nil {
 		return apperror.New("no_join_condition_expression")
-	} else if e.relationType == "" {
-		return apperror.New("no_relation_type")
-	} else if _, ok := RELATION_TYPE_MAP[e.relationType]; !ok {
-		return apperror.New("unknown_relation_type", fmt.Sprintf("Unknown relation type %v", e.relationType))
 	}
 	return nil
 }
@@ -881,12 +818,13 @@ func (s *joinStmt) GetIdentifiers() []string {
 	return ids
 }
 
-func JoinStmt(relationName, joinType string, joinCondition Expression) JoinStatement {
-	return &joinStmt{
-		relationName:  relationName,
+func JoinStmt(collection, joinType string, joinCondition Expression) JoinStatement {
+	s := &joinStmt{
 		joinType:      joinType,
 		joinCondition: joinCondition,
 	}
+	s.collection = collection
+	return s
 }
 
 /**
