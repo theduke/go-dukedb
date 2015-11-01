@@ -518,15 +518,15 @@ func (info *ModelInfo) ModelToMap(model interface{}, forBackend, marshal bool, i
 	return data, nil
 }
 
-func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]FieldValueExpression, apperror.Error) {
-	exprs := make([]FieldValueExpression, 0)
+func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]*FieldValueExpr, apperror.Error) {
+	exprs := make([]*FieldValueExpr, 0)
 
 	data, err := info.ModelToMap(model, true, false, false)
 	if err != nil {
 		return nil, err
 	}
 	for name, val := range data {
-		exprs = append(exprs, FieldVal(name, val))
+		exprs = append(exprs, NewFieldVal(name, val))
 	}
 
 	return exprs, nil
@@ -534,18 +534,18 @@ func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]FieldValueE
 
 func (info *ModelInfo) ModelFilter(model interface{}) Expression {
 	id := reflector.Reflect(model).MustStruct().UFieldValue(info.PkAttribute().Name())
-	f := FieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id)
+	f := NewFieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id)
 	return f
 }
 
-func (info *ModelInfo) ModelSelect(model interface{}) SelectStatement {
-	stmt := SelectStmt(info.BackendName())
+func (info *ModelInfo) ModelSelect(model interface{}) *SelectStmt {
+	stmt := NewSelectStmt(info.BackendName())
 	stmt.FilterAnd(info.ModelFilter(model))
 	return stmt
 }
 
-func (info *ModelInfo) ModelDeleteStmt(model interface{}) *DeleteStatement {
-	stmt := DeleteStmt(info.BackendName(), info.ModelSelect(model))
+func (info *ModelInfo) ModelDeleteStmt(model interface{}) *DeleteStmt {
+	stmt := NewDeleteStmt(info.BackendName(), info.ModelSelect(model))
 	return stmt
 }
 

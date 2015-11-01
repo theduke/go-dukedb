@@ -290,9 +290,9 @@ func setExpressionIdentifier(expr interface{}, forCollection, identifier string)
 		setExpressionIdentifier(nested.Expression(), forCollection, identifier)
 	} else if filter, ok := expr.(FilterExpression); ok {
 		setExpressionIdentifier(filter.Field(), forCollection, identifier)
-	} else if id, ok := expr.(IdentifierExpression); ok {
+	} else if id, ok := expr.(*IdentifierExpr); ok {
 		id.SetIdentifier(identifier)
-	} else if id, ok := expr.(CollectionFieldIdentifierExpression); ok {
+	} else if id, ok := expr.(*ColFieldIdentifierExpr); ok {
 		if id.Collection() == forCollection {
 			id.SetField(identifier)
 		}
@@ -322,7 +322,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 	case "$lte":
 		return Lte("", "placeholder", data), nil
 	case "$nin":
-		return NotExpr(In("", "placeholder", data)), nil
+		return NewNotExpr(In("", "placeholder", data)), nil
 	}
 
 	if name == "$nor" {
@@ -339,7 +339,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 			return nil, &apperror.Err{Code: "invalid_or_data"}
 		}
 
-		or := OrExpr()
+		or := NewOrExpr()
 		for _, rawClause := range orClauses {
 			clause, ok := rawClause.(map[string]interface{})
 			if !ok {
@@ -360,7 +360,7 @@ func parseQueryFilter(name string, data interface{}, query *Query) (Expression, 
 		// Nested dict with multipe AND clauses.
 
 		// Build an AND filter.
-		and := AndExpr()
+		and := NewAndExpr()
 		for key := range nestedData {
 			filter, err := parseQueryFilter(key, nestedData[key], query)
 			if err != nil {

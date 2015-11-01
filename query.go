@@ -24,7 +24,7 @@ type Query struct {
 	models []interface{}
 
 	// statement is the SelectStatement.
-	statement SelectStatement
+	statement *SelectStmt
 
 	joins map[string]*RelationQuery
 
@@ -46,11 +46,11 @@ func q(backend Backend, collection string) *Query {
 	return &Query{
 		backend:    backend,
 		collection: collection,
-		statement:  SelectStmt(info.BackendName()),
+		statement:  NewSelectStmt(info.BackendName()),
 	}
 }
 
-func (q *Query) GetStatement() SelectStatement {
+func (q *Query) GetStatement() *SelectStmt {
 	return q.statement
 }
 
@@ -153,7 +153,7 @@ func (q *Query) Field(fields ...string) *Query {
 		// Use a named expression to allow join queries without extra work.
 		// Named queries will construct a SQL query with '"collection"."field" AS "collection.field"'
 		fieldName := q.modelInfo.BackendName() + "." + field
-		expr := NameExpr(fieldName, ColFieldIdExpr(q.modelInfo.BackendName(), field))
+		expr := NameExpr(fieldName, NewColFieldIdExpr(q.modelInfo.BackendName(), field))
 		q.statement.AddField(expr)
 	}
 	return q
@@ -191,7 +191,7 @@ func (q *Query) Sort(field string, asc bool) *Query {
 				field = attr.BackendName()
 				// Even if the attr is not found, we do not return, but
 			}
-			q.statement.AddSort(SortExpr(ColFieldIdExpr(join.modelInfo.BackendName(), field), asc))
+			q.statement.AddSort(NewSortExpr(NewColFieldIdExpr(join.modelInfo.BackendName(), field), asc))
 			return q
 		}
 	}
@@ -206,16 +206,16 @@ func (q *Query) Sort(field string, asc bool) *Query {
 	}
 	// Even if the field was not found, still add it to the query, because
 	// maybe the backend still supports it.
-	q.statement.AddSort(SortExpr(ColFieldIdExpr(q.GetCollection(), field), asc))
+	q.statement.AddSort(NewSortExpr(NewColFieldIdExpr(q.GetCollection(), field), asc))
 	return q
 }
 
-func (q *Query) SortExpr(expr SortExpression) *Query {
+func (q *Query) SortExpr(expr *SortExpr) *Query {
 	q.statement.AddSort(expr)
 	return q
 }
 
-func (q *Query) SetSorts(exprs []SortExpression) *Query {
+func (q *Query) SetSorts(exprs []*SortExpr) *Query {
 	q.statement.SetSorts(exprs)
 	return q
 }
@@ -240,7 +240,7 @@ func (q *Query) SetFilters(expressions ...Expression) *Query {
 		q.statement.SetFilter(expressions[0])
 	} else {
 		// Multiple filters, so create an AndExpr wrapper.
-		q.statement.SetFilter(AndExpr(expressions...))
+		q.statement.SetFilter(NewAndExpr(expressions...))
 	}
 	return q
 }
@@ -251,7 +251,7 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 		q.addError("unknown_operator", fmt.Sprintf("Unknown operator %v", condition))
 		return q
 	}
-	return q.FilterExpr(FieldValFilter(q.modelInfo.BackendName(), field, operator, val))
+	return q.FilterExpr(NewFieldValFilter(q.modelInfo.BackendName(), field, operator, val))
 }
 
 func (q *Query) Filter(field string, val interface{}) *Query {
@@ -282,7 +282,7 @@ func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.OrExpr(FieldValFilter(q.GetCollection(), field, operator, val))
+	return q.OrExpr(NewFieldValFilter(q.GetCollection(), field, operator, val))
 }
 
 func (q *Query) Or(field string, val interface{}) *Query {
@@ -291,13 +291,13 @@ func (q *Query) Or(field string, val interface{}) *Query {
 
 func (q *Query) NotExpr(filters ...Expression) *Query {
 	for _, f := range filters {
-		q.FilterExpr(NotExpr(f))
+		q.FilterExpr(NewNotExpr(f))
 	}
 	return q
 }
 
 func (q *Query) Not(field string, val interface{}) *Query {
-	return q.FilterExpr(NotExpr(Eq(q.GetCollection(), field, val)))
+	return q.FilterExpr(NewNotExpr(Eq(q.GetCollection(), field, val)))
 }
 
 func (q *Query) NotCond(field string, condition string, val interface{}) *Query {
@@ -305,7 +305,7 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 	if operator == "" {
 		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
 	}
-	return q.NotExpr(FieldValFilter(q.GetCollection(), field, operator, val))
+	return q.NotExpr(NewFieldValFilter(q.GetCollection(), field, operator, val))
 }
 
 /**
@@ -473,11 +473,11 @@ type RelationQuery struct {
 
 	baseQuery    *Query
 	relationName string
-	statement    JoinStatement
+	statement    *JoinStmt
 }
 
 func RelQ(q *Query, name, backendName string, joinType string) *RelationQuery {
-	stmt := JoinStmt(backendName, joinType, nil)
+	stmt := NewJoinStmt(backendName, joinType, nil)
 	stmt.SetName(name)
 
 	relQ := &RelationQuery{
@@ -496,10 +496,10 @@ func RelQ(q *Query, name, backendName string, joinType string) *RelationQuery {
 // Create a new relation query that connects two collections via two of their
 // fields. These will normally be the respective primary keys.
 func RelQCustom(q *Query, collection, joinKey, foreignKey, typ string) *RelationQuery {
-	joinCondition := FilterExpr(
-		ColFieldIdExpr(q.GetCollection(), joinKey),
+	joinCondition := NewFilter(
+		NewColFieldIdExpr(q.GetCollection(), joinKey),
 		OPERATOR_EQ,
-		ColFieldIdExpr(collection, foreignKey))
+		NewColFieldIdExpr(collection, foreignKey))
 
 	return RelQExpr(q, collection, typ, joinCondition)
 }
@@ -507,7 +507,7 @@ func RelQCustom(q *Query, collection, joinKey, foreignKey, typ string) *Relation
 // RelQExpr creates a new relation query for a collection with an arbitrary
 // join condition.
 func RelQExpr(q *Query, collection, typ string, joinCondition Expression) *RelationQuery {
-	stmt := JoinStmt(collection, typ, joinCondition)
+	stmt := NewJoinStmt(collection, typ, joinCondition)
 
 	relQ := &RelationQuery{
 		baseQuery: q,
@@ -524,7 +524,7 @@ func RelQExpr(q *Query, collection, typ string, joinCondition Expression) *Relat
 
 // RelationQuery specific methods.
 
-func (q *RelationQuery) GetStatement() JoinStatement {
+func (q *RelationQuery) GetStatement() *JoinStmt {
 	return q.statement
 }
 
@@ -682,12 +682,12 @@ func (q *RelationQuery) Sort(name string, asc bool) *RelationQuery {
 	return q
 }
 
-func (q *RelationQuery) SortExpr(expr SortExpression) *RelationQuery {
+func (q *RelationQuery) SortExpr(expr *SortExpr) *RelationQuery {
 	q.Query.SortExpr(expr)
 	return q
 }
 
-func (q *RelationQuery) SetSorts(exprs []SortExpression) *RelationQuery {
+func (q *RelationQuery) SetSorts(exprs []*SortExpr) *RelationQuery {
 	q.Query.SetSorts(exprs)
 	return q
 }

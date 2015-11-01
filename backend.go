@@ -205,6 +205,18 @@ func (b *BaseBackend) NewModelSlice(collection string) (interface{}, apperror.Er
 	return info.NewSlice().Interface(), nil
 }
 
+func (b *BaseBackend) ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return nil, err
+	}
+	data, err := info.ModelToMap(model, false, marshal, includeRelations)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // Relationship stuff.
 func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Error) {
 	baseQ := q.GetBaseQuery()
@@ -272,7 +284,7 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 			if len(filterArgs) > 1 {
 				operator = OPERATOR_IN
 			}
-			filter := FieldValFilter(relatedInfo.BackendName(), relation.ForeignField(), operator, filterArgs)
+			filter := NewFieldValFilter(relatedInfo.BackendName(), relation.ForeignField(), operator, filterArgs)
 			resultQuery.FilterExpr(filter)
 		} else {
 			// No basemodels, so do a native join!
@@ -302,7 +314,7 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 			if len(filterArgs) > 1 {
 				operator = OPERATOR_IN
 			}
-			filter := FieldValFilter(relation.BackendName(), relation.LocalField(), operator, filterArgs)
+			filter := NewFieldValFilter(relation.BackendName(), relation.LocalField(), operator, filterArgs)
 			resultQuery.FilterExpr(filter)
 		}
 	}
@@ -622,7 +634,7 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	}
 
 	// Build a CreateStatement.
-	stmt := CreateStmt(info.BackendName(), values)
+	stmt := NewCreateStmt(info.BackendName(), values)
 
 	if _, err := b.backend.Exec(stmt); err != nil {
 		return err
@@ -682,7 +694,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	}
 
 	// Build a update statement.
-	stmt := UpdateStmt(info.BackendName(), values, info.ModelSelect(model))
+	stmt := NewUpdateStmt(info.BackendName(), values, info.ModelSelect(model))
 
 	if _, err := b.backend.Exec(stmt); err != nil {
 		return err
