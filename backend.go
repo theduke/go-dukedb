@@ -13,9 +13,10 @@ import (
 )
 
 type BaseM2MCollection struct {
-	Backend Backend
-	Name    string
-	Items   []interface{}
+	modelInfo *ModelInfo
+	Backend   Backend
+	Name      string
+	Items     []interface{}
 }
 
 func (c BaseM2MCollection) Count() int {
@@ -23,7 +24,7 @@ func (c BaseM2MCollection) Count() int {
 }
 
 func (c BaseM2MCollection) Contains(model interface{}) bool {
-	return c.GetByID(c.Backend.MustModelID(model)) != nil
+	return c.GetByID(c.modelInfo.MustDetermineModelId(model)) != nil
 }
 
 func (c BaseM2MCollection) ContainsID(id interface{}) bool {
@@ -36,7 +37,7 @@ func (c BaseM2MCollection) All() []interface{} {
 
 func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
 	for _, item := range c.Items {
-		if c.Backend.MustModelID(item) == id {
+		if c.modelInfo.MustDetermineModelId(item) == id {
 			return item
 		}
 	}
@@ -202,74 +203,6 @@ func (b *BaseBackend) NewModelSlice(collection string) (interface{}, apperror.Er
 	}
 
 	return info.NewSlice().Interface(), nil
-}
-
-// Determine the ID for a model.
-func (b *BaseBackend) ModelID(model interface{}) (interface{}, apperror.Error) {
-	if hook, ok := model.(ModelIDGetterHook); ok {
-		return hook.GetID(), nil
-	}
-
-	info, err := b.InfoForModel(model)
-	if err != nil {
-		return nil, err
-	}
-
-	return info.DetermineModelId(model), nil
-}
-
-// Determine the ID for a model, and panic on error.
-func (b *BaseBackend) MustModelID(model interface{}) interface{} {
-	id, err := b.ModelID(model)
-	if err != nil {
-		panic(fmt.Sprintf("Could not determine ID for model: %v", err))
-	}
-
-	return id
-}
-
-// Determine the  ID for a model and convert it to string.
-func (b *BaseBackend) ModelStrID(model interface{}) (string, apperror.Error) {
-	if hook, ok := model.(ModelStrIDGetterHook); ok {
-		return hook.GetStrID(), nil
-	}
-
-	id, err := b.ModelID(model)
-	if err != nil {
-		return "", err
-	}
-
-	if reflector.Reflect(id).IsZero() {
-		return "", nil
-	}
-
-	return fmt.Sprint(id), nil
-}
-
-// Determine the  ID for a model and convert it to string. Panics on error.
-func (b *BaseBackend) MustModelStrID(model interface{}) string {
-	id, err := b.ModelStrID(model)
-	if err != nil {
-		panic(fmt.Sprintf("Could not determine id for model: %v", err))
-	}
-
-	return id
-}
-
-// Set the id field on a model.
-func (b *BaseBackend) SetModelID(model interface{}, id interface{}) apperror.Error {
-	info, err := b.InfoForModel(model)
-	if err != nil {
-		return err
-	}
-	return info.SetModelId(model, id)
-}
-
-// Set the id  field on a model and panic on error.
-func (b *BaseBackend) MustSetModelID(model interface{}, id interface{}) {
-	if err := b.SetModelID(model, id); err != nil {
-		panic(err.GetMessage())
-	}
 }
 
 // Relationship stuff.
@@ -717,7 +650,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	}
 
 	// Verify that ID is not zero.
-	id, err := b.ModelID(model)
+	id, err := info.DetermineModelId(model)
 	if err != nil {
 		return err
 	}
@@ -770,16 +703,21 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	return nil
 }
 
-func BackendSave(b Backend, model interface{}) apperror.Error {
-	id, err := b.ModelStrID(model)
+func (b *BaseBackend) Save(model interface{}) apperror.Error {
+	info, err := b.InfoForModel(model)
 	if err != nil {
 		return err
 	}
 
-	if id == "" {
-		return b.Create(model)
+	hasId, err := info.ModelHasId(model)
+	if err != nil {
+		return err
+	}
+
+	if hasId {
+		return b.backend.Create(model)
 	} else {
-		return b.Update(model)
+		return b.backend.Update(model)
 	}
 }
 
@@ -790,13 +728,11 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	}
 
 	// Verify that ID is not zero.
-	id, err := b.ModelID(model)
+	hasId, err := info.ModelHasId(model)
 	if err != nil {
 		return err
-	}
-	if reflector.Reflect(id).IsZero() {
-		return apperror.New("cant_delete_model_without_id",
-			fmt.Sprintf("Trying to delete model %v with zero id", info.Collection))
+	} else if !hasId {
+		return apperror.New("model_without_id", "Can't delete a model without an id.")
 	}
 
 	if err := CallModelHook(b.backend, model, "BeforeDelete"); err != nil {

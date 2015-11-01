@@ -102,24 +102,6 @@ type Backend interface {
 	// Build a slice of a model for model Collection.
 	NewModelSlice(collection string) interface{}
 
-	// Determine the ID for a model.
-	ModelID(model interface{}) (interface{}, apperror.Error)
-
-	// Determine the ID for a model, and panic on error.
-	MustModelID(model interface{}) interface{}
-
-	// Set the id field on a model.
-	SetModelID(model interface{}, id interface{}) apperror.Error
-
-	// Set the id  field on a model and panic on error.
-	MustSetModelID(model interface{}, id interface{})
-
-	// Determine the  ID for a model and convert it to string.
-	ModelStrID(model interface{}) (string, apperror.Error)
-
-	// Determine the  ID for a model and convert it to string. Panics on error.
-	MustModelStrID(model interface{}) string
-
 	// ModelToMap converts a model to a map.
 	ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error)
 

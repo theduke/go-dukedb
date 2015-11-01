@@ -373,12 +373,60 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 	return nil
 }
 
-func (info *ModelInfo) DetermineModelId(model interface{}) interface{} {
+func (info *ModelInfo) DetermineModelId(model interface{}) (interface{}, apperror.Error) {
+	if hook, ok := model.(ModelIDGetterHook); ok {
+		return hook.GetID(), nil
+	}
+
 	r, err := reflector.Reflect(model).Struct()
 	if err != nil {
-		return nil
+		return nil, apperror.Wrap(err, "invalid_model")
 	}
-	return r.Field(info.PkAttribute().Name()).Interface()
+	return r.Field(info.PkAttribute().Name()).Interface(), nil
+}
+
+func (info *ModelInfo) MustDetermineModelId(model interface{}) interface{} {
+	id, err := info.DetermineModelId(model)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+// Determine the  ID for a model and convert it to string.
+func (info *ModelInfo) DetermineModelStrId(model interface{}) (string, apperror.Error) {
+	if hook, ok := model.(ModelStrIDGetterHook); ok {
+		return hook.GetStrID(), nil
+	}
+
+	id, err := info.DetermineModelId(model)
+	if err != nil {
+		return "", err
+	}
+
+	if reflector.Reflect(id).IsZero() {
+		return "", nil
+	}
+
+	return fmt.Sprint(id), nil
+}
+
+// Determine the  ID for a model and convert it to string. Panics on error.
+func (info *ModelInfo) MustDetermineModelStrId(model interface{}) string {
+	id, err := info.DetermineModelStrId(model)
+	if err != nil {
+		panic(fmt.Sprintf("Could not determine id for model: %v", err))
+	}
+
+	return id
+}
+
+func (info *ModelInfo) ModelHasId(model interface{}) (bool, apperror.Error) {
+	id, err := info.DetermineModelStrId(model)
+	if err != nil {
+		return false, err
+	}
+	return id != "", nil
 }
 
 func (info *ModelInfo) SetModelId(model, id interface{}) apperror.Error {
