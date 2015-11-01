@@ -5,7 +5,33 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/theduke/go-apperror"
+	. "github.com/theduke/go-dukedb/expressions"
 )
+
+const (
+	HOOK_BEFORE_CREATE = "before_create"
+	HOOK_AFTER_CREATE  = "after_create"
+	HOOK_BEFORE_UPDATE = "before_update"
+	HOOK_AFTER_UPDATE  = "after_update"
+	HOOK_BEFORE_DELETE = "before_delete"
+	HOOK_AFTER_DELETE  = "after_delete"
+)
+
+type Cursor interface {
+	// Count returns the total number of items.
+	Count() int
+
+	// HasNext returns true if a next item exists.
+	HasNext() bool
+
+	// Retrieve the next result item.
+	//
+	// As with other query methods, you may pass a pointer to the model
+	// that should be filled with the data.
+	Next(targetModel ...interface{}) (interface{}, apperror.Error)
+}
+
+type JoinAssigner func(objs, joinedModels []interface{}, joinQ *RelationQuery)
 
 type Backend interface {
 	// Returns the name of the backend.
@@ -13,50 +39,68 @@ type Backend interface {
 	SetName(name string)
 
 	// Returns true if the backend uses string IDs like MongoDB.
-	HasStringIDs() bool
+	HasStringIds() bool
 
-	GetDebug() bool
+	// Debug returns true if debugging is enabled.
+	Debug() bool
+
+	// SetDebug enables or disables the debug mode.
+	// In debug mode, all queries will be logged, and some methods will panic
+	// instead of returning an error.
 	SetDebug(bool)
 
-	GetLogger() *logrus.Logger
+	Logger() *logrus.Logger
 	SetLogger(*logrus.Logger)
 
 	// Duplicate the backend.
-	Copy() Backend
+	Clone() Backend
 
-	// Register a model type.
-	RegisterModel(model interface{})
+	/**
+	 * Hooks.
+	 */
 
-	// Get the model info for a collection.
-	ModelInfo(collection string) *ModelInfo
+	// RegisterHook registers a hook function that will be called for a model.
+	// The available hooks are: (before/after)_(create/update/delete).
+	RegisterHook(hook string, handler HookHandler)
 
-	// Retrieve the ModelInfo for a model.
-	InfoForModel(model interface{}) (*ModelInfo, apperror.Error)
-	InfoForCollection(collection string) (*ModelInfo, apperror.Error)
+	// GetHooks returns a slice with all hooks of the hook type.
+	GetHooks(hook string) []HookHandler
 
-	SetModelInfo(collection string, info *ModelInfo)
+	/**
+	 * ModelInfo and registration.
+	 */
 
 	// Get model info for all registered collections.
-	AllModelInfo() map[string]*ModelInfo
-	SetAllModelInfo(map[string]*ModelInfo)
+	ModelInfos() ModelInfos
 
-	// Determine if a model collection is registered with the backend.
+	// Get the model info for a collection.
+	// Returns nil if not found.
+	ModelInfo(collection string) *ModelInfo
+
+	// Retrieve the ModelInfo for a model instance.
+	InfoForModel(model interface{}) (*ModelInfo, apperror.Error)
+
+	// Determine if a collection is registered with the backend.
 	HasCollection(collection string) bool
 
-	ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error)
+	// RegisterModel registers a model type witht the backend.
+	//
+	// The first argument must be a pointer to an instance of the model,
+	// for example: &MyModel{}
+	RegisterModel(model interface{})
 
-	// After all models have been registered, build the relationship
-	// info.
-	BuildRelationshipInfo()
+	// Build analyzes the relationships between models and does all neccessary
+	// preparations for using the backend.
+	//
+	// Build MUST be called AFTER all models have been registered with
+	// backend.RegisterModel() and BEFORE the backend is used.
+	Build()
 
-	// Get a new struct instance to a model struct based on model Collection.
-	CreateModel(collection string) (interface{}, apperror.Error)
-
-	// Same as CreateModel(), but panics on error.
-	MustCreateModel(collection string) interface{}
+	// NewModel creates a new model instance of the specified collection.
+	NewModel(collection string) interface{}
 
 	// Build a slice of a model for model Collection.
-	CreateModelSlice(collection string) (interface{}, apperror.Error)
+	NewModelSlice(collection string) interface{}
 
 	// Determine the ID for a model.
 	ModelID(model interface{}) (interface{}, apperror.Error)
@@ -76,18 +120,66 @@ type Backend interface {
 	// Determine the  ID for a model and convert it to string. Panics on error.
 	MustModelStrID(model interface{}) string
 
+	// ModelToMap converts a model to a map.
+	ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error)
+
+	/**
+	 * Statements.
+	 */
+
+	// Exec executes an expression.
+	// The result will be nil for all statements except a SelectStatement.
+	// For a select statement, it should hold either the found models, or
+	// a map[string]interface{}.
+	Exec(statement Expression) (result interface{}, err apperror.Error)
+
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)
-	CreateCollection(collection string) apperror.Error
-	CreateCollections(collection ...string) apperror.Error
+	CreateCollection(collection ...string) apperror.Error
+
+	// RenameCollection renames a collection to a new name.
+	RenameCollection(collection, newName string) apperror.Error
 	DropCollection(collection string) apperror.Error
 	DropAllCollections() apperror.Error
 
-	// Create a new query for a collection.
-	Q(collection string) *Query
+	// CreateField creates the specified field on a collection.
+	// Note that the field must already be on the model struct, or an error
+	// will be returned.
+	//
+	// If you need to create arbitrary fields that are not on your model,
+	// use Exec() with a CreateFieldStatement.
+	CreateField(collection, field string) apperror.Error
 
-	// Perform a query.
+	// RenameField renames a collection field.
+	// The model must already have the new name, or an error will be returned.
+	RenameField(collection, field, newName string) apperror.Error
+
+	// DropField drops a field from a collection.
+	// The field must be the backend name.
+	DropField(collection, field string) apperror.Error
+
+	// Create an index for fields on a collection.
+	// If you need more complex indexes, use Exec() with a CreateIndexStatement.
+	CreateIndex(collection, indexName string, fields ...string) apperror.Error
+
+	// Drop an index.
+	DropIndex(indexName string) apperror.Error
+
+	// Create a new query.
+	//
+	// Can be used with different signatures:
+	// backend.Q("collection_name") => Get a query for a collection.
+	// backend.Q("collection_name", ID) => Get a query for a model in a collection. ID must be numeric or string.
+	// backend.Q(&myModel) => Get a query for a model.
+	Q(...interface{}) *Query
+
+	// Executes a query, fetches ALL results and returns them.
+	// If you expect a large number of results, you should use QueryCursor(), which
+	// returns an iterable cursor.
 	Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error)
+
+	// Executes a query, and returns a cursor.
+	QueryCursor(q *Query) (Cursor, apperror.Error)
 
 	// Perform a query and get the first result.
 	QueryOne(q *Query, targetModel ...interface{}) (interface{}, apperror.Error)
@@ -104,12 +196,15 @@ type Backend interface {
 	// Find a model  in a collection based on a field value.
 	FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error)
 
-	// Count by a query.
+	// Retrieve the count for a query.
 	Count(*Query) (int, apperror.Error)
+
+	// Pluck retrieves all fields specified on a query, and returns them as a
+	// map.
+	Pluck(q *Query) (map[string]interface{}, apperror.Error)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
-	// The third skip parameter is true when the base query does not contain any results.
 	BuildRelationQuery(q *RelationQuery) (*Query, apperror.Error)
 
 	// Retrieve a query for a relationship.
@@ -119,23 +214,27 @@ type Backend interface {
 	// to add/remove/clear items in the m2m relationship.
 	M2M(model interface{}, name string) (M2MCollection, apperror.Error)
 
-	// Convenience methods.
+	// C(r)UD methods.
 
+	// Create creates the model in the backend.
 	Create(model interface{}) apperror.Error
+
+	// Update a model.
 	Update(model interface{}) apperror.Error
+
+	// Save is a convenience method that created the passed model if it
+	// is new, or updates it otherwise.
 	Save(model interface{}) apperror.Error
+
+	// Update a model by values in a map.
+	// Note that this will only update the backend, not the model instance.
 	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
+
+	// Delete deletes the model from the backend.
 	Delete(model interface{}) apperror.Error
+
+	// DeleteQ deletes all models that match the passed query.
 	DeleteQ(*Query) apperror.Error
-
-	// Hooks.
-
-	// RegisterHook registers a hook function that will be called for a model.
-	// The available hooks are: (before/after)_(create/update/delete).
-	RegisterHook(hook string, handler HookHandler)
-
-	// GetHooks returns a slice with all hooks of the hook type.
-	GetHooks(hook string) []HookHandler
 }
 
 type HookHandler func(backend Backend, obj interface{}) apperror.Error

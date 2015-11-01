@@ -2,7 +2,6 @@ package dukedb
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/theduke/go-apperror"
 )
@@ -532,7 +531,6 @@ type SelectStatement interface {
 
 	Joins() []JoinStatement
 	SetJoins(joins []JoinStatement)
-	GetJoin(name string) JoinStatement
 	AddJoin(join JoinStatement)
 }
 
@@ -676,23 +674,6 @@ func (s *selectStmt) SetJoins(joins []JoinStatement) {
 
 func (s *selectStmt) AddJoin(join JoinStatement) {
 	s.joins = append(s.joins, join)
-}
-
-// Retrieve a join query for the specified field.
-// Supports nested Joins like 'Parent.Tags'.
-func (s *selectStmt) GetJoin(field string) JoinStatement {
-	// Avoid extra work if no joins are set.
-	if s.joins == nil || len(s.joins) == 0 {
-		return nil
-	}
-
-	parts := strings.Split(field, ".")
-	if len(parts) > 1 {
-		field = parts[0]
-	}
-
-	// Join not found, return nil.
-	return nil
 }
 
 func (e *selectStmt) Validate() apperror.Error {
@@ -951,4 +932,49 @@ func UpdateStmt(collection string, values []FieldValueExpression, selectStmt Sel
 	stmt.values = values
 	stmt.selectStmt = selectStmt
 	return stmt
+}
+
+type DeleteStatement struct {
+	collection string
+	selectStmt SelectStatement
+}
+
+func DeleteStmt(collection string, selectStmt SelectStatement) *DeleteStatement {
+	return &DeleteStatement{
+		collection: collection,
+		selectStmt: selectStmt,
+	}
+}
+
+func (d *DeleteStatement) Type() string {
+	return "delete"
+}
+
+func (d *DeleteStatement) Validate() apperror.Error {
+	if d.collection == "" {
+		return apperror.New("empty_collection")
+	} else if d.selectStmt == nil {
+		return apperror.New("empty_select_stmt")
+	}
+	return nil
+}
+
+func (d *DeleteStatement) GetIdentifiers() []string {
+	return nil
+}
+
+func (d *DeleteStatement) Collection() string {
+	return d.collection
+}
+
+func (d *DeleteStatement) SetCollection(collection string) {
+	d.collection = collection
+}
+
+func (d *DeleteStatement) SelectStmt() SelectStatement {
+	return d.selectStmt
+}
+
+func (d *DeleteStatement) SetSelectStmt(x SelectStatement) {
+	d.selectStmt = x
 }

@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/theduke/go-reflector"
 )
 
 func PickRandom(slice interface{}) interface{} {
@@ -28,8 +30,7 @@ func PickRandomSubSlice(slice interface{}, count int) interface{} {
 
 	itemCount := sliceVal.Len()
 
-	newSlice := NewSlice(sliceVal.Type().Elem())
-	newSliceVal := reflect.ValueOf(newSlice)
+	newSliceVal := reflector.New(sliceVal.Type().Elem()).Elem().Value()
 
 	used := make(map[int]bool)
 

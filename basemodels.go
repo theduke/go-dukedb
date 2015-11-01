@@ -3,6 +3,8 @@ package dukedb
 import (
 	"strconv"
 	"time"
+
+	"github.com/theduke/go-reflector"
 )
 
 /**
@@ -24,7 +26,7 @@ func (m *StrIDModel) SetID(id interface{}) error {
 		return nil
 	}
 
-	convertedId, err := Convert(id, "")
+	convertedId, err := reflector.Reflect(id).ConvertTo("")
 	if err != nil {
 		return err
 	}
@@ -60,7 +62,7 @@ func (m *IntIDModel) SetID(id interface{}) error {
 		return nil
 	}
 
-	convertedId, err := Convert(id, uint64(0))
+	convertedId, err := reflector.Reflect(id).ConvertTo(uint64(0))
 	if err != nil {
 		return err
 	}

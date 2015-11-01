@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/theduke/go-reflector"
+
 	"github.com/theduke/go-apperror"
+	. "github.com/theduke/go-dukedb/expressions"
 )
 
 /**
  * Query parser functions.
  */
 
-func ParseJsonQuery(js []byte) (*Query, apperror.Error) {
+func ParseJsonQuery(backend Backend, js []byte) (*Query, apperror.Error) {
 	var data map[string]interface{}
 	if err := json.Unmarshal(js, &data); err != nil {
 		return nil, &apperror.Err{
@@ -22,7 +25,7 @@ func ParseJsonQuery(js []byte) (*Query, apperror.Error) {
 		}
 	}
 
-	return ParseQuery(data)
+	return ParseQuery(backend, data)
 }
 
 // Build a database query based a map[string]interface{} data structure
@@ -56,7 +59,7 @@ func ParseJsonQuery(js []byte) (*Query, apperror.Error) {
 //  offset: 20
 // }
 //
-func ParseQuery(data map[string]interface{}) (*Query, apperror.Error) {
+func ParseQuery(backend Backend, data map[string]interface{}) (*Query, apperror.Error) {
 	if data == nil {
 		return nil, apperror.New("empty_query_data")
 	}
@@ -66,7 +69,7 @@ func ParseQuery(data map[string]interface{}) (*Query, apperror.Error) {
 		return nil, apperror.New("no_collection", "Query must contain a 'collection' key.")
 	}
 
-	q := Q(collection)
+	q := q(backend, collection)
 
 	// First, Handle joins so query and field specification parsing can use
 	// join info.
@@ -210,25 +213,25 @@ func ParseQuery(data map[string]interface{}) (*Query, apperror.Error) {
 
 	// Handle limit.
 	if rawLimit, ok := data["limit"]; ok {
-		if limit, err := NumericToInt64(rawLimit); err != nil {
+		if limit, err := reflector.Reflect(rawLimit).ConvertTo(0); err != nil {
 			return nil, &apperror.Err{
 				Code:    "limit_non_numeric",
 				Message: "Limit must be a number",
 			}
 		} else {
-			q.Limit(int(limit))
+			q.Limit(limit.(int))
 		}
 	}
 
 	// Handle offset.
 	if rawOffset, ok := data["offset"]; ok {
-		if offset, err := NumericToInt64(rawOffset); err != nil {
+		if offset, err := reflector.Reflect(rawOffset).ConvertTo(0); err != nil {
 			return nil, &apperror.Err{
 				Code:    "offset_non_numeric",
 				Message: "Offset must be a number",
 			}
 		} else {
-			q.Offset(int(offset))
+			q.Offset(offset.(int))
 		}
 	}
 

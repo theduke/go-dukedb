@@ -17,39 +17,6 @@ import (
  * Field.
  */
 
-type Field interface {
-	// Name returns the struct field name.
-	Name() string
-
-	// Type returns the type of the struct field.
-	Type() reflect.Type
-
-	// StructType returns the full path of the struct that this model field contains.
-	// Empty for non-struct fields.
-	// Example: "time.Time".
-	StructType() reflect.Type
-	SetStructType(typ reflect.Type)
-
-	StructName() string
-	SetStructName(typ string)
-
-	// EmbeddedIn returns the qualified path(eg "time.Time") of the embedded
-	// struct that this field is contained in.
-	// If the field is on the main struct, returns an emtpy string.
-	EmbeddingStructName() string
-	SetEmbeddingStructName(name string)
-
-	// BackendName returns the name of the field that should be used by the
-	// backend.
-	BackendName() string
-	SetBackendName(name string)
-
-	// MarshalName returns the name that should be used when marshalling this
-	// field.
-	MarshalName() string
-	SetMarshalName(name string)
-}
-
 /**
  * fieldTag.
  */
@@ -95,7 +62,7 @@ type fieldTag struct {
  * field.
  */
 
-type field struct {
+type Field struct {
 	// tag contains the parsed tag data.
 	tag *fieldTag
 
@@ -108,11 +75,8 @@ type field struct {
 	marshalName         string
 }
 
-// Ensure field implements Field.
-var _ Field = (*field)(nil)
-
 // Parse the information contained in a 'db:"xxx"' field tag.
-func (f *field) parseTag(tagContent string) apperror.Error {
+func (f *Field) parseTag(tagContent string) apperror.Error {
 	tag := &fieldTag{}
 	f.tag = tag
 
@@ -272,11 +236,11 @@ func (f *field) parseTag(tagContent string) apperror.Error {
  * Name.
  */
 
-func (f *field) Name() string {
+func (f *Field) Name() string {
 	return f.name
 }
 
-func (f *field) SetName(val string) {
+func (f *Field) SetName(val string) {
 	f.name = val
 }
 
@@ -284,11 +248,11 @@ func (f *field) SetName(val string) {
  * Type.
  */
 
-func (f *field) Type() reflect.Type {
+func (f *Field) Type() reflect.Type {
 	return f.typ
 }
 
-func (f *field) SetType(val reflect.Type) {
+func (f *Field) SetType(val reflect.Type) {
 	f.typ = val
 }
 
@@ -296,11 +260,11 @@ func (f *field) SetType(val reflect.Type) {
  * StructType.
  */
 
-func (f *field) StructType() reflect.Type {
+func (f *Field) StructType() reflect.Type {
 	return f.structType
 }
 
-func (f *field) SetStructType(x reflect.Type) {
+func (f *Field) SetStructType(x reflect.Type) {
 	f.structType = x
 }
 
@@ -308,11 +272,11 @@ func (f *field) SetStructType(x reflect.Type) {
  * StructName.
  */
 
-func (f *field) StructName() string {
+func (f *Field) StructName() string {
 	return f.structName
 }
 
-func (f *field) SetStructName(val string) {
+func (f *Field) SetStructName(val string) {
 	f.structName = val
 }
 
@@ -320,11 +284,11 @@ func (f *field) SetStructName(val string) {
  * EmbeddingStructName.
  */
 
-func (f *field) EmbeddingStructName() string {
+func (f *Field) EmbeddingStructName() string {
 	return f.embeddingStructName
 }
 
-func (f *field) SetEmbeddingStructName(val string) {
+func (f *Field) SetEmbeddingStructName(val string) {
 	f.embeddingStructName = val
 }
 
@@ -332,11 +296,11 @@ func (f *field) SetEmbeddingStructName(val string) {
  * BackendName.
  */
 
-func (f *field) BackendName() string {
+func (f *Field) BackendName() string {
 	return f.backendName
 }
 
-func (f *field) SetBackendName(val string) {
+func (f *Field) SetBackendName(val string) {
 	f.backendName = val
 }
 
@@ -344,11 +308,11 @@ func (f *field) SetBackendName(val string) {
  * MarshalName.
  */
 
-func (f *field) MarshalName() string {
+func (f *Field) MarshalName() string {
 	return f.marshalName
 }
 
-func (f *field) SetMarshalName(val string) {
+func (f *Field) SetMarshalName(val string) {
 	f.marshalName = val
 }
 
@@ -356,66 +320,9 @@ func (f *field) SetMarshalName(val string) {
  * Attribute.
  */
 
-type Attribute interface {
-	Field
-
-	// BackendType returns the backend field type to be used.
-	BackendType() string
-	SetBackendType(typ string)
-
-	// BackendMarshal returns true if the field should be stored in the backend
-	// in a marshalled form (usually JSON).
-	BackendMarshal() bool
-	SetBackendMarshal(flag bool)
-
-	// BackendEmbed returns true if the field should be embedded in the
-	// backend.
-	//
-	// Only document based databases like MongoDB support embedding.
-	BackendEmbed() bool
-	SetBackendEmbed(flag bool)
-
-	IsPrimaryKey() bool
-	SetIsPrimaryKey(flag bool)
-
-	AutoIncrement() bool
-	SetAutoIncrement(flag bool)
-
-	IsUnique() bool
-	SetIsUnique(flag bool)
-
-	IsUniqueWith() (fieldNames []string)
-	SetIsUniqueWith(fieldNames []string)
-
-	IsRequired() bool
-	SetIsRequired(flag bool)
-
-	IgnoreIfZero() bool
-	SetIgnoreIfZero(flag bool)
-
-	IsIndex() bool
-	SetIsIndex(flag bool)
-
-	IndexName() string
-	SetIndexName(name string)
-
-	Min() float64
-	SetMin(min float64)
-
-	Max() float64
-	SetMax(max float64)
-
-	DefaultValue() interface{}
-	SetDefaultValue(val interface{})
-}
-
-/**
- * attribute.
- */
-
-type attribute struct {
+type Attribute struct {
 	// Embed field.
-	field
+	Field
 
 	backendType    string
 	backendMarshal bool
@@ -433,13 +340,10 @@ type attribute struct {
 	defaultValue   interface{}
 }
 
-// Ensure attribute implements Attribute.
-var _ Attribute = (*attribute)(nil)
-
 // buildAttribute builds up an attribute based on a field.
-func buildAttribute(field field) Attribute {
-	attr := &attribute{}
-	attr.field = field
+func buildAttribute(field *Field) *Attribute {
+	attr := &Attribute{}
+	attr.Field = *field
 
 	// Check if any relationship data has been specified on the tag.
 	// If so, an error must be returned.
@@ -454,7 +358,7 @@ func buildAttribute(field field) Attribute {
 	return attr
 }
 
-func (a *attribute) readTag() {
+func (a *Attribute) readTag() {
 	tag := a.tag
 	if tag == nil {
 		panic("Can't call readTag() when tag is not set.")
@@ -474,17 +378,21 @@ func (a *attribute) readTag() {
 
 	a.backendMarshal = tag.marshal
 	a.backendEmbed = tag.embed
+
+	if a.backendMarshal || a.backendEmbed {
+		a.ignoreIfZero = true
+	}
 }
 
 /**
  * BackendType.
  */
 
-func (a *attribute) BackendType() string {
+func (a *Attribute) BackendType() string {
 	return a.backendType
 }
 
-func (a *attribute) SetBackendType(val string) {
+func (a *Attribute) SetBackendType(val string) {
 	a.backendType = val
 }
 
@@ -492,11 +400,11 @@ func (a *attribute) SetBackendType(val string) {
  * BackendMarshal.
  */
 
-func (a *attribute) BackendMarshal() bool {
+func (a *Attribute) BackendMarshal() bool {
 	return a.backendMarshal
 }
 
-func (a *attribute) SetBackendMarshal(val bool) {
+func (a *Attribute) SetBackendMarshal(val bool) {
 	a.backendMarshal = val
 }
 
@@ -504,11 +412,11 @@ func (a *attribute) SetBackendMarshal(val bool) {
  * BackendEmbed.
  */
 
-func (a *attribute) BackendEmbed() bool {
+func (a *Attribute) BackendEmbed() bool {
 	return a.backendEmbed
 }
 
-func (a *attribute) SetBackendEmbed(val bool) {
+func (a *Attribute) SetBackendEmbed(val bool) {
 	a.backendEmbed = val
 }
 
@@ -516,11 +424,11 @@ func (a *attribute) SetBackendEmbed(val bool) {
  * IsPrimaryKey.
  */
 
-func (a *attribute) IsPrimaryKey() bool {
+func (a *Attribute) IsPrimaryKey() bool {
 	return a.isPrimaryKey
 }
 
-func (a *attribute) SetIsPrimaryKey(val bool) {
+func (a *Attribute) SetIsPrimaryKey(val bool) {
 	a.isPrimaryKey = val
 }
 
@@ -528,11 +436,11 @@ func (a *attribute) SetIsPrimaryKey(val bool) {
  * AutoIncrement.
  */
 
-func (a *attribute) AutoIncrement() bool {
+func (a *Attribute) AutoIncrement() bool {
 	return a.autoIncrement
 }
 
-func (a *attribute) SetAutoIncrement(val bool) {
+func (a *Attribute) SetAutoIncrement(val bool) {
 	a.autoIncrement = val
 }
 
@@ -540,11 +448,11 @@ func (a *attribute) SetAutoIncrement(val bool) {
  * IsUnique.
  */
 
-func (a *attribute) IsUnique() bool {
+func (a *Attribute) IsUnique() bool {
 	return a.isUnique
 }
 
-func (a *attribute) SetIsUnique(val bool) {
+func (a *Attribute) SetIsUnique(val bool) {
 	a.isUnique = val
 }
 
@@ -552,11 +460,11 @@ func (a *attribute) SetIsUnique(val bool) {
  * IsUniqueWith.
  */
 
-func (a *attribute) IsUniqueWith() []string {
+func (a *Attribute) IsUniqueWith() []string {
 	return a.isUniqueWith
 }
 
-func (a *attribute) SetIsUniqueWith(val []string) {
+func (a *Attribute) SetIsUniqueWith(val []string) {
 	a.isUniqueWith = val
 }
 
@@ -564,11 +472,11 @@ func (a *attribute) SetIsUniqueWith(val []string) {
  * IsRequired.
  */
 
-func (a *attribute) IsRequired() bool {
+func (a *Attribute) IsRequired() bool {
 	return a.isRequired
 }
 
-func (a *attribute) SetIsRequired(val bool) {
+func (a *Attribute) SetIsRequired(val bool) {
 	a.isRequired = val
 }
 
@@ -576,11 +484,11 @@ func (a *attribute) SetIsRequired(val bool) {
  * IgnoreIfZero.
  */
 
-func (a *attribute) IgnoreIfZero() bool {
+func (a *Attribute) IgnoreIfZero() bool {
 	return a.ignoreIfZero
 }
 
-func (a *attribute) SetIgnoreIfZero(val bool) {
+func (a *Attribute) SetIgnoreIfZero(val bool) {
 	a.ignoreIfZero = val
 }
 
@@ -588,11 +496,11 @@ func (a *attribute) SetIgnoreIfZero(val bool) {
  * IsIndex.
  */
 
-func (a *attribute) IsIndex() bool {
+func (a *Attribute) IsIndex() bool {
 	return a.isIndex
 }
 
-func (a *attribute) SetIsIndex(x bool) {
+func (a *Attribute) SetIsIndex(x bool) {
 	a.isIndex = x
 }
 
@@ -600,11 +508,11 @@ func (a *attribute) SetIsIndex(x bool) {
  * IndexName.
  */
 
-func (a *attribute) IndexName() string {
+func (a *Attribute) IndexName() string {
 	return a.indexName
 }
 
-func (a *attribute) SetIndexName(val string) {
+func (a *Attribute) SetIndexName(val string) {
 	a.indexName = val
 }
 
@@ -612,11 +520,11 @@ func (a *attribute) SetIndexName(val string) {
  * Min.
  */
 
-func (a *attribute) Min() float64 {
+func (a *Attribute) Min() float64 {
 	return a.min
 }
 
-func (a *attribute) SetMin(val float64) {
+func (a *Attribute) SetMin(val float64) {
 	a.min = val
 }
 
@@ -624,11 +532,11 @@ func (a *attribute) SetMin(val float64) {
  * Max.
  */
 
-func (a *attribute) Max() float64 {
+func (a *Attribute) Max() float64 {
 	return a.max
 }
 
-func (a *attribute) SetMax(val float64) {
+func (a *Attribute) SetMax(val float64) {
 	a.max = val
 }
 
@@ -636,11 +544,11 @@ func (a *attribute) SetMax(val float64) {
  * DefaultValue.
  */
 
-func (a *attribute) DefaultValue() interface{} {
+func (a *Attribute) DefaultValue() interface{} {
 	return a.defaultValue
 }
 
-func (a *attribute) SetDefaultValue(val interface{}) {
+func (a *Attribute) SetDefaultValue(val interface{}) {
 	a.defaultValue = val
 }
 
@@ -662,65 +570,12 @@ var RELATION_TYPE_MAP map[string]bool = map[string]bool{
 	"m2m":        true,
 }
 
-type Relation interface {
+type Relation struct {
+	// Embed field.
 	Field
 
-	// ModelInfo returns the model info for the model that contains the relation.
-	Model() ModelInfo
-	SetModel(m ModelInfo)
-
-	RelatedModel() ModelInfo
-	SetRelatedModel(m ModelInfo)
-
-	// Type returns the type of the relation as one of the
-	// RELATION_TYPE* constants.
-	RelationType() string
-	SetRelationType(typ string)
-
-	// RelationIsMany returns true if the relation type is has_many or m2m.
-	IsMany() bool
-
-	InversingField() string
-	SetInversingField(name string)
-
-	// AutoCreate returns true if the relationship should be automatically
-	// created when the parent model is created.
-	AutoCreate() bool
-	SetAutoCreate(flag bool)
-
-	// AutoUpdate returns true if the relation should be updated
-	// automatically when the parent model is updated.
-	AutoUpdate() bool
-	SetAutoUpdate(flag bool)
-
-	// AutoDelete returns true if the relation should be deleted
-	// automatically when the parent model is deleted.
-	AutoDelete() bool
-	SetAutoDelete(flag bool)
-
-	// LocalField returns the name of the structs key field to use for
-	// relations.
-	//
-	// This usually is the primary key.
-	LocalField() string
-	SetLocalField(field string)
-
-	// ForeignField returns the field name of the related struct to be used
-	// for the relation.
-	ForeignField() string
-	SetForeignField(field string)
-}
-
-/**
- * relation.
- */
-
-type relation struct {
-	// Embed field.
-	field
-
-	model          ModelInfo
-	relatedModel   ModelInfo
+	model          *ModelInfo
+	relatedModel   *ModelInfo
 	relationType   string
 	autoCreate     bool
 	autoUpdate     bool
@@ -730,13 +585,10 @@ type relation struct {
 	inversingField string
 }
 
-// Ensure relation implements Relation.
-var _ Relation = (*relation)(nil)
-
 // buildRelation builds up a relation based on a field.
-func buildRelation(field field) Relation {
-	relation := &relation{}
-	relation.field = field
+func buildRelation(field *Field) *Relation {
+	relation := &Relation{}
+	relation.Field = *field
 
 	// Read information from tag into relation.
 	relation.readTag()
@@ -744,7 +596,7 @@ func buildRelation(field field) Relation {
 	return relation
 }
 
-func (r *relation) readTag() {
+func (r *Relation) readTag() {
 	tag := r.tag
 	if tag == nil {
 		panic("Can't call relation.readTag() if tag is not set")
@@ -780,11 +632,11 @@ func (r *relation) readTag() {
  * Model.
  */
 
-func (r *relation) Model() ModelInfo {
+func (r *Relation) Model() *ModelInfo {
 	return r.model
 }
 
-func (r *relation) SetModel(val ModelInfo) {
+func (r *Relation) SetModel(val *ModelInfo) {
 	r.model = val
 }
 
@@ -792,11 +644,11 @@ func (r *relation) SetModel(val ModelInfo) {
  * RelatedModel.
  */
 
-func (r *relation) RelatedModel() ModelInfo {
+func (r *Relation) RelatedModel() *ModelInfo {
 	return r.relatedModel
 }
 
-func (r *relation) SetRelatedModel(val ModelInfo) {
+func (r *Relation) SetRelatedModel(val *ModelInfo) {
 	r.relatedModel = val
 }
 
@@ -804,15 +656,15 @@ func (r *relation) SetRelatedModel(val ModelInfo) {
  * Type.
  */
 
-func (r *relation) RelationType() string {
+func (r *Relation) RelationType() string {
 	return r.relationType
 }
 
-func (r *relation) SetRelationType(val string) {
+func (r *Relation) SetRelationType(val string) {
 	r.relationType = val
 }
 
-func (f *relation) IsMany() bool {
+func (f *Relation) IsMany() bool {
 	if f.relationType != "" {
 		return f.relationType == RELATION_TYPE_HAS_MANY || f.relationType == RELATION_TYPE_M2M
 	} else {
@@ -826,11 +678,11 @@ func (f *relation) IsMany() bool {
  * InversingField.
  */
 
-func (r *relation) InversingField() string {
+func (r *Relation) InversingField() string {
 	return r.inversingField
 }
 
-func (r *relation) SetInversingField(val string) {
+func (r *Relation) SetInversingField(val string) {
 	r.inversingField = val
 }
 
@@ -838,11 +690,11 @@ func (r *relation) SetInversingField(val string) {
  * AutoCreate.
  */
 
-func (r *relation) AutoCreate() bool {
+func (r *Relation) AutoCreate() bool {
 	return r.autoCreate
 }
 
-func (r *relation) SetAutoCreate(val bool) {
+func (r *Relation) SetAutoCreate(val bool) {
 	r.autoCreate = val
 }
 
@@ -850,11 +702,11 @@ func (r *relation) SetAutoCreate(val bool) {
  * AutoUpdate.
  */
 
-func (r *relation) AutoUpdate() bool {
+func (r *Relation) AutoUpdate() bool {
 	return r.autoUpdate
 }
 
-func (r *relation) SetAutoUpdate(val bool) {
+func (r *Relation) SetAutoUpdate(val bool) {
 	r.autoUpdate = val
 }
 
@@ -862,11 +714,11 @@ func (r *relation) SetAutoUpdate(val bool) {
  * AutoDelete.
  */
 
-func (r *relation) AutoDelete() bool {
+func (r *Relation) AutoDelete() bool {
 	return r.autoDelete
 }
 
-func (r *relation) SetAutoDelete(val bool) {
+func (r *Relation) SetAutoDelete(val bool) {
 	r.autoDelete = val
 }
 
@@ -874,11 +726,11 @@ func (r *relation) SetAutoDelete(val bool) {
  * LocalField.
  */
 
-func (r *relation) LocalField() string {
+func (r *Relation) LocalField() string {
 	return r.localField
 }
 
-func (r *relation) SetLocalField(val string) {
+func (r *Relation) SetLocalField(val string) {
 	r.localField = val
 }
 
@@ -886,10 +738,10 @@ func (r *relation) SetLocalField(val string) {
  * ForeignField.
  */
 
-func (r *relation) ForeignField() string {
+func (r *Relation) ForeignField() string {
 	return r.foreignField
 }
 
-func (r *relation) SetForeignField(val string) {
+func (r *Relation) SetForeignField(val string) {
 	r.foreignField = val
 }

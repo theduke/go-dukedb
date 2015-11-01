@@ -1,69 +1,29 @@
 package dukedb
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/theduke/go-reflector"
+
 	"github.com/theduke/go-apperror"
+	. "github.com/theduke/go-dukedb/expressions"
 )
 
 /**
  * ModelInfo.
  */
 
-// ModelInfo describes a model managed by DukeDB.
-type ModelInfo interface {
-	// Item returns an instance of the model struct.
-	Item() interface{}
-
-	// StructName returns the unqualified struct name.
-	StructName() string
-
-	// FullStructName returns the fully qualified name of the struct.
-	// For example: mypackage.MyModel.
-	FullStructName() string
-
-	// Collection returns the collection name.
-	Collection() string
-
-	// BackendName returns the collection name used by the backend.
-	BackendName() string
-
-	// MarshalName returns the model name to be used when marshalling.
-	MarshalName() string
-
-	/**
-	 * Fields.
-	 */
-
-	Attributes() map[string]Attribute
-	SetAttributes(attrs map[string]Attribute)
-
-	Attribute(name string) Attribute
-	HasAttribute(name string) bool
-	PkAttribute() Attribute
-	// FindAttribute tries to find a field by checking its Name, BackendName and MarshalName.
-	FindAttribute(name string) Attribute
-
-	/**
-	 * Relations.
-	 */
-
-	Relations() map[string]Relation
-	SetRelations(rels map[string]Relation)
-
-	Relation(name string) Relation
-	HasRelation(name string) bool
-	FindRelation(name string) Relation
-}
-
 /**
  * modelInfo.
  */
 
-type modelInfo struct {
-	item           interface{}
+type ModelInfo struct {
+	item      interface{}
+	reflector *reflector.StructReflector
+
 	structName     string
 	fullStructName string
 	collection     string
@@ -73,21 +33,29 @@ type modelInfo struct {
 	// transientFields store fields which are not determined to be either
 	// a relationship or an attribute.
 	// See buildFields() for an explanation.
-	transientFields map[string]*field
+	transientFields map[string]*Field
 
-	attributes map[string]Attribute
-	relations  map[string]Relation
+	attributes map[string]*Attribute
+	relations  map[string]*Relation
+}
+
+/**
+ * StructReflector.
+ */
+
+func (m *ModelInfo) Reflector() *reflector.StructReflector {
+	return m.reflector
 }
 
 /**
  * Item.
  */
 
-func (m *modelInfo) Item() interface{} {
+func (m *ModelInfo) Item() interface{} {
 	return m.item
 }
 
-func (m *modelInfo) SetItem(val interface{}) {
+func (m *ModelInfo) SetItem(val interface{}) {
 	m.item = val
 }
 
@@ -95,11 +63,11 @@ func (m *modelInfo) SetItem(val interface{}) {
  * StructName.
  */
 
-func (m *modelInfo) StructName() string {
+func (m *ModelInfo) StructName() string {
 	return m.structName
 }
 
-func (m *modelInfo) SetStructName(val string) {
+func (m *ModelInfo) SetStructName(val string) {
 	m.structName = val
 }
 
@@ -107,11 +75,11 @@ func (m *modelInfo) SetStructName(val string) {
  * FullStructName.
  */
 
-func (m *modelInfo) FullStructName() string {
+func (m *ModelInfo) FullStructName() string {
 	return m.fullStructName
 }
 
-func (m *modelInfo) SetFullStructName(val string) {
+func (m *ModelInfo) SetFullStructName(val string) {
 	m.fullStructName = val
 }
 
@@ -119,11 +87,11 @@ func (m *modelInfo) SetFullStructName(val string) {
  * Collection.
  */
 
-func (m *modelInfo) Collection() string {
+func (m *ModelInfo) Collection() string {
 	return m.collection
 }
 
-func (m *modelInfo) SetCollection(val string) {
+func (m *ModelInfo) SetCollection(val string) {
 	m.collection = val
 }
 
@@ -131,11 +99,11 @@ func (m *modelInfo) SetCollection(val string) {
  * BackendName.
  */
 
-func (m *modelInfo) BackendName() string {
+func (m *ModelInfo) BackendName() string {
 	return m.backendName
 }
 
-func (m *modelInfo) SetBackendName(val string) {
+func (m *ModelInfo) SetBackendName(val string) {
 	m.backendName = val
 }
 
@@ -143,36 +111,44 @@ func (m *modelInfo) SetBackendName(val string) {
  * MarshalName.
  */
 
-func (m *modelInfo) MarshalName() string {
+func (m *ModelInfo) MarshalName() string {
 	return m.marshalName
 }
 
-func (m *modelInfo) SetMarshalName(val string) {
+func (m *ModelInfo) SetMarshalName(val string) {
 	m.marshalName = val
+}
+
+func (m *ModelInfo) New() interface{} {
+	return m.reflector.New().Interface()
+}
+
+func (m *ModelInfo) NewSlice() *reflector.SliceReflector {
+	return m.reflector.Value().NewSlice()
 }
 
 /**
  * Attributes.
  */
 
-func (m *modelInfo) Attributes() map[string]Attribute {
+func (m *ModelInfo) Attributes() map[string]*Attribute {
 	return m.attributes
 }
 
-func (m *modelInfo) SetAttributes(attrs map[string]Attribute) {
+func (m *ModelInfo) SetAttributes(attrs map[string]*Attribute) {
 	m.attributes = attrs
 }
 
-func (m *modelInfo) HasAttribute(name string) bool {
+func (m *ModelInfo) HasAttribute(name string) bool {
 	_, ok := m.attributes[name]
 	return ok
 }
 
-func (m *modelInfo) Attribute(name string) Attribute {
+func (m *ModelInfo) Attribute(name string) *Attribute {
 	return m.attributes[name]
 }
 
-func (m *modelInfo) PkAttribute() Attribute {
+func (m *ModelInfo) PkAttribute() *Attribute {
 	for _, attr := range m.attributes {
 		if attr.IsPrimaryKey() {
 			return attr
@@ -183,7 +159,7 @@ func (m *modelInfo) PkAttribute() Attribute {
 }
 
 // FindField tries to find a field by checking its Name, BackendName and MarshalName.
-func (m *modelInfo) FindAttribute(name string) Attribute {
+func (m *ModelInfo) FindAttribute(name string) *Attribute {
 	for _, attr := range m.attributes {
 		if attr.Name() == name || attr.BackendName() == name || attr.MarshalName() == name {
 			return attr
@@ -196,24 +172,24 @@ func (m *modelInfo) FindAttribute(name string) Attribute {
 /**
  * Relations.
  */
-func (m *modelInfo) Relations() map[string]Relation {
+func (m *ModelInfo) Relations() map[string]*Relation {
 	return m.relations
 }
 
-func (m *modelInfo) SetRelations(rels map[string]Relation) {
+func (m *ModelInfo) SetRelations(rels map[string]*Relation) {
 	m.relations = rels
 }
 
-func (m *modelInfo) HasRelation(name string) bool {
+func (m *ModelInfo) HasRelation(name string) bool {
 	_, ok := m.relations[name]
 	return ok
 }
 
-func (m *modelInfo) Relation(name string) Relation {
+func (m *ModelInfo) Relation(name string) *Relation {
 	return m.relations[name]
 }
 
-func (m *modelInfo) FindRelation(name string) Relation {
+func (m *ModelInfo) FindRelation(name string) *Relation {
 	for _, relation := range m.relations {
 		if relation.Name() == name || relation.BackendName() == name || relation.MarshalName() == name {
 			return relation
@@ -222,38 +198,29 @@ func (m *modelInfo) FindRelation(name string) Relation {
 	return nil
 }
 
-/**
- * ModelInfo.
- */
-
 // Builds the ModelInfo for a model and returns it.
-func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
-	typ := reflect.TypeOf(model)
-	modelVal := reflect.ValueOf(model)
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-		modelVal = modelVal.Elem()
-	}
-
-	if typ.Kind() != reflect.Struct {
-		return nil, apperror.New("invalid_model_argument",
-			fmt.Sprintf("Must use pointer to struct or struct, got %v", typ))
-	}
-
-	collection, err := GetModelCollection(model)
+func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
+	structReflector, err := reflector.Reflect(model).Struct()
 	if err != nil {
-		return nil, err
+		return nil, apperror.New("invalid_model_argument",
+			fmt.Sprintf("Must use pointer to struct or struct, got %v", reflect.TypeOf(model)))
 	}
 
-	info := &modelInfo{
-		item:           reflect.New(typ).Interface(),
-		fullStructName: typ.PkgPath() + "." + typ.Name(),
-		structName:     typ.Name(),
+	collection, err2 := GetModelCollection(model)
+	if err != nil {
+		return nil, err2
+	}
+
+	info := &ModelInfo{
+		reflector:      structReflector,
+		item:           structReflector.New().Value().Interface(),
+		fullStructName: structReflector.FullName(),
+		structName:     structReflector.Name(),
 		collection:     collection,
 
-		transientFields: make(map[string]*field),
-		attributes:      make(map[string]Attribute),
-		relations:       make(map[string]Relation),
+		transientFields: make(map[string]*Field),
+		attributes:      make(map[string]*Attribute),
+		relations:       make(map[string]*Relation),
 	}
 
 	// Determine BackendName.
@@ -277,7 +244,7 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 		info.marshalName = name
 	}
 
-	err = info.buildFields(modelVal, "")
+	err = info.buildFields(structReflector, "")
 	if err != nil {
 		return nil, apperror.Wrap(err, "build_field_info_error",
 			fmt.Sprintf("Could not build field info for %v", info.StructName()))
@@ -305,7 +272,7 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 
 			// On numeric fields, activate autoincrement.
 			// TODO: allow a way to disable autoincrement with a tag.
-			if IsNumericKind(attr.Type().Kind()) {
+			if reflector.IsNumericKind(attr.Type().Kind()) {
 				attr.SetAutoIncrement(true)
 			}
 		}
@@ -315,38 +282,26 @@ func BuildModelInfo(model interface{}) (ModelInfo, apperror.Error) {
 }
 
 // Build the field information for the model.
-func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) apperror.Error {
-	modelType := modelVal.Type()
-
+func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embeddedName string) apperror.Error {
 	// First build the info for embedded structs, since the random ordering of struct fields
 	// by reflect might mean that an overwritting field is not picked up on, and the nested
 	// field is put in FieldInfo instead.
 
-	for i := 0; i < modelVal.NumField(); i++ {
-		field := modelVal.Field(i)
-		fieldType := modelType.Field(i)
-		fieldKind := fieldType.Type.Kind()
-
-		if fieldKind == reflect.Struct && fieldType.Anonymous {
-			// Embedded struct. Find nested fields.
-			if err := info.buildFields(field, fieldType.Name); err != nil {
-				return err
-			}
+	for _, refl := range modelVal.EmbeddedFields() {
+		if err := info.buildFields(refl, refl.Name()); err != nil {
+			return err
 		}
 	}
 
-	for i := 0; i < modelVal.NumField(); i++ {
-		fieldType := modelType.Field(i)
-		fieldKind := fieldType.Type.Kind()
-
-		// Ignore private fields.
-		firstChar := fieldType.Name[0:1]
-		if strings.ToLower(firstChar) == firstChar {
+	for name, fieldInfo := range modelVal.FieldInfo() {
+		// Ignore embedded fields, since they were handled above.
+		if fieldInfo.Anonymous {
 			continue
 		}
 
-		// Ignore embedded structs, which were handled above.
-		if fieldKind == reflect.Struct && fieldType.Anonymous {
+		// Ignore private fields.
+		firstChar := fieldInfo.Name[0:1]
+		if strings.ToLower(firstChar) == firstChar {
 			continue
 		}
 
@@ -358,51 +313,34 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 		//  * a slice of pointers to structs
 		var structType reflect.Type
 
-		if fieldKind == reflect.Struct {
-			// Field is a direct struct.
-			structType = fieldType.Type
-		} else if fieldKind == reflect.Ptr {
-			// Field is a pointer.
-			ptrType := fieldType.Type.Elem()
-
-			// Only process pointers to structs.
-			if ptrType.Kind() == reflect.Struct {
-				structType = ptrType
-			}
-		} else if fieldKind == reflect.Slice {
-			// Field is slice.
-			// Check if slice items are structs or pointers to structs.
-			sliceType := fieldType.Type.Elem()
-			sliceKind := sliceType.Kind()
-
-			if sliceKind == reflect.Struct {
-				// Slice contains structs.
-				structType = sliceType
-			} else if sliceKind == reflect.Ptr {
-				// Slice contains pointers.
-				ptrType := sliceType.Elem()
-
-				// Only process structs.
-				if ptrType.Kind() == reflect.Struct {
-					structType = ptrType
-				}
+		fieldR := modelVal.Field(name)
+		if fieldR.IsStruct() {
+			structType = fieldR.Type()
+		} else if fieldR.IsStructPtr() {
+			structType = fieldR.Elem().Type()
+		} else if fieldR.IsSlice() {
+			sliceItemType := fieldR.Type().Elem()
+			if sliceItemType.Kind() == reflect.Struct {
+				structType = sliceItemType
+			} else if sliceItemType.Kind() == reflect.Ptr && sliceItemType.Elem().Kind() == reflect.Struct {
+				structType = sliceItemType.Elem()
 			}
 		}
 
 		// Build the base field.
-		field := &field{
-			typ:                 fieldType.Type,
-			name:                fieldType.Name,
+		field := &Field{
+			typ:                 fieldInfo.Type,
+			name:                fieldInfo.Name,
 			structType:          structType,
 			embeddingStructName: embeddedName,
-			backendName:         CamelCaseToUnderscore(fieldType.Name),
-			marshalName:         LowerCaseFirst(fieldType.Name),
+			backendName:         CamelCaseToUnderscore(fieldInfo.Name),
+			marshalName:         LowerCaseFirst(fieldInfo.Name),
 		}
 		if structType != nil {
 			field.structName = structType.PkgPath() + "." + structType.Name()
 		}
 
-		if err := field.parseTag(fieldType.Tag.Get("db")); err != nil {
+		if err := field.parseTag(fieldInfo.Tag.Get("db")); err != nil {
 			return apperror.Wrap(err, "invalid_field_tag", fmt.Sprintf("The field %v has an invalid db tag", field.name))
 		}
 
@@ -416,7 +354,7 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 			// relation and must be an attribute.
 			// Construct attribute now.
 
-			attr := buildAttribute(*field)
+			attr := buildAttribute(field)
 			// Add the attribute to attributes map.
 			info.attributes[attr.Name()] = attr
 		} else {
@@ -435,43 +373,229 @@ func (info *modelInfo) buildFields(modelVal reflect.Value, embeddedName string) 
 	return nil
 }
 
+func (info *ModelInfo) DetermineModelId(model interface{}) interface{} {
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return nil
+	}
+	return r.Field(info.PkAttribute().Name()).Interface()
+}
+
+func (info *ModelInfo) SetModelId(model, id interface{}) apperror.Error {
+	// If ID is string, check if model implements SetStrID.
+	if strId, ok := id.(string); ok {
+		if hook, ok := model.(ModelStrIDSetterHook); ok {
+			// String id and hook implemented, so use it.
+			err := hook.SetStrID(strId)
+			if err != nil {
+				return apperror.Wrap(err, "model_set_id_error")
+			}
+		}
+	}
+
+	// Check if model implements SetID.
+	// If so, use it.
+	if hook, ok := model.(ModelIDSetterHook); ok {
+		err := hook.SetID(id)
+		if err != nil {
+			return apperror.Wrap(err, "model_set_id_error")
+		}
+	}
+
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return apperror.Wrap(err, "invalid_model")
+	}
+	if err := r.SetFieldValue(info.PkAttribute().Name(), id, true); err != nil {
+		return apperror.Wrap(err, err.Error(),
+			fmt.Sprintf("Could not set %v.%v to value %v: %v", info.Collection(), info.PkAttribute().Name(), id))
+	}
+	return nil
+}
+
+func (info *ModelInfo) ModelToMap(model interface{}, forBackend, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
+	data := make(map[string]interface{})
+
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return nil, apperror.New("invalid_model")
+	}
+
+	// Handle regular fields.
+	for fieldName, fieldInfo := range info.Attributes() {
+		field := r.Field(fieldName)
+		if field.IsPtr() && !field.IsZero() {
+			field = field.Elem()
+		}
+
+		// Ignore zero values if specified.
+		if fieldInfo.IgnoreIfZero() && field.IsZero() {
+			continue
+		}
+
+		val := field.Interface()
+
+		if forBackend && fieldInfo.BackendMarshal() {
+			js, err := json.Marshal(val)
+			if err != nil {
+				return nil, &apperror.Err{
+					Code:    "marshal_error",
+					Message: fmt.Sprintf("Could not marshal %v.%v to json: %v", info.StructName(), fieldName, err),
+				}
+			}
+			val = js
+		}
+
+		name := fieldName
+		if forBackend {
+			name = fieldInfo.BackendName()
+		} else if marshal {
+			name = fieldInfo.MarshalName()
+		}
+
+		data[name] = val
+	}
+
+	if !includeRelations {
+		return data, nil
+	}
+
+	// TODO: write code for including relation data!
+	/*
+		for fieldName, relation := range info.Relations() {
+
+		}
+	*/
+
+	return data, nil
+}
+
+func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]FieldValueExpression, apperror.Error) {
+	exprs := make([]FieldValueExpression, 0)
+
+	data, err := info.ModelToMap(model, true, false, false)
+	if err != nil {
+		return nil, err
+	}
+	for name, val := range data {
+		exprs = append(exprs, FieldVal(name, val))
+	}
+
+	return exprs, nil
+}
+
+func (info *ModelInfo) ModelFilter(model interface{}) Expression {
+	id := reflector.Reflect(model).MustStruct().UFieldValue(info.PkAttribute().Name())
+	f := FieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id)
+	return f
+}
+
+func (info *ModelInfo) ModelSelect(model interface{}) SelectStatement {
+	stmt := SelectStmt(info.BackendName())
+	stmt.FilterAnd(info.ModelFilter(model))
+	return stmt
+}
+
+func (info *ModelInfo) ModelDeleteStmt(model interface{}) *DeleteStatement {
+	stmt := DeleteStmt(info.BackendName(), info.ModelSelect(model))
+	return stmt
+}
+
+func (info *ModelInfo) ValidateModel(m interface{}) apperror.Error {
+	r, err := reflector.Reflect(m).Struct()
+	if err != nil {
+		return apperror.Wrap(err, "invalid_model")
+	}
+
+	for fieldName, fieldInfo := range info.Attributes() {
+		field := r.Field(fieldName)
+
+		// Fill in default values.
+		if defaultVal := fieldInfo.DefaultValue(); defaultVal != nil && field.IsZero() {
+			if err := field.SetValue(defaultVal); err != nil {
+				msg := fmt.Sprintf("Invalid default value (%v) for %v.%v", defaultVal, info.collection, fieldName)
+				return apperror.Wrap(err, "invalid_default_value", msg, true)
+			}
+		}
+
+		// If field is required, and the field is not a primary key, validate that it is
+		// not zero.
+		// Note: numeric fields will not be checked, since their zero value is "0", which might
+		// be a valid field value.
+		if !field.IsNumeric() || fieldInfo.IsRequired() && !(fieldInfo.IsPrimaryKey() && fieldInfo.AutoIncrement()) {
+			if field.IsZero() {
+				return &apperror.Err{
+					Code:    "empty_required_field",
+					Message: fmt.Sprintf("The required field %v is empty", fieldName),
+					Public:  true,
+				}
+			}
+		}
+		if fieldInfo.Min() > 0 || fieldInfo.Max() > 0 {
+			// Either min or max is set, so check length.
+			var length float64
+
+			if field.IsIterable() {
+				length = float64(field.Len())
+			} else if field.IsNumeric() {
+				x, _ := field.ConvertTo(float64(0))
+				length = x.(float64)
+			} else {
+				msg := fmt.Sprintf("Field %v.%v has min or max set, but is neither numeric nor a string", info.collection, fieldName)
+				return apperror.New("invalid_min_or_max_condition", msg)
+			}
+
+			if fieldInfo.Min() > 0 && length < fieldInfo.Min() {
+				return &apperror.Err{
+					Code:    "shorter_than_min_length",
+					Message: fmt.Sprintf("The field %v is shorter than the minimum length %v", fieldName, fieldInfo.Min()),
+				}
+			}
+			if fieldInfo.Max() > 0 && length > fieldInfo.Max() {
+				return &apperror.Err{
+					Code:    "longer_than_max_length",
+					Message: fmt.Sprintf("The field %v is longer than the maximum length %v", fieldName, fieldInfo.Max()),
+				}
+			}
+		}
+	}
+
+	// If the model implements ModelValidateHook, call it.
+	if validator, ok := m.(ModelValidateHook); ok {
+		if err := validator.Validate(); err != nil {
+			// Check if error is an apperror, and return it if so.
+			if apperr, ok := err.(apperror.Error); ok {
+				return apperr
+			} else {
+				// Not an apperror, so create a new one.
+				return apperror.New(err.Error())
+			}
+		}
+	}
+
+	return nil
+}
+
 /**
  * ModelInfos.
  */
 
-// ModelInfos is a container collecting ModelInfo for a backend with some
-// convenience methods.
-type ModelInfos interface {
-	Get(collection string) ModelInfo
-	Add(info ModelInfo)
-	Has(collection string) bool
+type ModelInfos map[string]*ModelInfo
 
-	// Find looks for a model by checking Collection,
-	// BackendName and MarshalName.
-	Find(name string) ModelInfo
-
-	AnalyzeRelations() apperror.Error
-}
-
-type modelInfos map[string]ModelInfo
-
-// Ensure modelInfos implements ModelInfos.
-var _ ModelInfos = (*modelInfos)(nil)
-
-func (i modelInfos) Get(collection string) ModelInfo {
+func (i ModelInfos) Get(collection string) *ModelInfo {
 	return i[collection]
 }
 
-func (i modelInfos) Add(info ModelInfo) {
+func (i ModelInfos) Add(info *ModelInfo) {
 	i[info.Collection()] = info
 }
 
-func (i modelInfos) Has(collection string) bool {
+func (i ModelInfos) Has(collection string) bool {
 	_, ok := i[collection]
 	return ok
 }
 
-func (i modelInfos) Find(name string) ModelInfo {
+func (i ModelInfos) Find(name string) *ModelInfo {
 	for _, info := range i {
 		if info.Collection() == name || info.BackendName() == name || info.MarshalName() == name {
 			return info
@@ -484,9 +608,9 @@ func (i modelInfos) Find(name string) ModelInfo {
  * Functions for analyzing the relationships between model structs.
  */
 
-func (m modelInfos) AnalyzeRelations() apperror.Error {
+func (m ModelInfos) AnalyzeRelations() apperror.Error {
 	for _, info := range m {
-		if err := m.analyzeModelRelations(info.(*modelInfo)); err != nil {
+		if err := m.analyzeModelRelations(info); err != nil {
 			return err
 		}
 	}
@@ -497,7 +621,7 @@ func (m modelInfos) AnalyzeRelations() apperror.Error {
 // Will properly analyze all embedded structs as well.
 // All transientFields will be checked, and split intro attributes or
 // relations.
-func (m modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
+func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 	for fieldName, field := range model.transientFields {
 		relatedItem := reflect.New(field.structType)
 
@@ -514,13 +638,13 @@ func (m modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 			// We need to build the attribute now and add it to the attributes
 			// map.
 
-			attr := buildAttribute(*field)
+			attr := buildAttribute(field)
 			model.attributes[attr.Name()] = attr
 			continue
 		}
 
 		// Field is a relation, so build the relation struct.
-		relation := buildRelation(*field)
+		relation := buildRelation(field)
 		relation.SetModel(model)
 		relation.SetRelatedModel(relatedInfo)
 
@@ -627,6 +751,10 @@ func (m modelInfos) analyzeModelRelations(model *modelInfo) apperror.Error {
 		msg := fmt.Sprintf("Model %v has relationship to %v in field %v, but could not determine the relationship type. Specify explicitly with has-one/has-many/belongs-to/m2m", modelName, relatedName, fieldName)
 		return apperror.New("relationship_not_determined", msg)
 	}
+
+	// All done.
+	// Unset transientFields.
+	model.transientFields = nil
 
 	return nil
 }
