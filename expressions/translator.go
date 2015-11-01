@@ -1,4 +1,4 @@
-package dukedb
+package expressions
 
 import (
 	"bytes"
@@ -77,35 +77,37 @@ type SqlTranslator struct {
 }
 
 func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
-	if err := expression.Validate(); err != nil {
-		return apperror.Wrap(err, "invalid_"+expression.Type()+"_expression")
+	if validator, ok := expression.(ValidatableExpression); ok {
+		if err := validator.Validate(); err != nil {
+			return apperror.Wrap(err, "invalid_expression_"+reflect.TypeOf(expression).String())
+		}
 	}
 
 	switch e := expression.(type) {
-	case NamedNestedExpression:
+	case *NamedNestedExpr:
 		return t.Translate(e.Expression())
 
-	case TextExpression:
+	case *TextExpr:
 		t.W(e.Text())
 
-	case FieldTypeExpression:
+	case *FieldTypeExpr:
 		t.W(e.FieldType())
 
-	case ValueExpression:
+	case *ValueExpr:
 		t.W(t.PlaceHolder())
 		t.Arg(e.Value())
 
-	case IdentifierExpression:
+	case *IdentifierExpr:
 		t.WQ(e.Identifier())
 
-	case CollectionFieldIdentifierExpression:
+	case *ColFieldIdentifierExpr:
 		if e.Collection() != "" {
 			t.WQ(e.Collection())
 			t.W(".")
 		}
 		t.WQ(e.Field())
 
-	case ConstraintExpression:
+	case *ConstraintExpr:
 		switch e.Constraint() {
 		case CONSTRAINT_NOT_NULL:
 			t.W("NOT NULL")
@@ -117,10 +119,10 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W("AUTO_INCREMENT")
 		}
 
-	case ActionConstraint:
+	case *ActionConstraint:
 		t.W("ON ", strings.ToUpper(e.Event()), " ", ACTIONS_MAP[e.Action()])
 
-	case UniqueFieldsConstraint:
+	case *UniqueFieldsConstraint:
 		t.W("UNIQUE(")
 		lastIndex := len(e.UniqueFields()) - 1
 		for i, field := range e.UniqueFields() {
@@ -133,20 +135,20 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		}
 		t.W(")")
 
-	case DefaultValueConstraint:
+	case *DefaultValueConstraint:
 		t.W("DEFAULT ")
 		if err := t.Translate(e.DefaultValue()); err != nil {
 			return err
 		}
 
-	case CheckConstraint:
+	case *CheckConstraint:
 		t.W("CHECK (")
 		if err := t.Translate(e.Check()); err != nil {
 			return err
 		}
 		t.W(")")
 
-	case ReferenceConstraint:
+	case *ReferenceConstraint:
 		t.W("REFERENCES ")
 		fk := e.ForeignKey()
 		t.WQ(fk.Collection())
@@ -154,7 +156,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		t.WQ(fk.Field())
 		t.W(")")
 
-	case FieldExpression:
+	case *FieldExpr:
 		t.WQ(e.Name())
 		t.W(" ")
 		if err := t.Translate(e.FieldType()); err != nil {
@@ -175,7 +177,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			}
 		}
 
-	case FieldValueExpression:
+	case *FieldValueExpr:
 		if err := t.Translate(e.Field()); err != nil {
 			return err
 		}
@@ -184,14 +186,14 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 
-	case FunctionExpression:
+	case *FunctionExpr:
 		t.W(e.Function(), "(")
 		if err := t.Translate(e.Expression()); err != nil {
 			return err
 		}
 		t.W(")")
 
-	case *AndExpression:
+	case *AndExpr:
 		lastIndex := len(e.Expressions()) - 1
 		if lastIndex > 0 {
 			t.W("(")
@@ -208,7 +210,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(")")
 		}
 
-	case *OrExpression:
+	case *OrExpr:
 		lastIndex := len(e.Expressions()) - 1
 
 		// Wrap in parantheses if more than one filter.
@@ -227,7 +229,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(")")
 		}
 
-	case NotExpression:
+	case *NotExpr:
 		t.W("NOT ")
 		if err := t.Translate(e.Not()); err != nil {
 			return err
@@ -242,7 +244,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 
-	case SortExpression:
+	case *SortExpr:
 		if err := t.Translate(e.Expression()); err != nil {
 			return err
 		}
@@ -252,7 +254,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(" DESC")
 		}
 
-	case CreateCollectionStatement:
+	case *CreateCollectionStmt:
 		t.W("CREATE TABLE ")
 		if e.IfNotExists() {
 			t.W("IF NOT EXISTS ")
@@ -285,15 +287,13 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 
 		t.W(")")
 
-	case RenameCollectionStatement:
+	case *RenameCollectionStmt:
 		t.W("ALTER TABLE ")
 		t.WQ(e.Collection())
 		t.W(" RENAME TO ")
 		t.WQ(e.NewName())
 
-	// Warning: this NEEDS to appear before DropCollectionStatement,
-	// since otherwise the interfaces get mixed up.
-	case DropFieldStatement:
+	case *DropFieldStmt:
 		t.W("ALTER TABLE ")
 		t.WQ(e.Collection())
 		t.W(" DROP COLUMN ")
@@ -305,7 +305,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(" CASCADE")
 		}
 
-	case DropCollectionStatement:
+	case *DropCollectionStmt:
 		t.W("DROP TABLE ")
 		if e.IfExists() {
 			t.W("IF EXISTS ")
@@ -315,7 +315,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(" CASCADE")
 		}
 
-	case CreateFieldStatement:
+	case *CreateFieldStmt:
 		t.W("ALTER TABLE ")
 		t.WQ(e.Collection())
 		t.W(" ADD COLUMN ")
@@ -323,7 +323,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 
-	case RenameFieldStatement:
+	case *RenameFieldStmt:
 		t.W("ALTER TABLE ")
 		t.WQ(e.Collection())
 		t.W(" RENAME COLUMN ")
@@ -331,7 +331,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		t.W(" TO ")
 		t.WQ(e.NewName())
 
-	case CreateIndexStatement:
+	case *CreateIndexStmt:
 		t.W("CREATE ")
 		if e.Unique() {
 			t.W("UNIQUE ")
@@ -358,7 +358,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		}
 		t.W(")")
 
-	case DropIndexStatement:
+	case *DropIndexStmt:
 		t.W("DROP INDEX ")
 		if e.IfExists() {
 			t.W("IF EXISTS ")
@@ -368,7 +368,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(" CASCADE")
 		}
 
-	case SelectStatement:
+	case *SelectStmt:
 		// If counter is bigger than 0, this is a subquery and needs to be
 		// wrapped in parantheses.
 		isSubQuery := t.translationCounter > 0
@@ -455,7 +455,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			t.W(")")
 		}
 
-	case JoinStatement:
+	case *JoinStmt:
 		name := e.Name()
 		if name == "" {
 			name = e.Collection()
@@ -467,7 +467,31 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 
-	case UpdateStatement:
+	case *CreateStmt:
+		t.W("INSERT INTO ")
+		t.WQ(e.Collection())
+		t.W("(")
+		lastIndex := len(e.Values()) - 1
+		for i, field := range e.Values() {
+			if err := t.Translate(field); err != nil {
+				return err
+			}
+			if i < lastIndex {
+				t.W(", ")
+			}
+		}
+		t.W(") VALUES(")
+		for i, field := range e.Values() {
+			if err := t.Translate(field); err != nil {
+				return err
+			}
+			if i < lastIndex {
+				t.W(",")
+			}
+		}
+		t.W(")")
+
+	case *UpdateStmt:
 		t.W("UPDATE ")
 		t.WQ(e.Collection())
 		t.W(" SET ")
@@ -512,30 +536,6 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 				t.W(" OFFSET ", strconv.Itoa(sel.Offset()))
 			}
 		}
-
-	case CreateStatement:
-		t.W("INSERT INTO ")
-		t.WQ(e.Collection())
-		t.W("(")
-		lastIndex := len(e.Values()) - 1
-		for i, field := range e.Values() {
-			if err := t.Translate(field); err != nil {
-				return err
-			}
-			if i < lastIndex {
-				t.W(", ")
-			}
-		}
-		t.W(") VALUES(")
-		for i, field := range e.Values() {
-			if err := t.Translate(field); err != nil {
-				return err
-			}
-			if i < lastIndex {
-				t.W(",")
-			}
-		}
-		t.W(")")
 
 	default:
 		panic(fmt.Sprintf("Unhandled statement type: %v", reflect.TypeOf(expression)))

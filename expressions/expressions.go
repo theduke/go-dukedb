@@ -1,4 +1,4 @@
-package dukedb
+package expressions
 
 import (
 	"fmt"
@@ -8,59 +8,25 @@ import (
 	"github.com/theduke/go-apperror"
 )
 
-/**
- * Expressions.
- *
- * NamedNestedExpression
- * TextExpression
- * FieldTypeExpression
- * ValueExpression
- * IdentifierExpression
- * CollectionFieldIdentifierExpression
- * ConstraintExpression
- * ActionConstraint
- * DefaultValueConstraint
- * CheckConstraint
- * ReferenceConstraint
- * FieldExpression
- * FieldValueExpression
- * FunctionExpression
- * AndExpression
- * OrExpression
- * NotExpression
- * FilterExpression
- * SortExpression
- */
-
-// Expression represents an arbitrary database expression.
 type Expression interface {
-	// Type returns the type of the expression.
-	Type() string
-	// Validate validates the expression.
+}
+
+// ValidatableExpression must be implemented by expressions that can be
+// validated.
+type ValidatableExpression interface {
 	Validate() apperror.Error
-	// GetIdentifiers returns all database identifiers contained within an expression.
-	GetIdentifiers() []string
 }
 
-/**
- * noValidationExpr mixin.
- */
-
-// noValidationMixin can be used as a mixin if an Expression does not have any
-// validations.
-type noValidatationMixin struct{}
-
-func (*noValidatationMixin) Validate() apperror.Error {
-	return nil
+// IdentifierExpression must be implemented by expressions containing
+// identifiers.
+type IdentifierExpression interface {
+	GetIdentifiers() []Expression
 }
 
-/**
- * noIdentifiersMixin.
- */
-
-type noIdentifiersMixin struct{}
-
-func (*noIdentifiersMixin) GetIdentifiers() []string {
+func getIdentifiers(expr Expression) []Expression {
+	if idents, ok := expr.(IdentifierExpr); ok {
+		return idents.GetIdentifiers()
+	}
 	return nil
 }
 
@@ -68,9 +34,8 @@ func (*noIdentifiersMixin) GetIdentifiers() []string {
  * NamedExpression.
  */
 
-// NamedExpression is an expression that has a identifying name attached.
+// NamedExpression should be implemented by expressions that are/can be named.
 type NamedExpression interface {
-	Expression
 	Name() string
 	SetName(name string)
 }
@@ -98,21 +63,20 @@ func (e *namedExprMixin) SetName(name string) {
 // * SELECT fieldname FROM table: fieldname is an IdentifierExpression and a
 // TypedExpression with the value of the field type.
 type TypedExpression interface {
-	Expression
-	ValueType() reflect.Type
-	SetValueType(typ reflect.Type)
+	Type() reflect.Type
+	SetType(typ reflect.Type)
 }
 
 type typedExprMixin struct {
-	valueType reflect.Type
+	typ reflect.Type
 }
 
-func (e *typedExprMixin) ValueType() reflect.Type {
-	return e.valueType
+func (e *typedExprMixin) Type() reflect.Type {
+	return e.typ
 }
 
-func (e *typedExprMixin) SetValueType(typ reflect.Type) {
-	e.valueType = typ
+func (e *typedExprMixin) SetType(typ reflect.Type) {
+	e.typ = typ
 }
 
 /**
@@ -122,7 +86,6 @@ func (e *typedExprMixin) SetValueType(typ reflect.Type) {
 // NestedExpression represents an expression which holds another expression.
 // An example are SQL functions like MAX(...) or SUM(xxx).
 type NestedExpression interface {
-	Expression
 	Expression() Expression
 }
 
@@ -134,8 +97,8 @@ func (e *nestedExprMixin) Expression() Expression {
 	return e.expression
 }
 
-func (e *nestedExprMixin) GetIdentifiers() []string {
-	return e.expression.GetIdentifiers()
+func (e *nestedExprMixin) GetIdentifiers() []Expression {
+	return getIdentifiers(e.expression)
 }
 
 /**
@@ -143,7 +106,6 @@ func (e *nestedExprMixin) GetIdentifiers() []string {
  */
 
 type MultiExpression interface {
-	Expression
 	Expressions() []Expression
 	SetExpressions(expressions []Expression)
 	Add(expression ...Expression)
@@ -165,10 +127,12 @@ func (m *multiExprMixin) Add(expr ...Expression) {
 	m.expressions = append(m.expressions, expr...)
 }
 
-func (m multiExprMixin) GetIdentifiers() []string {
-	ids := make([]string, 0)
+func (m multiExprMixin) GetIdentifiers() []Expression {
+	ids := make([]Expression, 0)
 	for _, expr := range m.expressions {
-		ids = append(ids, expr.GetIdentifiers()...)
+		if idents, ok := expr.(IdentifierExpression); ok {
+			ids = append(ids, idents.GetIdentifiers()...)
+		}
 	}
 	return ids
 }
@@ -177,25 +141,12 @@ func (m multiExprMixin) GetIdentifiers() []string {
  * NamedNestedExpression.
  */
 
-type NamedNestedExpression interface {
-	Expression
-	Name() string
-	Expression() Expression
-}
-
-type namedNestedExpr struct {
+type NamedNestedExpr struct {
 	namedExprMixin
 	nestedExprMixin
 }
 
-// Ensure FieldTypeExpression implements NamedNestedExpr.
-var _ NamedNestedExpression = (*namedNestedExpr)(nil)
-
-func (*namedNestedExpr) Type() string {
-	return "named_nested"
-}
-
-func (e *namedNestedExpr) Validate() apperror.Error {
+func (e *NamedNestedExpr) Validate() apperror.Error {
 	if e.name == "" {
 		return apperror.New("empty_name")
 	} else if e.expression == nil {
@@ -204,13 +155,9 @@ func (e *namedNestedExpr) Validate() apperror.Error {
 	return nil
 }
 
-func (e *namedNestedExpr) GetIdentifiers() []string {
-	return e.expression.GetIdentifiers()
-}
-
 // NameExpr attaches a name to another expression.
-func NameExpr(name string, expr Expression) NamedNestedExpression {
-	e := &namedNestedExpr{}
+func NameExpr(name string, expr Expression) *NamedNestedExpr {
+	e := &NamedNestedExpr{}
 	e.name = name
 	e.expression = expr
 	return e
@@ -220,73 +167,43 @@ func NameExpr(name string, expr Expression) NamedNestedExpression {
  * TextExpression.
  */
 
-type TextExpression interface {
-	Expression
-	Text() string
-}
-
 // TextExpression is plain text that will be used directly in the database.
-type textExpr struct {
-	noValidatationMixin
-
-	noIdentifiersMixin
-
+type TextExpr struct {
 	text string
 }
 
-// Ensure textExpr implements TextExpression.
-var _ TextExpression = (*textExpr)(nil)
-
-func (*textExpr) Type() string {
-	return "text"
-}
-
-func (e *textExpr) Text() string {
+func (e *TextExpr) Text() string {
 	return e.text
 }
 
-func TextExpr(text string) TextExpression {
-	return &textExpr{text: text}
+func NewTextExpr(text string) *TextExpr {
+	return &TextExpr{text: text}
 }
 
 /**
  * FieldTypeExpression.
  */
 
-type FieldTypeExpression interface {
-	TypedExpression
-	FieldType() string
-}
-
-type fieldTypeExpr struct {
-	noIdentifiersMixin
+type FieldTypeExpr struct {
 	typedExprMixin
-
 	fieldType string
 }
 
-// Ensure FieldTypeExpression implements FieldTypeExpression.
-var _ FieldTypeExpression = (*fieldTypeExpr)(nil)
-
-func (*fieldTypeExpr) Type() string {
-	return "field_type"
-}
-
-func (e *fieldTypeExpr) FieldType() string {
+func (e *FieldTypeExpr) FieldType() string {
 	return e.fieldType
 }
 
-func (e *fieldTypeExpr) Validate() apperror.Error {
+func (e *FieldTypeExpr) Validate() apperror.Error {
 	if e.fieldType == "" {
 		return apperror.New("empty_field_type")
 	}
 	return nil
 }
 
-func FieldTypeExpr(fieldType string, goType reflect.Type) FieldTypeExpression {
-	e := &fieldTypeExpr{}
+func NewFieldTypeExpr(fieldType string, goType reflect.Type) *FieldTypeExpr {
+	e := &FieldTypeExpr{}
 	e.fieldType = fieldType
-	e.valueType = goType
+	e.typ = goType
 	return e
 }
 
@@ -297,38 +214,22 @@ func FieldTypeExpr(fieldType string, goType reflect.Type) FieldTypeExpression {
 // ValueExpression is an expression which just contains the corresponding value.
 // For example, consider a sql statement SELECT * from table where field=X.
 // Here, the X would be a ValueExpression.
-type ValueExpression interface {
-	TypedExpression
-	Value() interface{}
-}
-
-type valueExpr struct {
+type ValueExpr struct {
 	typedExprMixin
-
-	noValidatationMixin
-	noIdentifiersMixin
-
 	value interface{}
 }
 
-// Make sure ValueExpression implements TypedExpression.
-var _ ValueExpression = (*valueExpr)(nil)
-
-func (*valueExpr) Type() string {
-	return "value"
-}
-
-func (e *valueExpr) Value() interface{} {
+func (e *ValueExpr) Value() interface{} {
 	return e.value
 }
 
-func ValueExpr(value interface{}, typ ...reflect.Type) ValueExpression {
-	e := &valueExpr{value: value}
+func NewValueExpr(value interface{}, typ ...reflect.Type) *ValueExpr {
+	e := &ValueExpr{value: value}
 	if len(typ) > 0 {
 		if len(typ) > 1 {
 			panic("Called dukedb.Val() with more than one type")
 		}
-		e.valueType = typ[0]
+		e.typ = typ[0]
 	}
 	return e
 }
@@ -340,46 +241,32 @@ func ValueExpr(value interface{}, typ ...reflect.Type) ValueExpression {
 // IdentifierExpression is a db expression for a database identifier.
 // Identifiers could, for example, be column names or table names.
 
-type IdentifierExpression interface {
-	Expression
-
-	Identifier() string
-	SetIdentifier(id string)
-}
-
-type identifierExpr struct {
+type IdentifierExpr struct {
 	identifier string
 }
 
-// Make sure IdentifierExpression implements TypedExpression.
-var _ IdentifierExpression = (*identifierExpr)(nil)
-
-func (*identifierExpr) Type() string {
-	return "identifier"
-}
-
-func (s *identifierExpr) Identifier() string {
+func (s *IdentifierExpr) Identifier() string {
 	return s.identifier
 }
 
-func (s *identifierExpr) SetIdentifier(id string) {
+func (s *IdentifierExpr) SetIdentifier(id string) {
 	s.identifier = id
 }
 
-func (e *identifierExpr) Validate() apperror.Error {
+func (e *IdentifierExpr) Validate() apperror.Error {
 	if e.identifier == "" {
 		return apperror.New("empty_identifier")
 	}
 	return nil
 }
 
-func (e identifierExpr) GetIdentifiers() []string {
-	return []string{e.identifier}
+func (e *IdentifierExpr) GetIdentifiers() []Expression {
+	return []Expression{e.identifier}
 }
 
 // Identifier is a convenient way to create an IdentifierExpression.
-func IdExpr(identifier string) IdentifierExpression {
-	return &identifierExpr{
+func NewIdExpr(identifier string) *IdentifierExpr {
+	return &IdentifierExpr{
 		identifier: identifier,
 	}
 }
@@ -388,44 +275,28 @@ func IdExpr(identifier string) IdentifierExpression {
  * CollectionFieldIdentifierExpression.
  */
 
-type CollectionFieldIdentifierExpression interface {
-	Expression
-
-	Collection() string
-	SetCollection(collection string)
-	Field() string
-	SetField(field string)
-}
-
-type colFieldIdentifierExpr struct {
+type ColFieldIdentifierExpr struct {
 	collection string
 	field      string
 }
 
-// Make sure CollectionFieldIdentifierExpression implements TypedExpression.
-var _ CollectionFieldIdentifierExpression = (*colFieldIdentifierExpr)(nil)
-
-func (*colFieldIdentifierExpr) Type() string {
-	return "collection_field_identifier"
-}
-
-func (s *colFieldIdentifierExpr) Collection() string {
+func (s *ColFieldIdentifierExpr) Collection() string {
 	return s.collection
 }
 
-func (s *colFieldIdentifierExpr) SetCollection(collection string) {
+func (s *ColFieldIdentifierExpr) SetCollection(collection string) {
 	s.collection = collection
 }
 
-func (s *colFieldIdentifierExpr) Field() string {
+func (s *ColFieldIdentifierExpr) Field() string {
 	return s.field
 }
 
-func (s *colFieldIdentifierExpr) SetField(field string) {
+func (s *ColFieldIdentifierExpr) SetField(field string) {
 	s.field = field
 }
 
-func (e *colFieldIdentifierExpr) Validate() apperror.Error {
+func (e *ColFieldIdentifierExpr) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.field == "" {
@@ -434,13 +305,13 @@ func (e *colFieldIdentifierExpr) Validate() apperror.Error {
 	return nil
 }
 
-func (e *colFieldIdentifierExpr) GetIdentifiers() []string {
-	return []string{e.collection, e.field}
+func (e *ColFieldIdentifierExpr) GetIdentifiers() []Expression {
+	return []Expression{e.collection, e.field}
 }
 
 // ColFieldIdentifier is a convenient way to create an *CollectionFieldIdentifierExpression.
-func ColFieldIdExpr(collection, field string) CollectionFieldIdentifierExpression {
-	return &colFieldIdentifierExpr{
+func NewColFieldIdExpr(collection, field string) *ColFieldIdentifierExpr {
+	return &ColFieldIdentifierExpr{
 		collection: collection,
 		field:      field,
 	}
@@ -450,9 +321,9 @@ func ColFieldIdExpr(collection, field string) CollectionFieldIdentifierExpressio
 // If collection is "", an IdentifierExpression is returned.
 func BuildIdExpr(collection, id string) Expression {
 	if collection == "" {
-		return IdExpr(id)
+		return NewIdExpr(id)
 	} else {
-		return ColFieldIdExpr(collection, id)
+		return NewColFieldIdExpr(collection, id)
 	}
 }
 
@@ -476,30 +347,15 @@ var CONSTRAINT_MAP map[string]string = map[string]string{
 	CONSTRAINT_INDEX:          "",
 }
 
-type ConstraintExpression interface {
-	Expression
-
-	Constraint() string
-}
-
-type constraintExpr struct {
-	noIdentifiersMixin
-
+type ConstraintExpr struct {
 	constraint string
 }
 
-// Ensure NotNullConstraint implements ConstraintExpression.
-var _ ConstraintExpression = (*constraintExpr)(nil)
-
-func (*constraintExpr) Type() string {
-	return "constraint"
-}
-
-func (e *constraintExpr) Constraint() string {
+func (e *ConstraintExpr) Constraint() string {
 	return e.constraint
 }
 
-func (e *constraintExpr) Validate() apperror.Error {
+func (e *ConstraintExpr) Validate() apperror.Error {
 	if e.constraint == "" {
 		return apperror.New("empty_constraint")
 	} else if _, ok := CONSTRAINT_MAP[e.constraint]; !ok {
@@ -508,11 +364,11 @@ func (e *constraintExpr) Validate() apperror.Error {
 	return nil
 }
 
-func Constr(constraint string) ConstraintExpression {
+func NewConstraintExpr(constraint string) *ConstraintExpr {
 	if _, ok := CONSTRAINT_MAP[constraint]; !ok {
 		panic(fmt.Sprintf("Unknown constraint: %v", constraint))
 	}
-	return &constraintExpr{
+	return &ConstraintExpr{
 		constraint: constraint,
 	}
 }
@@ -538,33 +394,20 @@ var ACTIONS_MAP map[string]string = map[string]string{
 	ACTION_SET_DEFAULT: "SET DEFAULT",
 }
 
-type ActionConstraint interface {
-	Expression
-
-	Event() string
-	Action() string
-}
-
-type actionConstraint struct {
-	noIdentifiersMixin
-
+type ActionConstraint struct {
 	event  string
 	action string
 }
 
-func (*actionConstraint) Type() string {
-	return "action_constraint"
-}
-
-func (e *actionConstraint) Event() string {
+func (e *ActionConstraint) Event() string {
 	return e.event
 }
 
-func (e *actionConstraint) Action() string {
+func (e *ActionConstraint) Action() string {
 	return e.action
 }
 
-func (e *actionConstraint) Validate() apperror.Error {
+func (e *ActionConstraint) Validate() apperror.Error {
 	if e.event == "" {
 		return apperror.New("empty_event")
 	} else if !(e.event == EVENT_UPDATE || e.event == EVENT_DELETE) {
@@ -577,8 +420,8 @@ func (e *actionConstraint) Validate() apperror.Error {
 	return nil
 }
 
-func ActionConstr(event, action string) ActionConstraint {
-	return &actionConstraint{
+func NewActionConstraint(event, action string) *ActionConstraint {
+	return &ActionConstraint{
 		event:  event,
 		action: action,
 	}
@@ -588,72 +431,49 @@ func ActionConstr(event, action string) ActionConstraint {
  * DefaultValueConstraint.
  */
 
-type DefaultValueConstraint interface {
-	Expression
-	DefaultValue() Expression
-}
-
-type defaultValueConstraint struct {
-	noIdentifiersMixin
-	noValidatationMixin
-
+type DefaultValueConstraint struct {
 	defaultValue Expression
 }
 
-// Ensure DefaultValueConstraint implements ConstraintExpression.
-var _ DefaultValueConstraint = (*defaultValueConstraint)(nil)
-
-func (*defaultValueConstraint) Type() string {
-	return "default_value_constraint"
-}
-
-func (c *defaultValueConstraint) DefaultValue() Expression {
+func (c *DefaultValueConstraint) DefaultValue() Expression {
 	return c.defaultValue
 }
 
-func DefaultValConstr(expr Expression) DefaultValueConstraint {
-	return &defaultValueConstraint{
+func NewDefaultValConstraint(expr Expression) *DefaultValueConstraint {
+	e := &DefaultValueConstraint{
 		defaultValue: expr,
 	}
+	return e
 }
 
 /**
  * CheckConstraint.
  */
 
-type CheckConstraint interface {
-	Expression
-	Check() Expression
-}
-
-type checkConstraint struct {
+type CheckConstraint struct {
 	check Expression
 }
 
-// Make sure CheckConstraint implements Constraint.
-var _ CheckConstraint = (*checkConstraint)(nil)
-
-func (*checkConstraint) Type() string {
-	return "check_constraint"
-}
-
-func (e *checkConstraint) Check() Expression {
+func (e *CheckConstraint) Check() Expression {
 	return e.check
 }
 
-func (e *checkConstraint) Validate() apperror.Error {
+func (e *CheckConstraint) Validate() apperror.Error {
 	if e.check == nil {
 		return apperror.New("no_check_expression")
 	}
 	return nil
 }
 
-func (e *checkConstraint) GetIdentifiers() []string {
-	return e.check.GetIdentifiers()
+func (e *CheckConstraint) GetIdentifiers() []Expression {
+	if idents, ok := e.check.(IdentifierExpression); ok {
+		return idents.GetIdentifiers()
+	}
+	return nil
 }
 
-func CheckConstr(check Expression) CheckConstraint {
-	return &checkConstraint{
+func NewCheckConstraint(check Expression) *CheckConstraint {
+	return &CheckConstraint{
 		check: check,
 	}
 }
@@ -662,39 +482,24 @@ func CheckConstr(check Expression) CheckConstraint {
  * ReferenceConstraint.
  */
 
-type ReferenceConstraint interface {
-	Expression
-
-	ForeignKey() CollectionFieldIdentifierExpression
+type ReferenceConstraint struct {
+	foreignKey *ColFieldIdentifierExpr
 }
 
-type referenceConstraint struct {
-	noIdentifiersMixin
-
-	foreignKey CollectionFieldIdentifierExpression
-}
-
-// Make sure ReferenceConstraint implements Constraint.
-var _ ReferenceConstraint = (*referenceConstraint)(nil)
-
-func (*referenceConstraint) Type() string {
-	return "reference_constraint"
-}
-
-func (e *referenceConstraint) ForeignKey() CollectionFieldIdentifierExpression {
+func (e *ReferenceConstraint) ForeignKey() *ColFieldIdentifierExpr {
 	return e.foreignKey
 }
 
-func (e *referenceConstraint) Validate() apperror.Error {
+func (e *ReferenceConstraint) Validate() apperror.Error {
 	if e.foreignKey == nil {
 		return apperror.New("no_foreign_key")
 	}
 	return nil
 }
 
-func ReferenceConstr(collection, field string) ReferenceConstraint {
-	return &referenceConstraint{
-		foreignKey: ColFieldIdExpr(collection, field),
+func NewReferenceConstraint(collection, field string) *ReferenceConstraint {
+	return &ReferenceConstraint{
+		foreignKey: NewColFieldIdExpr(collection, field),
 	}
 }
 
@@ -702,34 +507,23 @@ func ReferenceConstr(collection, field string) ReferenceConstraint {
  * UniqueFieldsConstraint.
  */
 
-type UniqueFieldsConstraint interface {
-	Expression
-	UniqueFields() []Expression
-}
-
-type uniqueFieldsConstr struct {
-	noIdentifiersMixin
-
+type UniqueFieldsConstraint struct {
 	fields []Expression
 }
 
-func (*uniqueFieldsConstr) Type() string {
-	return "unique_fields"
-}
-
-func (c *uniqueFieldsConstr) UniqueFields() []Expression {
+func (c *UniqueFieldsConstraint) UniqueFields() []Expression {
 	return c.fields
 }
 
-func (c *uniqueFieldsConstr) Validate() apperror.Error {
+func (c *UniqueFieldsConstraint) Validate() apperror.Error {
 	if len(c.fields) < 1 {
 		return apperror.New("no_unique_fields")
 	}
 	return nil
 }
 
-func UniqueFieldsConstr(fields ...Expression) UniqueFieldsConstraint {
-	return &uniqueFieldsConstr{
+func NewUniqueFieldsConstraint(fields ...Expression) *UniqueFieldsConstraint {
+	return &UniqueFieldsConstraint{
 		fields: fields,
 	}
 }
@@ -738,44 +532,27 @@ func UniqueFieldsConstr(fields ...Expression) UniqueFieldsConstraint {
  * FieldExpression.
  */
 
-type FieldExpression interface {
-	Expression
-
-	Name() string
-	FieldType() FieldTypeExpression
-	Constraints() []Expression
-}
-
 // FieldExpression represents the definition for a field.
-type fieldExpr struct {
-	noIdentifiersMixin
-
+type FieldExpr struct {
 	// Name is the field name.
 	name        string
-	fieldType   FieldTypeExpression
+	fieldType   *FieldTypeExpr
 	constraints []Expression
 }
 
-// Ensure FieldExpression implements Expression.
-var _ FieldExpression = (*fieldExpr)(nil)
-
-func (*fieldExpr) Type() string {
-	return "field"
-}
-
-func (e *fieldExpr) Name() string {
+func (e *FieldExpr) Name() string {
 	return e.name
 }
 
-func (e *fieldExpr) FieldType() FieldTypeExpression {
+func (e *FieldExpr) FieldType() *FieldTypeExpr {
 	return e.fieldType
 }
 
-func (e *fieldExpr) Constraints() []Expression {
+func (e *FieldExpr) Constraints() []Expression {
 	return e.constraints
 }
 
-func (e *fieldExpr) Validate() apperror.Error {
+func (e *FieldExpr) Validate() apperror.Error {
 	if e.name == "" {
 		return apperror.New("empty_field")
 	} else if e.fieldType == nil {
@@ -785,8 +562,8 @@ func (e *fieldExpr) Validate() apperror.Error {
 	return nil
 }
 
-func FieldExpr(name string, fieldType FieldTypeExpression, constraints ...Expression) FieldExpression {
-	return &fieldExpr{
+func NewFieldExpr(name string, fieldType *FieldTypeExpr, constraints ...Expression) *FieldExpr {
+	return &FieldExpr{
 		name:        name,
 		fieldType:   fieldType,
 		constraints: constraints,
@@ -797,37 +574,20 @@ func FieldExpr(name string, fieldType FieldTypeExpression, constraints ...Expres
  * FieldValueExpression.
  */
 
-// FieldValueExpression represents a a value for a field.
-// Used in create or update statements.
-type FieldValueExpression interface {
-	Expression
-
-	// Must be either IdentifierExpression or CollectionFieldIdentifierExpression.
-	Field() Expression
-	Value() Expression
-}
-
-type fieldValueExpr struct {
+type FieldValueExpr struct {
 	field Expression
 	value Expression
 }
 
-// Ensure FieldValueExpression implements Expression.
-var _ FieldValueExpression = (*fieldValueExpr)(nil)
-
-func (*fieldValueExpr) Type() string {
-	return "field_value"
-}
-
-func (e *fieldValueExpr) Field() Expression {
+func (e *FieldValueExpr) Field() Expression {
 	return e.field
 }
 
-func (e *fieldValueExpr) Value() Expression {
+func (e *FieldValueExpr) Value() Expression {
 	return e.value
 }
 
-func (e *fieldValueExpr) Validate() apperror.Error {
+func (e *FieldValueExpr) Validate() apperror.Error {
 	if e.field == nil {
 		return apperror.New("empty_field")
 	} else if e.value == nil {
@@ -835,8 +595,8 @@ func (e *fieldValueExpr) Validate() apperror.Error {
 	}
 
 	// Check that field is either IdentifierExpression of ColfieldIdentifer.
-	if _, ok := e.field.(IdentifierExpression); ok {
-	} else if _, ok := e.field.(CollectionFieldIdentifierExpression); ok {
+	if _, ok := e.field.(*IdentifierExpr); ok {
+	} else if _, ok := e.field.(*ColFieldIdentifierExpr); ok {
 	} else {
 		return apperror.New("invalid_field_type", "Invalid field type: %v", reflect.TypeOf(e.field))
 	}
@@ -844,48 +604,39 @@ func (e *fieldValueExpr) Validate() apperror.Error {
 	return nil
 }
 
-func (e fieldValueExpr) GetIdentifiers() []string {
-	return e.field.GetIdentifiers()
+func (e *FieldValueExpr) GetIdentifiers() []Expression {
+	if idents, ok := e.field.(IdentifierExpression); ok {
+		return idents.GetIdentifiers()
+	}
+	return nil
 }
 
-func FieldValExpr(field, value Expression) FieldValueExpression {
-	return &fieldValueExpr{
+func NewFieldValExpr(field, value Expression) *FieldValueExpr {
+	return &FieldValueExpr{
 		field: field,
 		value: value,
 	}
 }
 
-func FieldVal(field string, value interface{}, typ ...reflect.Type) FieldValueExpression {
-	return FieldValExpr(IdExpr(field), ValueExpr(value, typ...))
+func NewFieldVal(field string, value interface{}, typ ...reflect.Type) *FieldValueExpr {
+	return NewFieldValExpr(NewIdExpr(field), NewValueExpr(value, typ...))
 }
 
 /**
  * FunctionExpression.
  */
 
-type FunctionExpression interface {
-	NestedExpression
-	Function() string
-}
-
 // FunctionExpression represents a database function.
-type functionExpr struct {
+type FunctionExpr struct {
 	nestedExprMixin
 	function string
 }
 
-// Ensure FunctionExpression implements NestedExpression.
-var _ FunctionExpression = (*functionExpr)(nil)
-
-func (*functionExpr) Type() string {
-	return "function"
-}
-
-func (e *functionExpr) Function() string {
+func (e *FunctionExpr) Function() string {
 	return e.function
 }
 
-func (e *functionExpr) Validate() apperror.Error {
+func (e *FunctionExpr) Validate() apperror.Error {
 	if e.function == "" {
 		return apperror.New("empty_function")
 	} else if e.expression == nil {
@@ -895,12 +646,12 @@ func (e *functionExpr) Validate() apperror.Error {
 	return nil
 }
 
-func (e functionExpr) GetIdentifiers() []string {
-	return e.expression.GetIdentifiers()
+func (e *FunctionExpr) GetIdentifiers() []Expression {
+	return getIdentifiers(e.expression)
 }
 
-func FuncExpr(function string, expr Expression) FunctionExpression {
-	e := &functionExpr{
+func NewFuncExpr(function string, expr Expression) *FunctionExpr {
+	e := &FunctionExpr{
 		function: function,
 	}
 	e.expression = expr
@@ -915,26 +666,19 @@ func FuncExpr(function string, expr Expression) FunctionExpression {
  * AndExpression.
  */
 
-type AndExpression struct {
+type AndExpr struct {
 	multiExprMixin
 }
 
-// Ensure AndCondition implements MultiExpression.
-var _ MultiExpression = (*AndExpression)(nil)
-
-func (a *AndExpression) Type() string {
-	return "and"
-}
-
-func (e *AndExpression) Validate() apperror.Error {
+func (e *AndExpr) Validate() apperror.Error {
 	if len(e.expressions) < 1 {
 		return apperror.New("no_and_expressions")
 	}
 	return nil
 }
 
-func AndExpr(exprs ...Expression) *AndExpression {
-	e := &AndExpression{}
+func NewAndExpr(exprs ...Expression) *AndExpr {
+	e := &AndExpr{}
 	e.expressions = exprs
 	return e
 }
@@ -943,26 +687,19 @@ func AndExpr(exprs ...Expression) *AndExpression {
  * Or.
  */
 
-type OrExpression struct {
+type OrExpr struct {
 	multiExprMixin
 }
 
-// Ensure OrCondition implements MultiExpression.
-var _ MultiExpression = (*OrExpression)(nil)
-
-func (o *OrExpression) Type() string {
-	return "or"
-}
-
-func (e *OrExpression) Validate() apperror.Error {
+func (e *OrExpr) Validate() apperror.Error {
 	if len(e.expressions) < 1 {
 		return apperror.New("no_or_expressions")
 	}
 	return nil
 }
 
-func OrExpr(exprs ...Expression) *OrExpression {
-	or := &OrExpression{}
+func NewOrExpr(exprs ...Expression) *OrExpr {
+	or := &OrExpr{}
 	or.expressions = exprs
 	return or
 }
@@ -971,43 +708,31 @@ func OrExpr(exprs ...Expression) *OrExpression {
  * NOT.
  */
 
-type NotExpression interface {
-	Expression
-	Not() Expression
-}
-
-type notExpr struct {
+type NotExpr struct {
 	not Expression
 }
 
-// Ensure NotCondition implements NestedExpression.
-var _ NotExpression = (*notExpr)(nil)
-
-func (*notExpr) Type() string {
-	return "not"
-}
-
-func (e *notExpr) Not() Expression {
+func (e *NotExpr) Not() Expression {
 	return e.not
 }
 
-func (e *notExpr) Validate() apperror.Error {
+func (e *NotExpr) Validate() apperror.Error {
 	if e.not == nil {
 		return apperror.New("no_not_expression")
 	}
 	return nil
 }
 
-func (e *notExpr) GetIdentifiers() []string {
-	return e.not.GetIdentifiers()
+func (e *NotExpr) GetIdentifiers() []Expression {
+	return getIdentifiers(e.not)
 }
 
-func NotExpr(expr ...Expression) NotExpression {
-	not := &notExpr{}
+func NewNotExpr(expr ...Expression) *NotExpr {
+	not := &NotExpr{}
 	if len(expr) == 1 {
 		not.not = expr[0]
 	} else if len(expr) > 1 {
-		not.not = AndExpr(expr...)
+		not.not = NewAndExpr(expr...)
 	}
 	return not
 }
@@ -1054,7 +779,6 @@ func MapOperator(op string) string {
  */
 
 type FilterExpression interface {
-	Expression
 	Field() Expression
 	Operator() string
 	Clause() Expression
@@ -1065,32 +789,25 @@ type FilterExpression interface {
  */
 
 // Filter represents an expression that filters an arbitrary expression field by a clause with an operator.
-type filter struct {
+type Filter struct {
 	field    Expression
 	operator string
 	clause   Expression
 }
 
-// Ensure Filter implements Expression.
-var _ FilterExpression = (*filter)(nil)
-
-func (*filter) Type() string {
-	return "filter"
-}
-
-func (f filter) Field() Expression {
+func (f *Filter) Field() Expression {
 	return f.field
 }
 
-func (f filter) Operator() string {
+func (f *Filter) Operator() string {
 	return f.operator
 }
 
-func (f filter) Clause() Expression {
+func (f *Filter) Clause() Expression {
 	return f.clause
 }
 
-func (e *filter) Validate() apperror.Error {
+func (e *Filter) Validate() apperror.Error {
 	if e.field == nil {
 		return apperror.New("empty_field")
 	} else if e.operator == "" {
@@ -1103,148 +820,135 @@ func (e *filter) Validate() apperror.Error {
 	return nil
 }
 
-func (f filter) GetIdentifiers() []string {
-	ids := f.field.GetIdentifiers()
-	ids = append(ids, f.clause.GetIdentifiers()...)
+func (f *Filter) GetIdentifiers() []Expression {
+	ids := getIdentifiers(f.field)
+	ids = append(ids, getIdentifiers(f.clause)...)
 	return ids
 }
 
 // NewFilter creates a new filter expression.
-func FilterExpr(field Expression, operator string, clause Expression) FilterExpression {
-	return &filter{
+func NewFilter(field Expression, operator string, clause Expression) *Filter {
+	return &Filter{
 		field:    field,
 		operator: operator,
 		clause:   clause,
 	}
 }
 
-func FieldFilter(collection, field, operator string, clause Expression) FilterExpression {
+func NewFieldFilter(collection, field, operator string, clause Expression) *Filter {
 	var fieldExpr Expression
 	if collection != "" {
-		fieldExpr = ColFieldIdExpr(collection, field)
+		fieldExpr = NewColFieldIdExpr(collection, field)
 	} else {
-		fieldExpr = IdExpr(field)
+		fieldExpr = NewIdExpr(field)
 	}
-	return &filter{
+	return &Filter{
 		field:    fieldExpr,
 		operator: operator,
 		clause:   clause,
 	}
 }
 
-func FieldValFilter(collection, field, operator string, value interface{}) FilterExpression {
-	return FieldFilter(collection, field, operator, ValueExpr(value))
+func NewFieldValFilter(collection, field, operator string, value interface{}) *Filter {
+	return NewFieldFilter(collection, field, operator, NewValueExpr(value))
 }
 
 /**
  * Eq.
  */
 
-func Eq(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_EQ, val)
+func Eq(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_EQ, val)
 }
 
 /**
  * Neq.
  */
 
-func Neq(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_NEQ, val)
+func Neq(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_NEQ, val)
 }
 
 /**
  * Like.
  */
 
-func Like(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_LIKE, val)
+func Like(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_LIKE, val)
 }
 
 /**
  * In.
  */
 
-func In(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_IN, val)
+func In(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_IN, val)
 }
 
 /**
  * Less than Lt.
  */
 
-func Lt(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_LT, val)
+func Lt(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_LT, val)
 }
 
 /**
  * Less than eqal Lte.
  */
 
-func Lte(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_LTE, val)
+func Lte(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_LTE, val)
 }
 
 /**
  * Greater than gt.
  */
 
-func Gt(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_GT, val)
+func Gt(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_GT, val)
 }
 
 /**
  * Greater than equal gte.
  */
 
-func Gte(collection, field string, val interface{}) FilterExpression {
-	return FieldValFilter(collection, field, OPERATOR_GTE, val)
+func Gte(collection, field string, val interface{}) *Filter {
+	return NewFieldValFilter(collection, field, OPERATOR_GTE, val)
 }
 
 /**
  * SortExpression.
  */
 
-type SortExpression interface {
-	NestedExpression
-	Ascending() bool
-	SetAscending(asc bool)
-}
-
-type sortExpr struct {
+type SortExpr struct {
 	nestedExprMixin
 	ascending bool
 }
 
-// Ensure SortExpression implements Expression.
-var _ SortExpression = (*sortExpr)(nil)
-
-func (*sortExpr) Type() string {
-	return "sort"
-}
-
-func (s *sortExpr) Ascending() bool {
+func (s *SortExpr) Ascending() bool {
 	return s.ascending
 }
 
-func (s *sortExpr) SetAscending(asc bool) {
+func (s *SortExpr) SetAscending(asc bool) {
 	s.ascending = asc
 }
 
-func (e *sortExpr) Validate() apperror.Error {
+func (e *SortExpr) Validate() apperror.Error {
 	if e.expression == nil {
 		return apperror.New("empty_field_expression")
 	}
 	return nil
 }
 
-func SortExpr(expr Expression, ascending bool) SortExpression {
-	e := &sortExpr{
+func NewSortExpr(expr Expression, ascending bool) *SortExpr {
+	e := &SortExpr{
 		ascending: ascending,
 	}
 	e.expression = expr
 	return e
 }
 
-func Sort(collection, field string, ascending bool) SortExpression {
-	return SortExpr(BuildIdExpr(collection, field), ascending)
+func NewSort(collection, field string, ascending bool) *SortExpr {
+	return NewSortExpr(BuildIdExpr(collection, field), ascending)
 }

@@ -1,4 +1,4 @@
-package dukedb
+package expressions
 
 import (
 	"fmt"
@@ -7,88 +7,53 @@ import (
 )
 
 /**
- * List of statements:
- *
- * CreateCollectionStatement
- * RenameCollectionStatement
- * DropCollectionStatement
- * CreateFieldStatement
- * RenameFieldStatement
- * DropFieldStatement
- * CreateIndexStatement
- * DropIndexStatement
- * SelectStatement
- * JoinStatement
- * CreateStatement
- * UpdateStatement
-* /
-
-/**
  * Statements.
-*/
+ */
 
 /**
  * CreateCollectionStatement.
  */
 
-type CreateCollectionStatement interface {
-	Expression
-
-	Collection() string
-	IfNotExists() bool
-	Fields() []FieldExpression
-	Constraints() []Expression
-}
-
 // CollectionStatement represents the definition for a collection.
-type createCollectionStmt struct {
-	noIdentifiersMixin
-
+type CreateCollectionStmt struct {
 	// Name is the collection name.
 	collection string
 
 	ifNotExists bool
 
 	// Fields are the collection fields.
-	fields []FieldExpression
+	fields []*FieldExpr
 
 	// Constraints are the constraints applied to the table, like
 	// UniqueFieldsConstraint, CheckConstraint, ...
 	constraints []Expression
 }
 
-// Ensure CreateCollectionStatement implements Expression.
-var _ CreateCollectionStatement = (*createCollectionStmt)(nil)
-
-func (*createCollectionStmt) Type() string {
-	return "create_collection"
-}
-
-func (s *createCollectionStmt) Collection() string {
+func (s *CreateCollectionStmt) Collection() string {
 	return s.collection
 }
 
-func (s *createCollectionStmt) IfNotExists() bool {
+func (s *CreateCollectionStmt) IfNotExists() bool {
 	return s.ifNotExists
 }
 
-func (s *createCollectionStmt) Fields() []FieldExpression {
+func (s *CreateCollectionStmt) Fields() []*FieldExpr {
 	return s.fields
 }
 
-func (s *createCollectionStmt) Constraints() []Expression {
+func (s *CreateCollectionStmt) Constraints() []Expression {
 	return s.constraints
 }
 
-func (e *createCollectionStmt) Validate() apperror.Error {
+func (e *CreateCollectionStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	}
 	return nil
 }
 
-func CreateColStmt(collection string, ifNotExists bool, fields []FieldExpression, constraints []Expression) CreateCollectionStatement {
-	return &createCollectionStmt{
+func NewCreateColStmt(collection string, ifNotExists bool, fields []*FieldExpr, constraints []Expression) *CreateCollectionStmt {
+	return &CreateCollectionStmt{
 		collection:  collection,
 		ifNotExists: ifNotExists,
 		fields:      fields,
@@ -100,37 +65,21 @@ func CreateColStmt(collection string, ifNotExists bool, fields []FieldExpression
  * RenameCollectionStatement.
  */
 
-type RenameCollectionStatement interface {
-	Expression
-
-	Collection() string
-	NewName() string
-}
-
-type renameCollectionStmt struct {
-	noIdentifiersMixin
-
+type RenameCollectionStmt struct {
 	// Collection is the current name of the collection.
 	collection string
 	newName    string
 }
 
-// Ensure RenameCollectionStatement implements Expression.
-var _ RenameCollectionStatement = (*renameCollectionStmt)(nil)
-
-func (*renameCollectionStmt) Type() string {
-	return "rename_collection"
-}
-
-func (s *renameCollectionStmt) Collection() string {
+func (s *RenameCollectionStmt) Collection() string {
 	return s.collection
 }
 
-func (s *renameCollectionStmt) NewName() string {
+func (s *RenameCollectionStmt) NewName() string {
 	return s.newName
 }
 
-func (e *renameCollectionStmt) Validate() apperror.Error {
+func (e *RenameCollectionStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.newName == "" {
@@ -139,8 +88,8 @@ func (e *renameCollectionStmt) Validate() apperror.Error {
 	return nil
 }
 
-func RenameColStmt(collection, newName string) RenameCollectionStatement {
-	return &renameCollectionStmt{
+func NewRenameColStmt(collection, newName string) *RenameCollectionStmt {
+	return &RenameCollectionStmt{
 		collection: collection,
 		newName:    newName,
 	}
@@ -150,18 +99,8 @@ func RenameColStmt(collection, newName string) RenameCollectionStatement {
  * DropCollectionStatement.
  */
 
-type DropCollectionStatement interface {
-	Expression
-
-	Collection() string
-	IfExists() bool
-	Cascade() bool
-}
-
 // DropCollectionStatement is an expression for dropping a collection.
-type dropCollectionStmt struct {
-	noIdentifiersMixin
-
+type DropCollectionStmt struct {
 	// Name is the collection name.
 	collection string
 
@@ -169,34 +108,27 @@ type dropCollectionStmt struct {
 	cascade  bool
 }
 
-// Ensure DropCollectionStatement implements Expression.
-var _ DropCollectionStatement = (*dropCollectionStmt)(nil)
-
-func (*dropCollectionStmt) Type() string {
-	return "drop_collection"
-}
-
-func (s *dropCollectionStmt) Collection() string {
+func (s *DropCollectionStmt) Collection() string {
 	return s.collection
 }
 
-func (s *dropCollectionStmt) IfExists() bool {
+func (s *DropCollectionStmt) IfExists() bool {
 	return s.ifExists
 }
 
-func (s *dropCollectionStmt) Cascade() bool {
+func (s *DropCollectionStmt) Cascade() bool {
 	return s.cascade
 }
 
-func (e *dropCollectionStmt) Validate() apperror.Error {
+func (e *DropCollectionStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	}
 	return nil
 }
 
-func DropColStmt(collection string, ifExists, cascade bool) DropCollectionStatement {
-	return &dropCollectionStmt{
+func NewDropColStmt(collection string, ifExists, cascade bool) *DropCollectionStmt {
+	return &DropCollectionStmt{
 		collection: collection,
 		ifExists:   ifExists,
 		cascade:    cascade,
@@ -207,37 +139,21 @@ func DropColStmt(collection string, ifExists, cascade bool) DropCollectionStatem
  * CreateFieldStatement.
  */
 
-type CreateFieldStatement interface {
-	Expression
-
-	Collection() string
-	Field() FieldExpression
-}
-
 // AddCollectionFieldStatement is an expression to add a field to a collection.
-type createFieldStmt struct {
-	noIdentifiersMixin
-
+type CreateFieldStmt struct {
 	collection string
-	field      FieldExpression
+	field      *FieldExpr
 }
 
-// Ensure AddCollectionFieldStatement implements Expression.
-var _ CreateFieldStatement = (*createFieldStmt)(nil)
-
-func (*createFieldStmt) Type() string {
-	return "create_collection_field"
-}
-
-func (s *createFieldStmt) Collection() string {
+func (s *CreateFieldStmt) Collection() string {
 	return s.collection
 }
 
-func (s *createFieldStmt) Field() FieldExpression {
+func (s *CreateFieldStmt) Field() *FieldExpr {
 	return s.field
 }
 
-func (e *createFieldStmt) Validate() apperror.Error {
+func (e *CreateFieldStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.Field == nil {
@@ -246,8 +162,8 @@ func (e *createFieldStmt) Validate() apperror.Error {
 	return nil
 }
 
-func CreateFieldStmt(collection string, field FieldExpression) CreateFieldStatement {
-	return &createFieldStmt{
+func NewCreateFieldStmt(collection string, field *FieldExpr) *CreateFieldStmt {
+	return &CreateFieldStmt{
 		collection: collection,
 		field:      field,
 	}
@@ -257,42 +173,25 @@ func CreateFieldStmt(collection string, field FieldExpression) CreateFieldStatem
  * RenameFieldStatement.
  */
 
-type RenameFieldStatement interface {
-	Expression
-
-	Collection() string
-	Field() string
-	NewName() string
-}
-
-type renameFieldStmt struct {
-	noIdentifiersMixin
-
+type RenameFieldStmt struct {
 	collection string
 	field      string
 	newName    string
 }
 
-// Ensure RenameCollectionFieldStatement implements Expression.
-var _ RenameFieldStatement = (*renameFieldStmt)(nil)
-
-func (*renameFieldStmt) Type() string {
-	return "rename_collection_field"
-}
-
-func (s *renameFieldStmt) Collection() string {
+func (s *RenameFieldStmt) Collection() string {
 	return s.collection
 }
 
-func (s *renameFieldStmt) Field() string {
+func (s *RenameFieldStmt) Field() string {
 	return s.field
 }
 
-func (s *renameFieldStmt) NewName() string {
+func (s *RenameFieldStmt) NewName() string {
 	return s.newName
 }
 
-func (e *renameFieldStmt) Validate() apperror.Error {
+func (e *RenameFieldStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.field == "" {
@@ -303,8 +202,8 @@ func (e *renameFieldStmt) Validate() apperror.Error {
 	return nil
 }
 
-func RenameFieldStmt(collection, field, newName string) RenameFieldStatement {
-	return &renameFieldStmt{
+func NewRenameFieldStmt(collection, field, newName string) *RenameFieldStmt {
+	return &RenameFieldStmt{
 		collection: collection,
 		field:      field,
 		newName:    newName,
@@ -315,48 +214,30 @@ func RenameFieldStmt(collection, field, newName string) RenameFieldStatement {
  * DropFieldStatement.
  */
 
-type DropFieldStatement interface {
-	Expression
-
-	Collection() string
-	Field() string
-	IfExists() bool
-	Cascade() bool
-}
-
-type dropFieldStmt struct {
-	noIdentifiersMixin
-
+type DropFieldStmt struct {
 	collection string
 	field      string
 	ifExists   bool
 	cascade    bool
 }
 
-// Ensure DropCollectionFieldStatement implements Expression.
-var _ DropFieldStatement = (*dropFieldStmt)(nil)
-
-func (*dropFieldStmt) Type() string {
-	return "drop_collection_field"
-}
-
-func (s *dropFieldStmt) Collection() string {
+func (s *DropFieldStmt) Collection() string {
 	return s.collection
 }
 
-func (s *dropFieldStmt) Field() string {
+func (s *DropFieldStmt) Field() string {
 	return s.field
 }
 
-func (s *dropFieldStmt) IfExists() bool {
+func (s *DropFieldStmt) IfExists() bool {
 	return s.ifExists
 }
 
-func (s *dropFieldStmt) Cascade() bool {
+func (s *DropFieldStmt) Cascade() bool {
 	return s.cascade
 }
 
-func (e *dropFieldStmt) Validate() apperror.Error {
+func (e *DropFieldStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	} else if e.field == "" {
@@ -365,8 +246,8 @@ func (e *dropFieldStmt) Validate() apperror.Error {
 	return nil
 }
 
-func DropFieldStmt(collection, field string, ifExists, cascade bool) DropFieldStatement {
-	return &dropFieldStmt{
+func NewDropFieldStmt(collection, field string, ifExists, cascade bool) *DropFieldStmt {
+	return &DropFieldStmt{
 		collection: collection,
 		field:      field,
 		ifExists:   ifExists,
@@ -378,20 +259,7 @@ func DropFieldStmt(collection, field string, ifExists, cascade bool) DropFieldSt
  * CreateIndexStatement.
  */
 
-type CreateIndexStatement interface {
-	Expression
-
-	IndexName() string
-	IndexExpression() Expression
-
-	Expressions() []Expression
-	Unique() bool
-	Method() string
-}
-
-type createIndexStmt struct {
-	noIdentifiersMixin
-
+type CreateIndexStmt struct {
 	name            string
 	indexExpression Expression
 	expressions     []Expression
@@ -400,34 +268,27 @@ type createIndexStmt struct {
 	method string
 }
 
-// Ensure AddIndexStatement implements Expression.
-var _ CreateIndexStatement = (*createIndexStmt)(nil)
-
-func (*createIndexStmt) Type() string {
-	return "create_index"
-}
-
-func (s *createIndexStmt) IndexName() string {
+func (s *CreateIndexStmt) IndexName() string {
 	return s.name
 }
 
-func (s *createIndexStmt) IndexExpression() Expression {
+func (s *CreateIndexStmt) IndexExpression() Expression {
 	return s.indexExpression
 }
 
-func (s *createIndexStmt) Expressions() []Expression {
+func (s *CreateIndexStmt) Expressions() []Expression {
 	return s.expressions
 }
 
-func (s *createIndexStmt) Unique() bool {
+func (s *CreateIndexStmt) Unique() bool {
 	return s.unique
 }
 
-func (s *createIndexStmt) Method() string {
+func (s *CreateIndexStmt) Method() string {
 	return s.method
 }
 
-func (e *createIndexStmt) Validate() apperror.Error {
+func (e *CreateIndexStmt) Validate() apperror.Error {
 	if len(e.expressions) < 1 {
 		return apperror.New("no_index_expressions")
 	} else if e.name == "" {
@@ -436,8 +297,8 @@ func (e *createIndexStmt) Validate() apperror.Error {
 	return nil
 }
 
-func CreateIndexStmt(name string, indexExpr Expression, expressions []Expression, unique bool, method string) CreateIndexStatement {
-	return &createIndexStmt{
+func NewCreateIndexStmt(name string, indexExpr Expression, expressions []Expression, unique bool, method string) *CreateIndexStmt {
+	return &CreateIndexStmt{
 		name:            name,
 		indexExpression: indexExpr,
 		expressions:     expressions,
@@ -450,50 +311,33 @@ func CreateIndexStmt(name string, indexExpr Expression, expressions []Expression
  * DropIndexStatement.
  */
 
-type DropIndexStatement interface {
-	Expression
-
-	IndexName() string
-	IfExists() bool
-	Cascade() bool
-}
-
-type dropIndexStmt struct {
-	noIdentifiersMixin
-
+type DropIndexStmt struct {
 	name     string
 	ifExists bool
 	cascade  bool
 }
 
-// Ensure DropIndexStatement implements Expression.
-var _ DropIndexStatement = (*dropIndexStmt)(nil)
-
-func (*dropIndexStmt) Type() string {
-	return "drop_index"
-}
-
-func (s *dropIndexStmt) IndexName() string {
+func (s *DropIndexStmt) IndexName() string {
 	return s.name
 }
 
-func (s *dropIndexStmt) IfExists() bool {
+func (s *DropIndexStmt) IfExists() bool {
 	return s.ifExists
 }
 
-func (s *dropIndexStmt) Cascade() bool {
+func (s *DropIndexStmt) Cascade() bool {
 	return s.cascade
 }
 
-func (e *dropIndexStmt) Validate() apperror.Error {
+func (e *DropIndexStmt) Validate() apperror.Error {
 	if e.name == "" {
 		return apperror.New("empty_index_name")
 	}
 	return nil
 }
 
-func DropIndexStmt(name string, ifExists, cascade bool) DropIndexStatement {
-	return &dropIndexStmt{
+func NewDropIndexStmt(name string, ifExists, cascade bool) *DropIndexStmt {
+	return &DropIndexStmt{
 		name:     name,
 		ifExists: ifExists,
 		cascade:  cascade,
@@ -504,71 +348,33 @@ func DropIndexStmt(name string, ifExists, cascade bool) DropIndexStatement {
  * SelectStatement.
  */
 
-type SelectStatement interface {
-	NamedExpression
-
-	Collection() string
-	SetCollection(collection string)
-
-	Fields() []Expression
-	SetFields(fields []Expression)
-	AddField(fields ...Expression)
-
-	Filter() Expression
-	SetFilter(f Expression)
-	FilterAnd(filter Expression)
-	FilterOr(filter Expression)
-
-	Sorts() []SortExpression
-	SetSorts(sorts []SortExpression)
-	AddSort(sort SortExpression)
-
-	Limit() int
-	SetLimit(limit int)
-
-	Offset() int
-	SetOffset(offset int)
-
-	Joins() []JoinStatement
-	SetJoins(joins []JoinStatement)
-	AddJoin(join JoinStatement)
-}
-
 // SelectStatement represents a database select.
-type selectStmt struct {
+type SelectStmt struct {
 	namedExprMixin
-	noIdentifiersMixin
 
 	collection string
 	// Fields are arbitrary field expressions.
 	fields []Expression
 	filter Expression
-	sorts  []SortExpression
+	sorts  []*SortExpr
 
 	limit  int
 	offset int
 
-	joins []JoinStatement
+	joins []*JoinStmt
 }
 
-// Ensure SelectStatement implements NamedExpression.
-var _ SelectStatement = (*selectStmt)(nil)
-
-func SelectStmt(collection string) SelectStatement {
-	return &selectStmt{
+func NewSelectStmt(collection string) *SelectStmt {
+	return &SelectStmt{
 		collection: collection,
 	}
 }
 
-func (*selectStmt) Type() string {
-	return "select"
-}
-
-func (s *selectStmt) Collection() string {
+func (s *SelectStmt) Collection() string {
 	return s.collection
 }
 
-func (s *selectStmt) SetCollection(col string) {
+func (s *SelectStmt) SetCollection(col string) {
 	s.collection = col
 }
 
@@ -576,15 +382,15 @@ func (s *selectStmt) SetCollection(col string) {
  * Fields.
  */
 
-func (s *selectStmt) Fields() []Expression {
+func (s *SelectStmt) Fields() []Expression {
 	return s.fields
 }
 
-func (s *selectStmt) SetFields(fields []Expression) {
+func (s *SelectStmt) SetFields(fields []Expression) {
 	s.fields = fields
 }
 
-func (s *selectStmt) AddField(fields ...Expression) {
+func (s *SelectStmt) AddField(fields ...Expression) {
 	s.fields = append(s.fields, fields...)
 }
 
@@ -592,31 +398,31 @@ func (s *selectStmt) AddField(fields ...Expression) {
  * Filters.
  */
 
-func (s *selectStmt) Filter() Expression {
+func (s *SelectStmt) Filter() Expression {
 	return s.filter
 }
 
-func (s *selectStmt) SetFilter(filter Expression) {
+func (s *SelectStmt) SetFilter(filter Expression) {
 	s.filter = filter
 }
 
-func (s *selectStmt) FilterAnd(filter Expression) {
+func (s *SelectStmt) FilterAnd(filter Expression) {
 	if s.filter == nil {
 		s.filter = filter
-	} else if andExpr, ok := s.filter.(*AndExpression); ok {
+	} else if andExpr, ok := s.filter.(*AndExpr); ok {
 		andExpr.Add(filter)
 	} else {
-		s.filter = AndExpr(s.filter, filter)
+		s.filter = NewAndExpr(s.filter, filter)
 	}
 }
 
-func (s *selectStmt) FilterOr(filter Expression) {
+func (s *SelectStmt) FilterOr(filter Expression) {
 	if s.filter == nil {
 		s.filter = filter
-	} else if orExpr, ok := s.filter.(*OrExpression); ok {
+	} else if orExpr, ok := s.filter.(*OrExpr); ok {
 		orExpr.Add(filter)
 	} else {
-		s.filter = OrExpr(s.filter, filter)
+		s.filter = NewOrExpr(s.filter, filter)
 	}
 }
 
@@ -624,15 +430,15 @@ func (s *selectStmt) FilterOr(filter Expression) {
  * Sorts.
  */
 
-func (s *selectStmt) Sorts() []SortExpression {
+func (s *SelectStmt) Sorts() []*SortExpr {
 	return s.sorts
 }
 
-func (s *selectStmt) SetSorts(sorts []SortExpression) {
+func (s *SelectStmt) SetSorts(sorts []*SortExpr) {
 	s.sorts = sorts
 }
 
-func (s *selectStmt) AddSort(sort SortExpression) {
+func (s *SelectStmt) AddSort(sort *SortExpr) {
 	s.sorts = append(s.sorts, sort)
 }
 
@@ -640,11 +446,11 @@ func (s *selectStmt) AddSort(sort SortExpression) {
  * Limit.
  */
 
-func (s *selectStmt) Limit() int {
+func (s *SelectStmt) Limit() int {
 	return s.limit
 }
 
-func (s *selectStmt) SetLimit(limit int) {
+func (s *SelectStmt) SetLimit(limit int) {
 	s.limit = limit
 }
 
@@ -652,11 +458,11 @@ func (s *selectStmt) SetLimit(limit int) {
  * Offset.
  */
 
-func (s *selectStmt) Offset() int {
+func (s *SelectStmt) Offset() int {
 	return s.offset
 }
 
-func (s *selectStmt) SetOffset(offset int) {
+func (s *SelectStmt) SetOffset(offset int) {
 	s.offset = offset
 }
 
@@ -664,36 +470,36 @@ func (s *selectStmt) SetOffset(offset int) {
  * Joins.
  */
 
-func (s *selectStmt) Joins() []JoinStatement {
+func (s *SelectStmt) Joins() []*JoinStmt {
 	return s.joins
 }
 
-func (s *selectStmt) SetJoins(joins []JoinStatement) {
+func (s *SelectStmt) SetJoins(joins []*JoinStmt) {
 	s.joins = joins
 }
 
-func (s *selectStmt) AddJoin(join JoinStatement) {
+func (s *SelectStmt) AddJoin(join *JoinStmt) {
 	s.joins = append(s.joins, join)
 }
 
-func (e *selectStmt) Validate() apperror.Error {
+func (e *SelectStmt) Validate() apperror.Error {
 	if e.collection == "" {
 		return apperror.New("empty_collection")
 	}
 	return nil
 }
 
-func (s selectStmt) GetIdentifiers() []string {
-	ids := make([]string, 0)
+func (s *SelectStmt) GetIdentifiers() []Expression {
+	ids := make([]Expression, 0)
 	// Fields.
 	for _, f := range s.fields {
-		ids = append(ids, f.GetIdentifiers()...)
+		ids = append(ids, getIdentifiers(f)...)
 	}
 	// Filter.
-	ids = append(ids, s.filter.GetIdentifiers()...)
+	ids = append(ids, getIdentifiers(s.filter)...)
 	// Sorts.
 	for _, sort := range s.sorts {
-		ids = append(ids, sort.GetIdentifiers()...)
+		ids = append(ids, getIdentifiers(sort)...)
 	}
 	// Joins.
 	for _, join := range s.joins {
@@ -728,24 +534,9 @@ var JOIN_MAP map[string]string = map[string]string{
 	"cross":       "CROSS JOIN",
 }
 
-type JoinStatement interface {
-	SelectStatement
-
-	// One of the JOIN_* constants.
-	JoinType() string
-	SetJoinType(typ string)
-
-	JoinCondition() Expression
-	SetJoinCondition(expr Expression)
-
-	// Returns the select for the join.
-	// Do not confuse it with ParentSelect(), which returns the select this join belongs to.
-	SelectStatement() SelectStatement
-}
-
 // JoinStatement represents a database join.
-type joinStmt struct {
-	selectStmt
+type JoinStmt struct {
+	SelectStmt
 
 	// One of the JOIN_* constants.
 	joinType string
@@ -753,35 +544,28 @@ type joinStmt struct {
 	joinCondition Expression
 }
 
-// Ensure JoinStatement implements Expression.
-var _ JoinStatement = (*joinStmt)(nil)
-
-func (*joinStmt) Type() string {
-	return "join"
-}
-
-func (s *joinStmt) JoinType() string {
+func (s *JoinStmt) JoinType() string {
 	return s.joinType
 }
 
-func (s *joinStmt) SetJoinType(typ string) {
+func (s *JoinStmt) SetJoinType(typ string) {
 	s.joinType = typ
 }
 
-func (s *joinStmt) JoinCondition() Expression {
+func (s *JoinStmt) JoinCondition() Expression {
 	return s.joinCondition
 }
 
-func (s *joinStmt) SetJoinCondition(e Expression) {
+func (s *JoinStmt) SetJoinCondition(e Expression) {
 	s.joinCondition = e
 }
 
-func (s *joinStmt) SelectStatement() SelectStatement {
-	return &s.selectStmt
+func (s *JoinStmt) SelectStatement() *SelectStmt {
+	return &s.SelectStmt
 }
 
-func (e *joinStmt) Validate() apperror.Error {
-	if err := e.selectStmt.Validate(); err != nil {
+func (e *JoinStmt) Validate() apperror.Error {
+	if err := e.SelectStmt.Validate(); err != nil {
 		return err
 	} else if e.joinType == "" {
 		return apperror.New("empty_join_type")
@@ -793,14 +577,14 @@ func (e *joinStmt) Validate() apperror.Error {
 	return nil
 }
 
-func (s *joinStmt) GetIdentifiers() []string {
-	ids := s.selectStmt.GetIdentifiers()
-	ids = append(ids, s.joinCondition.GetIdentifiers()...)
+func (s *JoinStmt) GetIdentifiers() []Expression {
+	ids := s.SelectStmt.GetIdentifiers()
+	ids = append(ids, getIdentifiers(s.joinCondition)...)
 	return ids
 }
 
-func JoinStmt(collection, joinType string, joinCondition Expression) JoinStatement {
-	s := &joinStmt{
+func NewJoinStmt(collection, joinType string, joinCondition Expression) *JoinStmt {
+	s := &JoinStmt{
 		joinType:      joinType,
 		joinCondition: joinCondition,
 	}
@@ -812,18 +596,10 @@ func JoinStmt(collection, joinType string, joinCondition Expression) JoinStateme
  * MutationExpression.
  */
 
-type MutationStatement interface {
-	NamedExpression
-	Collection() string
-	SetCollection(col string)
-	Values() []FieldValueExpression
-	SetValues([]FieldValueExpression)
-}
-
 type mutationStmt struct {
 	namedExprMixin
 	collection string
-	values     []FieldValueExpression
+	values     []*FieldValueExpr
 }
 
 func (e *mutationStmt) Validate() apperror.Error {
@@ -843,18 +619,18 @@ func (e *mutationStmt) SetCollection(col string) {
 	e.collection = col
 }
 
-func (e mutationStmt) Values() []FieldValueExpression {
+func (e mutationStmt) Values() []*FieldValueExpr {
 	return e.values
 }
 
-func (e *mutationStmt) SetValues(vals []FieldValueExpression) {
+func (e *mutationStmt) SetValues(vals []*FieldValueExpr) {
 	e.values = vals
 }
 
-func (s mutationStmt) GetIdentifiers() []string {
-	ids := make([]string, 0)
+func (s mutationStmt) GetIdentifiers() []Expression {
+	ids := make([]Expression, 0)
 	for _, val := range s.values {
-		ids = append(ids, val.GetIdentifiers()...)
+		ids = append(ids, getIdentifiers(val)...)
 	}
 	return ids
 }
@@ -863,23 +639,12 @@ func (s mutationStmt) GetIdentifiers() []string {
  * CreateStatement.
  */
 
-type CreateStatement interface {
-	MutationStatement
-}
-
-type createStmt struct {
+type CreateStmt struct {
 	mutationStmt
 }
 
-// Ensure CreateStatement implements Expression.
-var _ CreateStatement = (*createStmt)(nil)
-
-func (*createStmt) Type() string {
-	return "create"
-}
-
-func CreateStmt(collection string, values []FieldValueExpression) CreateStatement {
-	stmt := &createStmt{}
+func NewCreateStmt(collection string, values []*FieldValueExpr) *CreateStmt {
+	stmt := &CreateStmt{}
 	stmt.collection = collection
 	stmt.values = values
 	return stmt
@@ -889,35 +654,21 @@ func CreateStmt(collection string, values []FieldValueExpression) CreateStatemen
  * UpdateStatement.
  */
 
-type UpdateStatement interface {
-	MutationStatement
-	// Select is the select statement to specify which models to update.
-	Select() SelectStatement
-	SetSelect(stmt SelectStatement)
-}
-
-type updateStmt struct {
+type UpdateStmt struct {
 	mutationStmt
 	// Select is the select statement to specify which models to update.
-	selectStmt SelectStatement
+	selectStmt *SelectStmt
 }
 
-// Ensure UpdateStatement implements Expression.
-var _ UpdateStatement = (*updateStmt)(nil)
-
-func (*updateStmt) Type() string {
-	return "update"
-}
-
-func (s *updateStmt) Select() SelectStatement {
+func (s *UpdateStmt) Select() *SelectStmt {
 	return s.selectStmt
 }
 
-func (s *updateStmt) SetSelect(x SelectStatement) {
+func (s *UpdateStmt) SetSelect(x *SelectStmt) {
 	s.selectStmt = x
 }
 
-func (e *updateStmt) Validate() apperror.Error {
+func (e *UpdateStmt) Validate() apperror.Error {
 	if err := e.mutationStmt.Validate(); err != nil {
 		return err
 	} else if e.selectStmt == nil {
@@ -926,31 +677,31 @@ func (e *updateStmt) Validate() apperror.Error {
 	return nil
 }
 
-func UpdateStmt(collection string, values []FieldValueExpression, selectStmt SelectStatement) UpdateStatement {
-	stmt := &updateStmt{}
+func NewUpdateStmt(collection string, values []*FieldValueExpr, selectStmt *SelectStmt) *UpdateStmt {
+	stmt := &UpdateStmt{}
 	stmt.collection = collection
 	stmt.values = values
 	stmt.selectStmt = selectStmt
 	return stmt
 }
 
-type DeleteStatement struct {
+/**
+ * DeleteStmtm.
+ */
+
+type DeleteStmt struct {
 	collection string
-	selectStmt SelectStatement
+	selectStmt *SelectStmt
 }
 
-func DeleteStmt(collection string, selectStmt SelectStatement) *DeleteStatement {
-	return &DeleteStatement{
+func NewDeleteStmt(collection string, selectStmt *SelectStmt) *DeleteStmt {
+	return &DeleteStmt{
 		collection: collection,
 		selectStmt: selectStmt,
 	}
 }
 
-func (d *DeleteStatement) Type() string {
-	return "delete"
-}
-
-func (d *DeleteStatement) Validate() apperror.Error {
+func (d *DeleteStmt) Validate() apperror.Error {
 	if d.collection == "" {
 		return apperror.New("empty_collection")
 	} else if d.selectStmt == nil {
@@ -959,22 +710,22 @@ func (d *DeleteStatement) Validate() apperror.Error {
 	return nil
 }
 
-func (d *DeleteStatement) GetIdentifiers() []string {
+func (d *DeleteStmt) GetIdentifiers() []Expression {
 	return nil
 }
 
-func (d *DeleteStatement) Collection() string {
+func (d *DeleteStmt) Collection() string {
 	return d.collection
 }
 
-func (d *DeleteStatement) SetCollection(collection string) {
+func (d *DeleteStmt) SetCollection(collection string) {
 	d.collection = collection
 }
 
-func (d *DeleteStatement) SelectStmt() SelectStatement {
+func (d *DeleteStmt) SelectStmt() *SelectStmt {
 	return d.selectStmt
 }
 
-func (d *DeleteStatement) SetSelectStmt(x SelectStatement) {
+func (d *DeleteStmt) SetSelectStmt(x *SelectStmt) {
 	d.selectStmt = x
 }
