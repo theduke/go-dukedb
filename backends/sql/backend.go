@@ -3,7 +3,9 @@ package sql
 import (
 	"database/sql"
 	"reflect"
+	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/theduke/go-apperror"
 	db "github.com/theduke/go-dukedb"
 	. "github.com/theduke/go-dukedb/expressions"
@@ -12,6 +14,8 @@ import (
 type Backend struct {
 	db.BaseBackend
 	dialect Dialect
+
+	sqlProfilingEnabled bool
 
 	Db *sql.DB
 	Tx *sql.Tx
@@ -55,6 +59,18 @@ func (b *Backend) HasStringIds() bool {
 	return false
 }
 
+func (b *Backend) IsSqlProfilingEnabled() bool {
+	return b.sqlProfilingEnabled
+}
+
+func (b *Backend) EnableSqlProfiling() {
+	b.sqlProfilingEnabled = true
+}
+
+func (b *Backend) DisableSqlProfiling() {
+	b.sqlProfilingEnabled = false
+}
+
 func (b *Backend) Clone() db.Backend {
 	base := b.BaseBackend.Clone()
 	return &Backend{
@@ -79,6 +95,11 @@ func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error)
 	var res sql.Result
 	var err error
 
+	var started time.Time
+	if b.sqlProfilingEnabled {
+		started = time.Now()
+	}
+
 	if b.Tx != nil {
 		res, err = b.Tx.Exec(query, args...)
 	} else {
@@ -87,8 +108,15 @@ func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error)
 
 	if err != nil {
 		b.Logger().Errorf("SQL error: %v: %v | %+v", err, query, args)
+	} else if b.sqlProfilingEnabled {
+		b.Logger().WithFields(logrus.Fields{
+			"action": "sql_exec",
+			"sql":    query,
+			"args":   args,
+			"ms":     time.Now().Sub(started).Nanoseconds() / 1000,
+		}).Debugf("SQL exec")
 	} else if b.Debug() {
-		b.Logger().Debugf("%v | %v", query, args)
+		b.Logger().Debugf("SQL exec: %v | %v", query, args)
 	}
 
 	return res, err
@@ -98,6 +126,11 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 	var rows *sql.Rows
 	var err error
 
+	var started time.Time
+	if b.sqlProfilingEnabled {
+		started = time.Now()
+	}
+
 	if b.Tx != nil {
 		rows, err = b.Tx.Query(query, args...)
 	} else {
@@ -106,8 +139,15 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 
 	if err != nil {
 		b.Logger().Errorf("SQL error: %v: %v | %+v", err, query, args)
+	} else if b.sqlProfilingEnabled {
+		b.Logger().WithFields(logrus.Fields{
+			"action": "sql_query",
+			"sql":    query,
+			"args":   args,
+			"ms":     time.Now().Sub(started).Nanoseconds() / 1000,
+		}).Debugf("SQL exec")
 	} else if b.Debug() {
-		b.Logger().Debugf("%v | %v", query, args)
+		b.Logger().Debugf("SQL query: %v | %v", query, args)
 	}
 
 	return rows, err
