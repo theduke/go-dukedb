@@ -351,7 +351,8 @@ func buildAttribute(field *Field) *Attribute {
 	// If so, an error must be returned.
 	tag := attr.tag
 	if tag.hasOne || tag.belongsTo || tag.hasMany || tag.m2m {
-		panic(fmt.Sprintf("Tag for field %v specifies a relationship, but field type cannot possibly be a relationship (struct required).", field.name))
+		panic(fmt.Sprintf("Tag for field %v specifies a relationship, but could not determine the related model.\n"+
+			"Did you forget to backend.RegisterModel() your related model?", field.name))
 	}
 
 	// Read information from tag into attribute.

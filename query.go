@@ -472,7 +472,7 @@ func (q *Query) Delete() apperror.Error {
 	if q.backend == nil {
 		panic("Calling .Delete() on query without backend")
 	}
-	return q.backend.DeleteQ(q)
+	return q.backend.DeleteMany(q)
 }
 
 /**

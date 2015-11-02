@@ -8,12 +8,19 @@ import (
 	"github.com/theduke/go-dukedb/backends/sql"
 )
 
+type Tag struct {
+	db.IntIdModel
+	Tag string `db:"required"`
+}
+
 type Project struct {
 	db.IntIdModel
 
 	Name string `db:"required"`
 
 	Todos []*Todo `db:"auto-create"`
+
+	Tags []*Tag `db:"m2m"`
 }
 
 type Todo struct {
@@ -40,6 +47,7 @@ func main() {
 	b.SetDebug(true)
 	b.RegisterModel(&Todo{})
 	b.RegisterModel(&Project{})
+	b.RegisterModel(&Tag{})
 	b.EnableProfiling()
 	b.Build()
 	//b.EnableSqlProfiling()

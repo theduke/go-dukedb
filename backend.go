@@ -13,37 +13,137 @@ import (
 	. "github.com/theduke/go-dukedb/expressions"
 )
 
-type BaseM2MCollection struct {
-	modelInfo *ModelInfo
-	Backend   Backend
-	Name      string
-	Items     []interface{}
+type DefaultM2MCollection struct {
+	backend  Backend
+	relation *Relation
+
+	model           interface{}
+	localFieldValue interface{}
+
+	localFieldName   string
+	foreignFieldName string
 }
 
-func (c BaseM2MCollection) Count() int {
-	return len(c.Items)
-}
+// Ensure M2MCollection implements M2MCollection
+var _ M2MCollection = (*DefaultM2MCollection)(nil)
 
-func (c BaseM2MCollection) Contains(model interface{}) bool {
-	return c.GetByID(c.modelInfo.MustDetermineModelId(model)) != nil
-}
-
-func (c BaseM2MCollection) ContainsID(id interface{}) bool {
-	return c.GetByID(id) != nil
-}
-
-func (c BaseM2MCollection) All() []interface{} {
-	return c.Items
-}
-
-func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
-	for _, item := range c.Items {
-		if c.modelInfo.MustDetermineModelId(item) == id {
-			return item
-		}
+func NewM2MCollection(backend Backend, relation *Relation, model interface{}) (M2MCollection, apperror.Error) {
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return nil, apperror.Wrap(err, "invalid_model")
 	}
 
+	id := r.Field(relation.LocalField())
+	if id.IsZero() {
+		msg := fmt.Sprintf("Can't retrieve a m2m collection when the m2m foreign key field %v.%v is emtpy",
+			relation.Model().Collection(), relation.LocalField())
+		return nil, apperror.New("invalid_m2m_key", msg)
+	}
+
+	m := &DefaultM2MCollection{
+		backend:         backend,
+		relation:        relation,
+		model:           model,
+		localFieldValue: id,
+
+		localFieldName:   relation.Model().BackendName() + "." + relation.Model().Attribute(relation.LocalField()).BackendName(),
+		foreignFieldName: relation.RelatedModel().BackendName() + "." + relation.RelatedModel().Attribute(relation.ForeignField()).BackendName(),
+	}
+
+	return m, nil
+}
+
+func (c *DefaultM2MCollection) Add(models ...interface{}) apperror.Error {
+	for _, model := range models {
+		r, err := reflector.Reflect(model).Struct()
+		if err != nil {
+			return apperror.Wrap(err, "invalid_model")
+		}
+
+		_, err2 := c.backend.CreateByMap(c.relation.BackendName(), map[string]interface{}{
+			c.localFieldName:   c.localFieldValue,
+			c.foreignFieldName: r.UFieldValue(c.relation.ForeignField()),
+		})
+		if err2 != nil {
+			return err2
+		}
+	}
 	return nil
+}
+
+func (c *DefaultM2MCollection) Remove(models ...interface{}) apperror.Error {
+	q := c.backend.Q(c.relation.BackendName())
+	q.Filter(c.localFieldName, c.localFieldValue)
+
+	ids := make([]interface{}, 0)
+	for _, model := range models {
+		r, err := reflector.Reflect(model).Struct()
+		if err != nil {
+			return apperror.Wrap(err, "invalid_model")
+		}
+
+		ids = append(ids, r.UFieldValue(c.relation.ForeignField()))
+	}
+
+	q.FilterCond(c.foreignFieldName, OPERATOR_IN, ids)
+
+	return q.Delete()
+}
+
+func (c *DefaultM2MCollection) Clear() apperror.Error {
+	return c.backend.Q(c.relation.BackendName()).Delete()
+}
+
+func (c *DefaultM2MCollection) Replace(models []interface{}) apperror.Error {
+	if err := c.Clear(); err != nil {
+		return err
+	}
+	return c.Add(models...)
+}
+
+func (c *DefaultM2MCollection) Count() (int, apperror.Error) {
+	return c.backend.Q(c.relation.BackendName()).Filter(c.localFieldName, c.localFieldValue).Count()
+}
+
+func (c *DefaultM2MCollection) Contains(model interface{}) (bool, apperror.Error) {
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return false, apperror.Wrap(err, "invalid_model")
+	}
+
+	id := r.UFieldValue(c.relation.ForeignField())
+	return c.ContainsId(id)
+}
+
+func (c *DefaultM2MCollection) ContainsId(id interface{}) (bool, apperror.Error) {
+	q := c.backend.Q(c.relation.BackendName()).Filter(c.localFieldName, c.localFieldValue)
+	q.Filter(c.foreignFieldName, id)
+	count, err := q.Count()
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (c *DefaultM2MCollection) GetById(id interface{}) (interface{}, apperror.Error) {
+	flag, err := c.ContainsId(id)
+	if err != nil {
+		return nil, err
+	} else if !flag {
+		return nil, nil
+	}
+	return c.backend.FindOne(c.relation.RelatedModel().Collection(), id)
+}
+
+func (c *DefaultM2MCollection) Q() *Query {
+	q := c.backend.Q(c.relation.RelatedModel().Collection())
+	jq := RelQCustom(q, c.relation.BackendName(), c.relation.ForeignField(), c.foreignFieldName, JOIN_INNER)
+	q.JoinQ(jq)
+	return q
+}
+
+func (c *DefaultM2MCollection) All() ([]interface{}, apperror.Error) {
+	return c.Q().Find()
 }
 
 type BaseBackend struct {
@@ -266,6 +366,15 @@ func (b *BaseBackend) CreateCollection(collections ...string) apperror.Error {
 		if err := b.backend.Exec(stmt); err != nil {
 			return err
 		}
+
+		// Create m2m collections.
+		for _, relation := range info.Relations() {
+			if relation.RelationType() == RELATION_TYPE_M2M {
+				if err := b.backend.CreateCollection(relation.BackendName()); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	return nil
@@ -292,6 +401,8 @@ func (b *BaseBackend) DropCollection(collection string, ifExists, cascade bool) 
 	if info != nil {
 		collection = info.BackendName()
 	}
+
+	b.Logger().Infof("Dropping col %v: %+v\n", collection, info)
 
 	stmt := NewDropColStmt(collection, ifExists, cascade)
 	return b.backend.Exec(stmt)
@@ -1016,6 +1127,39 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	return nil
 }
 
+func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}) (interface{}, apperror.Error) {
+	info := b.ModelInfo(collection)
+	if info != nil && info.Item() != nil {
+		// Known collection which has a struct.
+
+		// Create new model instance and fill it with data.
+		model := info.New()
+		if err := info.UpdateModelFromData(model, data); err != nil {
+			return nil, err
+		}
+		if err := b.Create(model); err != nil {
+			return nil, err
+		}
+		return model, nil
+	}
+
+	// Either unknown collection, or collection does not have a struct, so
+	// manually create a statement.
+	values := make([]*FieldValueExpr, 0)
+	for name, val := range data {
+		values = append(values, NewFieldVal(name, val))
+	}
+	stmt := NewCreateStmt(collection, values)
+	res, err := b.backend.ExecQuery(stmt, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(res) == 0 {
+		return nil, nil
+	}
+	return res[0], nil
+}
+
 func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	info, err := b.InfoForModel(model)
 	if err != nil {
@@ -1149,7 +1293,7 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	return nil
 }
 
-func (b *BaseBackend) DeleteQ(query *Query) apperror.Error {
+func (b *BaseBackend) DeleteMany(query *Query) apperror.Error {
 	stmt := NewDeleteStmt(query.modelInfo.BackendName(), query.GetStatement())
 	return b.backend.Exec(stmt)
 }

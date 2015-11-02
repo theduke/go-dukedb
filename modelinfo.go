@@ -329,6 +329,11 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 			} else if sliceItemType.Kind() == reflect.Ptr && sliceItemType.Elem().Kind() == reflect.Struct {
 				structType = sliceItemType.Elem()
 			}
+
+			if structType == nil {
+				panic("slice: " + name + "| " + structType.String())
+
+			}
 		}
 
 		// Build the base field.
@@ -339,6 +344,10 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 			embeddingStructName: embeddedName,
 			backendName:         CamelCaseToUnderscore(fieldInfo.Name),
 			marshalName:         LowerCaseFirst(fieldInfo.Name),
+		}
+
+		if name == "Tags" {
+			fmt.Sprintf("tags: %+v\n", field)
 		}
 		if structType != nil {
 			field.structName = structType.PkgPath() + "." + structType.Name()
@@ -556,7 +565,7 @@ func (info *ModelInfo) BuildCreateStmt(withReferences bool) *CreateCollectionStm
 			for _, name := range attr.isUniqueWith {
 				fields = append(fields, NewIdExpr(name))
 			}
-			constr := NewUniqueFieldsConstraint(fields)
+			constr := NewUniqueFieldsConstraint(fields...)
 			constraints = append(constraints, constr)
 		}
 	}
@@ -792,14 +801,26 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 
 			// Check m2m.
 			if relation.RelationType() == RELATION_TYPE_M2M {
-				if relation.LocalField() == "" || relation.ForeignField() == "" {
-					// Set fields to respective PKs.
+
+				if relation.LocalField() == "" {
 					relation.SetLocalField(model.PkAttribute().Name())
+				} else if !model.HasAttribute(relation.LocalField()) {
+					msg := fmt.Sprintf("Specified inexistant %v.%v as m2m field", modelName, relation.LocalField())
+					return apperror.New("invalid_m2m_field", msg)
+				}
+				if relation.ForeignField() == "" {
+					// Set fields to respective PKs.
 					relation.SetForeignField(relatedInfo.PkAttribute().Name())
+				} else if !relatedInfo.HasAttribute(relation.ForeignField()) {
+					msg := fmt.Sprintf("Specified inexistant %v.%v as m2m field", relatedName, relation.ForeignField())
+					return apperror.New("invalid_m2m_field", msg)
 				}
 
-				// Valid m2m, all done.
+				// Valid m2m.
 				model.relations[fieldName] = relation
+				if err := m.buildM2MRelation(relation); err != nil {
+					return err
+				}
 				continue
 			}
 
@@ -921,6 +942,55 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 	// All done.
 	// Unset transientFields.
 	model.transientFields = nil
+
+	return nil
+}
+
+func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
+	colName := relation.BackendName()
+	if colName == "" || colName == relation.RelatedModel().BackendName() {
+		colName = relation.Model().BackendName() + "_" + relation.RelatedModel().BackendName()
+	}
+	relation.SetBackendName(colName)
+
+	if m.Has(colName) {
+		msg := fmt.Sprintf("Could not build m2m relationship: the collection %v already exists", colName)
+		return apperror.New("m2m_collection_exists", msg)
+	}
+
+	localField := relation.Model().Attribute(relation.LocalField())
+	localFieldName := relation.Model().BackendName() + "." + localField.BackendName()
+	localAttr := &Attribute{
+		Field: Field{
+			typ:         localField.Type(),
+			name:        localFieldName,
+			backendName: localFieldName,
+		},
+		isRequired: true,
+	}
+
+	fk := relation.RelatedModel().Attribute(relation.ForeignField())
+	fkName := relation.RelatedModel().BackendName() + "." + fk.BackendName()
+	fkAttr := &Attribute{
+		Field: Field{
+			typ:         fk.Type(),
+			name:        fkName,
+			backendName: fkName,
+		},
+		isRequired:   true,
+		isUniqueWith: []string{localFieldName},
+	}
+
+	col := &ModelInfo{
+		collection:  colName,
+		backendName: colName,
+		attributes: map[string]*Attribute{
+			localFieldName: localAttr,
+			fkName:         fkAttr,
+		},
+	}
+
+	m[colName] = col
 
 	return nil
 }

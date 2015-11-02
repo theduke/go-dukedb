@@ -208,6 +208,8 @@ type Backend interface {
 	// Create creates the model in the backend.
 	Create(model interface{}) apperror.Error
 
+	CreateByMap(collection string, data map[string]interface{}) (result interface{}, err apperror.Error)
+
 	// Update a model.
 	Update(model interface{}) apperror.Error
 
@@ -215,30 +217,31 @@ type Backend interface {
 	// is new, or updates it otherwise.
 	Save(model interface{}) apperror.Error
 
-	// Update a model by values in a map.
-	// Note that this will only update the backend, not the model instance.
+	// Updat all models matching a query by values in a map.
 	UpdateByMap(query *Query, data map[string]interface{}) apperror.Error
 
 	// Delete deletes the model from the backend.
 	Delete(model interface{}) apperror.Error
 
 	// DeleteQ deletes all models that match the passed query.
-	DeleteQ(*Query) apperror.Error
+	DeleteMany(*Query) apperror.Error
 }
 
 type HookHandler func(backend Backend, obj interface{}) apperror.Error
 
 type M2MCollection interface {
 	Add(models ...interface{}) apperror.Error
-	Delete(models ...interface{}) apperror.Error
+	Remove(models ...interface{}) apperror.Error
 	Clear() apperror.Error
 	Replace(models []interface{}) apperror.Error
 
-	Count() int
-	Contains(model interface{}) bool
-	ContainsID(id interface{}) bool
-	GetByID(id interface{}) interface{}
-	All() []interface{}
+	Count() (int, apperror.Error)
+	Contains(model interface{}) (bool, apperror.Error)
+	ContainsId(id interface{}) (bool, apperror.Error)
+	GetById(id interface{}) (interface{}, apperror.Error)
+	All() ([]interface{}, apperror.Error)
+
+	Q() *Query
 }
 
 type Transaction interface {
