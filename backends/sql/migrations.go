@@ -11,8 +11,8 @@ import (
 /**
  * Implement migration related interfaces.
  */
-func (b Backend) GetMigrationHandler() *db.MigrationHandler {
-	return b.MigrationHandler
+func (b *Backend) GetMigrationHandler() *db.MigrationHandler {
+	return b.migrationHandler
 }
 
 func (b Backend) MigrationsSetup() apperror.Error {
@@ -25,7 +25,10 @@ func (b Backend) MigrationsSetup() apperror.Error {
 	initialRun := count == -1
 
 	if initialRun {
-		tx := b.Begin()
+		tx, err := b.Begin()
+		if err != nil {
+			return err
+		}
 
 		if err := tx.CreateCollection("migration_attempts"); err != nil {
 			tx.Rollback()

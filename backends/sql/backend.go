@@ -19,11 +19,14 @@ type Backend struct {
 
 	Db *sql.DB
 	Tx *sql.Tx
+
+	migrationHandler *db.MigrationHandler
 }
 
 // Ensure Backend implements dukedb.Backend.
 var _ db.Backend = (*Backend)(nil)
 var _ db.TransactionBackend = (*Backend)(nil)
+var _ db.MigrationBackend = (*Backend)(nil)
 
 func New(driver, driverOptions string) (*Backend, apperror.Error) {
 	b := &Backend{}
@@ -48,8 +51,8 @@ func New(driver, driverOptions string) (*Backend, apperror.Error) {
 
 	b.Db = DB
 
-	//b.MigrationHandler = db.NewMigrationHandler(&b)
-	//b.RegisterModel(&MigrationAttempt{})
+	b.migrationHandler = db.NewMigrationHandler(b)
+	b.RegisterModel(&MigrationAttempt{})
 
 	b.BuildLogger()
 
