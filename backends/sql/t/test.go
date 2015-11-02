@@ -46,7 +46,7 @@ func main() {
 
 	fmt.Printf("rels: %+v\n", b.ModelInfo("projects").Relations())
 
-	mustNot(b.DropCollection("todos", true, false))
+	mustNot(b.DropAllCollections())
 	mustNot(b.CreateCollection("todos"))
 	mustNot(b.CreateCollection("projects"))
 

@@ -156,12 +156,6 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 }
 
 func (b *Backend) Exec(statement Expression) apperror.Error {
-	if s, ok := statement.(*CreateCollectionStmt); ok {
-		for _, f := range s.Fields() {
-			b.Logger().Infof("building stmt %v: %+v\n", f.Name(), f.FieldType())
-		}
-	}
-
 	dialect := b.dialect.New()
 	if err := dialect.PrepareExpression(statement); err != nil {
 		return err
@@ -252,4 +246,21 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 	b.Logger().Infof("result: %+v\n", result)
 
 	return result, nil
+}
+
+func (b *Backend) CreateCollection(collections ...string) apperror.Error {
+	for _, collection := range collections {
+		if err := b.BaseBackend.CreateCollection(collection); err != nil {
+			return err
+		}
+
+		// Call dialect AfterCollectionCreate hook.
+		// Needed because we want auto incrementing fields to start with 1 instead of 0,
+		// and this is dialect specific.
+		if err := b.dialect.AfterCollectionCreate(b.ModelInfo(collection)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

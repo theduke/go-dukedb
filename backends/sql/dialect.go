@@ -3,7 +3,6 @@ package sql
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/theduke/go-apperror"
@@ -16,12 +15,18 @@ type Dialect interface {
 	ExpressionTranslator
 	New() Dialect
 	DetermineColumnType(attr *db.Attribute) (string, apperror.Error)
+
+	AfterCollectionCreate(info *db.ModelInfo) apperror.Error
 }
 
 type baseDialect struct {
 	SqlTranslator
 	backend   *Backend
 	modelInfo db.ModelInfos
+}
+
+func (baseDialect) AfterCollectionCreate(info *db.ModelInfo) apperror.Error {
+	return nil
 }
 
 func (baseDialect) DetermineColumnType(attr *db.Attribute) (string, apperror.Error) {
@@ -85,106 +90,6 @@ func (baseDialect) DetermineColumnType(attr *db.Attribute) (string, apperror.Err
 func (d *baseDialect) PrepareExpression(e Expression) apperror.Error {
 	d.SqlTranslator.PrepareExpression(e)
 	return nil
-}
-
-type PostgresDialect struct {
-	baseDialect
-}
-
-// Ensure PostgresDialect implements Dialect.
-var _ Dialect = (*PostgresDialect)(nil)
-
-func NewPostgresDialect(b *Backend) Dialect {
-	d := &PostgresDialect{}
-	d.SqlTranslator = NewSqlTranslator(d)
-	d.backend = b
-	d.modelInfo = b.ModelInfos()
-	return d
-}
-
-func (d *PostgresDialect) New() Dialect {
-	return NewPostgresDialect(d.backend)
-}
-
-func (d *PostgresDialect) PrepareExpression(expression Expression) apperror.Error {
-	switch e := expression.(type) {
-	case *CreateStmt:
-		// Add RETURNING clause for id.
-		info := d.modelInfo.Find(e.Collection())
-		if info != nil {
-			pk := info.PkAttribute()
-			e.AddField(NewFieldSelector(pk.Name(), info.BackendName(), pk.BackendName(), pk.Type()))
-		}
-
-	case *SelectStmt:
-		if len(e.Fields()) == 0 {
-			// If no fields are specified, add all model attributes.
-			info := d.modelInfo.Find(e.Collection())
-			if info != nil {
-				for name, attr := range info.Attributes() {
-					e.AddField(NewFieldSelector(name, info.BackendName(), attr.BackendName(), attr.Type()))
-				}
-			}
-		}
-	}
-
-	d.SqlTranslator.PrepareExpression(expression)
-
-	return nil
-}
-
-func (d *PostgresDialect) Translate(expression Expression) apperror.Error {
-	switch e := expression.(type) {
-	case *ConstraintExpr:
-		// Ignore auto increment.
-		if e.Constraint() == CONSTRAINT_AUTO_INCREMENT {
-			return nil
-		}
-		// Ignore primary key.
-		if e.Constraint() == CONSTRAINT_PRIMARY_KEY {
-			return nil
-		}
-
-	case *CreateStmt:
-		d.SqlTranslator.Translate(e)
-
-		// Add returning fields.
-		fields := e.Fields()
-		if len(fields) > 0 {
-			d.W(" RETURNING ")
-			for _, f := range fields {
-				d.SqlTranslator.Translate(f)
-			}
-		}
-
-		return nil
-	}
-
-	return d.SqlTranslator.Translate(expression)
-}
-
-func (PostgresDialect) Placeholder() string {
-	return "${}$"
-}
-
-func (PostgresDialect) fixPlaceholders(stmt string) string {
-	index := 0
-	for {
-		pos := strings.Index(stmt, "${}$")
-		if pos == -1 {
-			break
-		}
-
-		index += 1
-		stmt = strings.Replace(stmt, "${}$", "$"+strconv.Itoa(index), 1)
-	}
-
-	return stmt
-}
-
-func (d *PostgresDialect) String() string {
-	stmt := d.SqlTranslator.String()
-	return d.fixPlaceholders(stmt)
 }
 
 type MysqlDialect struct {
