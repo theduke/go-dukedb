@@ -95,6 +95,10 @@ func (q *Query) addError(code, msg string) {
 	q.errors = append(q.errors, apperror.New(code, msg))
 }
 
+func (q *Query) GetErrors() []apperror.Error {
+	return q.errors
+}
+
 /**
  * Limit methods.
  */

@@ -289,7 +289,7 @@ func (b *BaseBackend) InfoForModel(model interface{}) (*ModelInfo, apperror.Erro
 		return nil, err
 	}
 
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info == nil {
 		return nil, b.unknownColErr(collection, model)
 	}
@@ -322,7 +322,7 @@ func (b *BaseBackend) Build() {
  */
 
 func (b *BaseBackend) NewModel(collection string) (interface{}, apperror.Error) {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info == nil {
 		b.unknownColErr(collection).Panic()
 	}
@@ -331,7 +331,7 @@ func (b *BaseBackend) NewModel(collection string) (interface{}, apperror.Error) 
 }
 
 func (b *BaseBackend) NewModelSlice(collection string) (interface{}, apperror.Error) {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info == nil {
 		b.unknownColErr(collection).Panic()
 	}
@@ -340,7 +340,7 @@ func (b *BaseBackend) NewModelSlice(collection string) (interface{}, apperror.Er
 }
 
 func (b *BaseBackend) ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error) {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (b *BaseBackend) ModelToMap(model interface{}, marshal bool, includeRelatio
 
 func (b *BaseBackend) CreateCollection(collections ...string) apperror.Error {
 	for _, collection := range collections {
-		info := b.ModelInfo(collection)
+		info := b.backend.ModelInfo(collection)
 		if info == nil {
 			return b.unknownColErr(collection)
 		}
@@ -381,7 +381,7 @@ func (b *BaseBackend) CreateCollection(collections ...string) apperror.Error {
 }
 
 func (b *BaseBackend) RenameCollection(collection, newName string) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info != nil {
 		collection = info.BackendName()
 	}
@@ -397,20 +397,20 @@ func (b *BaseBackend) RenameCollection(collection, newName string) apperror.Erro
 }
 
 func (b *BaseBackend) DropCollection(collection string, ifExists, cascade bool) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info != nil {
 		collection = info.BackendName()
 	}
 
-	b.Logger().Infof("Dropping col %v: %+v\n", collection, info)
+	b.backend.Logger().Infof("Dropping col %v: %+v\n", collection, info)
 
 	stmt := NewDropColStmt(collection, ifExists, cascade)
 	return b.backend.Exec(stmt)
 }
 
 func (b *BaseBackend) DropAllCollections() apperror.Error {
-	for col, _ := range b.ModelInfos() {
-		if err := b.DropCollection(col, true, true); err != nil {
+	for col, _ := range b.backend.ModelInfos() {
+		if err := b.backend.DropCollection(col, true, true); err != nil {
 			return err
 		}
 	}
@@ -418,7 +418,7 @@ func (b *BaseBackend) DropAllCollections() apperror.Error {
 }
 
 func (b *BaseBackend) CreateField(collection, fieldName string) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info == nil {
 		return b.unknownColErr(collection)
 	}
@@ -434,7 +434,7 @@ func (b *BaseBackend) CreateField(collection, fieldName string) apperror.Error {
 }
 
 func (b *BaseBackend) RenameField(collection, field, newName string) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	var attr *Attribute
 	if info != nil {
 		collection = info.BackendName()
@@ -455,7 +455,7 @@ func (b *BaseBackend) RenameField(collection, field, newName string) apperror.Er
 }
 
 func (b *BaseBackend) DropField(collection, field string) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	var attr *Attribute
 	if info != nil {
 		collection = info.BackendName()
@@ -471,7 +471,7 @@ func (b *BaseBackend) DropField(collection, field string) apperror.Error {
 }
 
 func (b *BaseBackend) CreateIndex(collection, indexName string, fields ...string) apperror.Error {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info != nil {
 		collection = info.BackendName()
 	}
@@ -502,7 +502,7 @@ func (b *BaseBackend) DropIndex(indexName string) apperror.Error {
  */
 
 func (b *BaseBackend) NewQuery(collection string) (*Query, apperror.Error) {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info == nil {
 		return nil, b.unknownColErr(collection)
 	}
@@ -510,7 +510,7 @@ func (b *BaseBackend) NewQuery(collection string) (*Query, apperror.Error) {
 }
 
 func (b *BaseBackend) NewModelQuery(model interface{}) (*Query, apperror.Error) {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return nil, err
 	}
@@ -555,6 +555,14 @@ func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
 }
 
 func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
+	if errs := q.GetErrors(); len(errs) > 0 {
+		msg := ""
+		for _, e := range errs {
+			msg += e.Error() + " | "
+		}
+		return nil, apperror.New("invalid_query", "Query contained errors: ", msg)
+	}
+
 	var started time.Time
 	if b.profilingEnabled && q.GetName() != "" {
 		started = time.Now()
@@ -576,15 +584,20 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 		models = append(models, model)
 	}
 
+	if len(q.GetJoins()) > 0 {
+		if err := b.DoJoins(q, models); err != nil {
+			return nil, err
+		}
+	}
+
 	if len(targetSlice) > 0 {
-		// TODO: assign result to target slice.
 		SetSlicePointer(targetSlice[0], models)
 	}
 
 	if !started.IsZero() {
 		timeTaken := time.Now().Sub(started)
 		ms := timeTaken.Nanoseconds() / 1000
-		b.Logger().WithFields(logrus.Fields{
+		b.backend.Logger().WithFields(logrus.Fields{
 			"backend":    b.name,
 			"action":     "query",
 			"query_name": q.GetName(),
@@ -708,7 +721,7 @@ func (b *BaseBackend) Pluck(q *Query) ([]map[string]interface{}, apperror.Error)
 
 func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Error) {
 	baseQ := q.GetBaseQuery()
-	baseInfo := b.ModelInfo(baseQ.GetCollection())
+	baseInfo := b.backend.ModelInfo(baseQ.GetCollection())
 	if baseInfo == nil {
 		return nil, b.unknownColErr(baseQ.GetCollection())
 	}
@@ -1045,7 +1058,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 }
 
 func (b *BaseBackend) Related(model interface{}, name string) (*RelationQuery, apperror.Error) {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return nil, err
 	}
@@ -1061,7 +1074,19 @@ func (b *BaseBackend) Related(model interface{}, name string) (*RelationQuery, a
 }
 
 func (b *BaseBackend) M2M(model interface{}, name string) (M2MCollection, apperror.Error) {
-	return nil, nil
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return nil, err
+	}
+
+	if !info.HasRelation(name) {
+		return nil, &apperror.Err{
+			Code:    "invalid_relationship",
+			Message: fmt.Sprintf("Collection %v does not have a relation %v", info.Collection(), name),
+		}
+	}
+
+	return NewM2MCollection(b.backend, info.Relation(name), model)
 }
 
 /**
@@ -1128,7 +1153,7 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 }
 
 func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}) (interface{}, apperror.Error) {
-	info := b.ModelInfo(collection)
+	info := b.backend.ModelInfo(collection)
 	if info != nil && info.Item() != nil {
 		// Known collection which has a struct.
 
@@ -1137,7 +1162,7 @@ func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}
 		if err := info.UpdateModelFromData(model, data); err != nil {
 			return nil, err
 		}
-		if err := b.Create(model); err != nil {
+		if err := b.backend.Create(model); err != nil {
 			return nil, err
 		}
 		return model, nil
@@ -1161,7 +1186,7 @@ func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}
 }
 
 func (b *BaseBackend) Update(model interface{}) apperror.Error {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return err
 	}
@@ -1184,7 +1209,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	}
 
 	// Call backend-wide before_update hooks.
-	for _, handler := range b.GetHooks("before_update") {
+	for _, handler := range b.backend.GetHooks("before_update") {
 		handler(b.backend, model)
 	}
 
@@ -1212,7 +1237,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	CallModelHook(b.backend, model, "AfterUpdate")
 
 	// Call backend-wide after_update hooks.
-	for _, handler := range b.GetHooks("after_update") {
+	for _, handler := range b.backend.GetHooks("after_update") {
 		handler(b.backend, model)
 	}
 
@@ -1220,7 +1245,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 }
 
 func (b *BaseBackend) Save(model interface{}) apperror.Error {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return err
 	}
@@ -1248,7 +1273,7 @@ func (b *BaseBackend) UpdateByMap(query *Query, data map[string]interface{}) app
 }
 
 func (b *BaseBackend) Delete(model interface{}) apperror.Error {
-	info, err := b.InfoForModel(model)
+	info, err := b.backend.InfoForModel(model)
 	if err != nil {
 		return err
 	}
@@ -1266,7 +1291,7 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	}
 
 	// Call backend-wide before_delete hooks.
-	for _, handler := range b.GetHooks("before_delete") {
+	for _, handler := range b.backend.GetHooks("before_delete") {
 		handler(b.backend, model)
 	}
 
@@ -1286,7 +1311,7 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	CallModelHook(b.backend, model, "AfterDelete")
 
 	// Call backend-wide after_delete hooks.
-	for _, handler := range b.GetHooks("after_delete") {
+	for _, handler := range b.backend.GetHooks("after_delete") {
 		handler(b.backend, model)
 	}
 
@@ -1302,117 +1327,37 @@ func (b *BaseBackend) DeleteMany(query *Query) apperror.Error {
  * Join logic.
  */
 
-/*
-func BackendDoJoins(b Backend, model string, objs []interface{}, joins []*RelationQuery) apperror.Error {
-	if len(objs) == 0 {
-		// Nothing to do if no objects.
+func (b *BaseBackend) DoJoins(q *Query, models []interface{}) apperror.Error {
+	if len(models) < 1 {
 		return nil
 	}
-
-	handledJoins := make(map[string]bool)
-	nestedJoins := make([]*RelationQuery, 0)
-
-	modelInfo := b.ModelInfo(joins[0].GetBaseQuery().GetCollection())
-	if modelInfo == nil {
-		panic("Missing model info!")
-	}
-
-	for _, joinQ := range joins {
-		// With a specific join type, joins should be handled by the backend itself.
-		if joinQ.GetJoinType() != "" {
-			continue
-		}
-
-		parts := strings.Split(joinQ.GetRelationName(), ".")
-		if len(parts) > 1 {
-			// Add the nested join to nestedJoins and execute it later, after this loop.
-			nestedJoins = append(nestedJoins, joinQ)
-
-			// Build a new join query for the first level join.
-			RelQ(joinQ.GetBaseQuery(), parts[0], JOIN_LEFT)
-		}
-
-		// Skip already executed joins to avoid duplicate work.
-		if _, ok := handledJoins[joinQ.GetRelationName()]; ok {
-			continue
-		}
-
-		err := doJoin(b, model, objs, joinQ)
-		if err != nil {
+	for _, jq := range q.GetJoins() {
+		if err := b.DoJoin(models, jq); err != nil {
 			return err
 		}
 	}
-
-	// If no nestedJoins remain, we got nothing to do, so return.
-	if len(nestedJoins) < 1 {
-		return nil
-	}
-
-	// Nested joins remain!
-	// First, group the joins by parent.
-	joinMap := make(map[string][]*RelationQuery, 0)
-
-	for _, joinQ := range nestedJoins {
-		parts := strings.Split(joinQ.GetRelationName(), ".")
-		joinMap[parts[0]] = append(joinMap[parts[0]], joinQ)
-	}
-
-	// Execute the joins for each Field.
-	for parentField := range joinMap {
-		fieldInfo := modelInfo.GetField(parentField)
-		parentCollection := fieldInfo.RelationCollection
-
-		// First, build a new slice of the objects to join.
-		var nestedObjs []interface{}
-
-		for _, obj := range objs {
-			nestedObj, err := GetStructFieldValue(obj, fieldInfo.Name)
-			if err != nil {
-				panic(err)
-			}
-
-			// Ignore zero values.
-			if nestedObj == nil || IsZero(nestedObj) {
-				continue
-			}
-
-			if fieldInfo.RelationIsMany {
-				// Many relationship means the nestedObj is actually an array, so
-				// we need to add all items of that array to nestedObjs.
-
-				nestedSlice := reflect.ValueOf(nestedObj)
-				for i := 0; i < nestedSlice.Len(); i++ {
-					nestedObjs = append(nestedObjs, nestedSlice.Index(i).Interface())
-				}
-			} else {
-				nestedObjs = append(nestedObjs, nestedObj)
-			}
-		}
-
-		// If no objs were found, avoid unneccessary work and skip this Field.
-		if len(nestedObjs) == 0 {
-			continue
-		}
-
-		// Need to determine the collection.
-
-		// Build a list of nested joins.
-		var nestedJoins []*RelationQuery
-		for _, joinQ := range joinMap[parentField] {
-			parts := strings.Split(joinQ.GetRelationName(), ".")
-			nestedQ := RelQ(Q(parentCollection), strings.Join(parts[1:], "."), JOIN_LEFT)
-			nestedJoins = append(nestedJoins, nestedQ)
-		}
-
-		// Now, Actually execute the nested joins.
-		BackendDoJoins(b, parentCollection, nestedObjs, nestedJoins)
-	}
-
 	return nil
 }
 
-func doJoin(b Backend, model string, objs []interface{}, joinQ *RelationQuery) apperror.Error {
-	resultQuery, err := BuildRelationQuery(b, objs, joinQ)
+func (b *BaseBackend) DoJoin(objs []interface{}, joinQ *RelationQuery) apperror.Error {
+	if len(objs) == 0 {
+		return nil
+	}
+	if joinQ.GetRelationName() == "" {
+		return nil
+	}
+
+	parentModelInfo := joinQ.GetBaseQuery().modelInfo
+	if parentModelInfo == nil {
+		return nil
+	}
+	relation := parentModelInfo.Relation(joinQ.relationName)
+	if relation == nil {
+		msg := fmt.Sprintf("Collection %v does not have a relation %v", parentModelInfo.Collection(), joinQ.GetRelationName())
+		return apperror.New("invalid_relationship", msg)
+	}
+
+	resultQuery, err := b.BuildRelationQuery(joinQ)
 	if err != nil {
 		if apperror.IsCode(err, "relation_query_on_empty_result") {
 			// If the base result was empty, we just ignore this join.
@@ -1435,29 +1380,38 @@ func doJoin(b Backend, model string, objs []interface{}, joinQ *RelationQuery) a
 		}
 	}
 
+	// Process nested joins.
+	for _, jq := range joinQ.GetJoins() {
+		if err := b.DoJoin(res, jq); err != nil {
+			return nil
+		}
+	}
+
 	return nil
 }
 
 func assignJoinModels(objs, joinedModels []interface{}, joinQ *RelationQuery) {
-	targetField := joinQ.GetRelationName()
-	joinedField := "" // joinQ.GetJoinFieldName()
-	joinField := ""   //joinQ.GetForeignFieldName()
+	/*
+		targetField := joinQ.GetRelationName()
+		joinedField := "" // joinQ.GetJoinFieldName()
+		joinField := ""   //joinQ.GetForeignFieldName()
 
-	mapper := make(map[interface{}][]interface{})
-	for _, model := range joinedModels {
-		val, _ := GetStructFieldValue(model, joinField)
-		mapper[val] = append(mapper[val], model)
-	}
 
-	for _, model := range objs {
-		val, err := GetStructFieldValue(model, joinedField)
-		if err != nil {
-			panic("Join result assignment error: " + err.Error())
+		mapper := make(map[interface{}][]interface{})
+		for _, model := range joinedModels {
+			val, _ := GetStructFieldValue(model, joinField)
+			mapper[val] = append(mapper[val], model)
 		}
 
-		if joins, ok := mapper[val]; ok && len(joins) > 0 {
-			SetStructModelField(model, targetField, joins)
+		for _, model := range objs {
+			val, err := GetStructFieldValue(model, joinedField)
+			if err != nil {
+				panic("Join result assignment error: " + err.Error())
+			}
+
+			if joins, ok := mapper[val]; ok && len(joins) > 0 {
+				SetStructModelField(model, targetField, joins)
+			}
 		}
-	}
+	*/
 }
-*/
