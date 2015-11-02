@@ -80,6 +80,15 @@ func (e *typedExprMixin) SetType(typ reflect.Type) {
 }
 
 /**
+ * NamedTypedExpression.
+ */
+
+type NamedTypedExpression interface {
+	NamedExpression
+	TypedExpression
+}
+
+/**
  * NestedExpression interface and embeddable.
  */
 
@@ -143,6 +152,7 @@ func (m multiExprMixin) GetIdentifiers() []Expression {
 
 type NamedNestedExpr struct {
 	namedExprMixin
+	typedExprMixin
 	nestedExprMixin
 }
 
@@ -156,10 +166,13 @@ func (e *NamedNestedExpr) Validate() apperror.Error {
 }
 
 // NameExpr attaches a name to another expression.
-func NameExpr(name string, expr Expression) *NamedNestedExpr {
+func NameExpr(name string, expr Expression, typ ...reflect.Type) *NamedNestedExpr {
 	e := &NamedNestedExpr{}
 	e.name = name
 	e.expression = expr
+	if len(typ) > 0 {
+		e.typ = typ[0]
+	}
 	return e
 }
 
@@ -315,6 +328,11 @@ func NewColFieldIdExpr(collection, field string) *ColFieldIdentifierExpr {
 		collection: collection,
 		field:      field,
 	}
+}
+
+func NewFieldSelectorExpr(name, collection, field string, typ reflect.Type) NamedTypedExpression {
+	colId := NewColFieldIdExpr(collection, field)
+	return NameExpr(name, colId, typ)
 }
 
 // BuildIdExpr is a convenience function for creating either an IdentiferExpression or a CollectionFieldIdentifierExpression.
@@ -550,6 +568,10 @@ func (e *FieldExpr) FieldType() *FieldTypeExpr {
 
 func (e *FieldExpr) Constraints() []Expression {
 	return e.constraints
+}
+
+func (e *FieldExpr) AddConstraint(constraint Expression) {
+	e.constraints = append(e.constraints, constraint)
 }
 
 func (e *FieldExpr) Validate() apperror.Error {
