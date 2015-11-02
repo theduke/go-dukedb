@@ -10,6 +10,7 @@ import (
 
 	"github.com/theduke/go-apperror"
 	. "github.com/theduke/go-dukedb/expressions"
+	"github.com/theduke/go-utils"
 )
 
 /**
@@ -342,8 +343,8 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 			name:                fieldInfo.Name,
 			structType:          structType,
 			embeddingStructName: embeddedName,
-			backendName:         CamelCaseToUnderscore(fieldInfo.Name),
-			marshalName:         LowerCaseFirst(fieldInfo.Name),
+			backendName:         utils.CamelCaseToUnderscore(fieldInfo.Name),
+			marshalName:         utils.LowerCaseFirst(fieldInfo.Name),
 		}
 
 		if name == "Tags" {

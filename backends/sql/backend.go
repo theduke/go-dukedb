@@ -23,6 +23,7 @@ type Backend struct {
 
 // Ensure Backend implements dukedb.Backend.
 var _ db.Backend = (*Backend)(nil)
+var _ db.TransactionBackend = (*Backend)(nil)
 
 func New(driver, driverOptions string) (*Backend, apperror.Error) {
 	b := &Backend{}
@@ -77,6 +78,49 @@ func (b *Backend) Clone() db.Backend {
 		BaseBackend: *base,
 		dialect:     b.dialect,
 	}
+}
+
+/**
+ * Transactions.
+ */
+
+func (b *Backend) Begin() (db.Transaction, apperror.Error) {
+	if b.Tx != nil {
+		panic("Can't call .Begin() on a transaction.")
+	}
+
+	copied := b.Clone().(*Backend)
+	tx, err := b.Db.Begin()
+	if err != nil {
+		return nil, apperror.Wrap(err, "begin_transaction_failed")
+	}
+
+	copied.Tx = tx
+	copied.Db = nil
+
+	return copied, nil
+}
+
+func (b *Backend) MustBegin() db.Transaction {
+	tx, err := b.Begin()
+	if err != nil {
+		panic(err)
+	}
+	return tx
+}
+
+func (b *Backend) Rollback() apperror.Error {
+	if err := b.Tx.Rollback(); err != nil {
+		return apperror.Wrap(err, "transaction_rollback_failed")
+	}
+	return nil
+}
+
+func (b *Backend) Commit() apperror.Error {
+	if err := b.Tx.Commit(); err != nil {
+		return apperror.Wrap(err, "transaction_commit_failed")
+	}
+	return nil
 }
 
 func (b *Backend) Build() {

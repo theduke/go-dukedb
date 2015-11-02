@@ -96,7 +96,10 @@ func (handler *MigrationHandler) RunMigration(m *Migration) apperror.Error {
 	txCapableBackend, hasTransactions := handler.Backend.(TransactionBackend)
 	if hasTransactions && m.WrapTransaction {
 		useTransaction = true
-		tx = txCapableBackend.Begin()
+		tx, err := txCapableBackend.Begin()
+		if err != nil {
+			return err
+		}
 		backend = tx.(MigrationBackend)
 	}
 

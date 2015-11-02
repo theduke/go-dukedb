@@ -252,7 +252,8 @@ type Transaction interface {
 
 type TransactionBackend interface {
 	Backend
-	Begin() Transaction
+	Begin() (Transaction, apperror.Error)
+	MustBegin() Transaction
 }
 
 type MigrationAttempt interface {

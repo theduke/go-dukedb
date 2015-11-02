@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/theduke/go-apperror"
+	"github.com/theduke/go-utils"
 )
 
 /**
@@ -55,58 +56,6 @@ func StrAfterLast(str, separator string) string {
 		return str[pos+1:]
 	}
 	return str
-}
-
-// Convert a CamelCase string to underscore version, eg camel_case.
-func CamelCaseToUnderscore(str string) string {
-	u := ""
-
-	didChange := false
-	for i, c := range str {
-		if c >= 65 && c <= 90 {
-			if i == 0 {
-				u += string(byte(c + 32))
-				didChange = true
-				continue
-			}
-
-			if !didChange {
-				u += "_"
-				didChange = true
-			}
-			u += string(byte(c + 32))
-		} else {
-			u += string(byte(c))
-			didChange = false
-		}
-	}
-
-	return u
-}
-
-func LowerCaseFirst(str string) string {
-	if len(str) == 0 {
-		return ""
-	}
-
-	newStr := ""
-
-	doReplace := true
-	for _, c := range str {
-		x := int(c)
-		if doReplace {
-			if x >= 65 && x <= 90 {
-				newStr += string(x + 32)
-			} else {
-				doReplace = false
-				newStr += string(c)
-			}
-		} else {
-			newStr += string(c)
-		}
-	}
-
-	return newStr
 }
 
 /**
@@ -185,7 +134,7 @@ func GetModelCollection(model interface{}) (string, apperror.Error) {
 		}
 	}
 
-	collection := CamelCaseToUnderscore(typ.Name())
+	collection := utils.CamelCaseToUnderscore(typ.Name())
 	collection = Pluralize(collection)
 
 	return collection, nil
