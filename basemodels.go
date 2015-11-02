@@ -12,17 +12,17 @@ import (
  */
 
 // Base model with a string ID.
-type StrIDModel struct {
-	ID string
+type StrIdModel struct {
+	Id string
 }
 
-func (m *StrIDModel) GetID() interface{} {
-	return m.ID
+func (m *StrIdModel) GetID() interface{} {
+	return m.Id
 }
 
-func (m *StrIDModel) SetID(id interface{}) error {
+func (m *StrIdModel) SetID(id interface{}) error {
 	if strId, ok := id.(string); ok {
-		m.ID = strId
+		m.Id = strId
 		return nil
 	}
 
@@ -30,16 +30,16 @@ func (m *StrIDModel) SetID(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	m.ID = convertedId.(string)
+	m.Id = convertedId.(string)
 	return nil
 }
 
-func (m *StrIDModel) GetStrID() string {
-	return m.ID
+func (m *StrIdModel) GetStrID() string {
+	return m.Id
 }
 
-func (m *StrIDModel) SetStrID(rawId string) error {
-	m.ID = rawId
+func (m *StrIdModel) SetStrID(rawId string) error {
+	m.Id = rawId
 	return nil
 }
 
@@ -48,17 +48,17 @@ func (m *StrIDModel) SetStrID(rawId string) error {
  */
 
 // Base model with a integer ID.
-type IntIDModel struct {
-	ID uint64
+type IntIdModel struct {
+	Id uint64
 }
 
-func (m *IntIDModel) GetID() interface{} {
-	return m.ID
+func (m *IntIdModel) GetID() interface{} {
+	return m.Id
 }
 
-func (m *IntIDModel) SetID(id interface{}) error {
+func (m *IntIdModel) SetID(id interface{}) error {
 	if intId, ok := id.(uint64); ok {
-		m.ID = intId
+		m.Id = intId
 		return nil
 	}
 
@@ -66,24 +66,24 @@ func (m *IntIDModel) SetID(id interface{}) error {
 	if err != nil {
 		return err
 	}
-	m.ID = convertedId.(uint64)
+	m.Id = convertedId.(uint64)
 	return nil
 }
 
-func (m *IntIDModel) GetStrID() string {
-	if m.ID == 0 {
+func (m *IntIdModel) GetStrID() string {
+	if m.Id == 0 {
 		return ""
 	}
-	return strconv.FormatUint(m.ID, 10)
+	return strconv.FormatUint(m.Id, 10)
 }
 
-func (m *IntIDModel) SetStrID(rawId string) error {
+func (m *IntIdModel) SetStrID(rawId string) error {
 	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err
 	}
 
-	m.ID = id
+	m.Id = id
 	return nil
 }
 

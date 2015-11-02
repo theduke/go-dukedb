@@ -56,7 +56,14 @@ type BaseBackend struct {
 	// Parent backend reference.
 	backend Backend
 
-	Hooks map[string][]HookHandler
+	hooks map[string][]HookHandler
+}
+
+func NewBaseBackend(backend Backend) BaseBackend {
+	return BaseBackend{
+		backend:   backend,
+		modelInfo: make(ModelInfos),
+	}
 }
 
 func (b BaseBackend) unknownColErr(collection string, model ...interface{}) apperror.Error {
@@ -107,6 +114,18 @@ func (b *BaseBackend) BuildLogger() {
 	b.logger = l
 }
 
+func (b *BaseBackend) Clone() *BaseBackend {
+	return &BaseBackend{
+		name:           b.name,
+		debug:          b.debug,
+		logger:         b.logger,
+		modelInfo:      b.modelInfo,
+		HasNativeJoins: b.HasNativeJoins,
+		backend:        b.backend,
+		hooks:          b.hooks,
+	}
+}
+
 /**
  * Hooks.
  */
@@ -119,23 +138,23 @@ func (b *BaseBackend) RegisterHook(hook string, handler HookHandler) {
 		panic("Unknown hook type: " + hook)
 	}
 
-	if b.Hooks == nil {
-		b.Hooks = make(map[string][]HookHandler)
+	if b.hooks == nil {
+		b.hooks = make(map[string][]HookHandler)
 	}
 
-	if _, ok := b.Hooks[hook]; !ok {
-		b.Hooks[hook] = make([]HookHandler, 0)
+	if _, ok := b.hooks[hook]; !ok {
+		b.hooks[hook] = make([]HookHandler, 0)
 	}
 
-	b.Hooks[hook] = append(b.Hooks[hook], handler)
+	b.hooks[hook] = append(b.hooks[hook], handler)
 }
 
 func (b *BaseBackend) GetHooks(hook string) []HookHandler {
-	if b.Hooks == nil {
+	if b.hooks == nil {
 		return nil
 	}
 
-	return b.Hooks[hook]
+	return b.hooks[hook]
 }
 
 /**
@@ -168,13 +187,14 @@ func (b *BaseBackend) HasCollection(collection string) bool {
 	return b.modelInfo.Has(collection)
 }
 
-func (b *BaseBackend) RegisterModel(model interface{}) {
+func (b *BaseBackend) RegisterModel(model interface{}) *ModelInfo {
 	info, err := BuildModelInfo(model)
 	if err != nil {
 		panic(fmt.Sprintf("Could not register model '%v': %v\n", reflect.TypeOf(model).Name(), err))
 	}
 
 	b.modelInfo.Add(info)
+	return info
 }
 
 func (b *BaseBackend) Build() {
@@ -217,7 +237,334 @@ func (b *BaseBackend) ModelToMap(model interface{}, marshal bool, includeRelatio
 	return data, nil
 }
 
-// Relationship stuff.
+/**
+ *
+ */
+
+func (b *BaseBackend) CreateCollection(collections ...string) apperror.Error {
+	for _, collection := range collections {
+		info := b.ModelInfo(collection)
+		if info == nil {
+			return b.unknownColErr(collection)
+		}
+
+		stmt := info.BuildCreateStmt(false)
+		if err := b.backend.Exec(stmt); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (b *BaseBackend) RenameCollection(collection, newName string) apperror.Error {
+	info := b.ModelInfo(collection)
+	if info != nil {
+		collection = info.BackendName()
+	}
+
+	stmt := NewRenameColStmt(collection, newName)
+	err := b.backend.Exec(stmt)
+
+	if info != nil && err == nil {
+		info.SetBackendName(newName)
+	}
+
+	return err
+}
+
+func (b *BaseBackend) DropCollection(collection string, ifExists, cascade bool) apperror.Error {
+	info := b.ModelInfo(collection)
+	if info != nil {
+		collection = info.BackendName()
+	}
+
+	stmt := NewDropColStmt(collection, ifExists, cascade)
+	return b.backend.Exec(stmt)
+}
+
+func (b *BaseBackend) DropAllCollections() apperror.Error {
+	for col, _ := range b.ModelInfos() {
+		if err := b.DropCollection(col, true, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *BaseBackend) CreateField(collection, fieldName string) apperror.Error {
+	info := b.ModelInfo(collection)
+	if info == nil {
+		return b.unknownColErr(collection)
+	}
+	attr := info.Attribute(fieldName)
+	if attr == nil {
+		return apperror.New("unknown_field", fmt.Sprintf("Collection %v does not have a field %v", collection, fieldName))
+	}
+
+	fieldExpr := attr.BuildFieldExpression()
+	stmt := NewCreateFieldStmt(info.BackendName(), fieldExpr)
+
+	return b.backend.Exec(stmt)
+}
+
+func (b *BaseBackend) RenameField(collection, field, newName string) apperror.Error {
+	info := b.ModelInfo(collection)
+	var attr *Attribute
+	if info != nil {
+		collection = info.BackendName()
+		attr = info.Attribute(field)
+		if attr != nil {
+			field = attr.BackendName()
+		}
+	}
+
+	stmt := NewRenameFieldStmt(collection, field, newName)
+
+	err := b.backend.Exec(stmt)
+	if err == nil && attr != nil {
+		attr.SetBackendName(newName)
+	}
+
+	return err
+}
+
+func (b *BaseBackend) DropField(collection, field string) apperror.Error {
+	info := b.ModelInfo(collection)
+	var attr *Attribute
+	if info != nil {
+		collection = info.BackendName()
+		attr = info.Attribute(field)
+		if attr != nil {
+			field = attr.BackendName()
+		}
+	}
+
+	stmt := NewDropFieldStmt(collection, field, true, false)
+
+	return b.backend.Exec(stmt)
+}
+
+func (b *BaseBackend) CreateIndex(collection, indexName string, fields ...string) apperror.Error {
+	info := b.ModelInfo(collection)
+	if info != nil {
+		collection = info.BackendName()
+	}
+
+	fieldExprs := make([]Expression, 0)
+	for _, field := range fields {
+		if info != nil {
+			attr := info.FindAttribute(field)
+			if attr != nil {
+				field = attr.BackendName()
+			}
+		}
+		fieldExprs = append(fieldExprs, NewIdExpr(field))
+	}
+
+	stmt := NewCreateIndexStmt(indexName, NewIdExpr(collection), fieldExprs, false, "")
+
+	return b.backend.Exec(stmt)
+}
+
+func (b *BaseBackend) DropIndex(indexName string) apperror.Error {
+	stmt := NewDropIndexStmt(indexName, true, false)
+	return b.backend.Exec(stmt)
+}
+
+/**
+ * Query methods.
+ */
+
+func (b *BaseBackend) NewQuery(collection string) (*Query, apperror.Error) {
+	info := b.ModelInfo(collection)
+	if info == nil {
+		return nil, b.unknownColErr(collection)
+	}
+	return newQuery(b.backend, collection), nil
+}
+
+func (b *BaseBackend) NewModelQuery(model interface{}) (*Query, apperror.Error) {
+	info, err := b.InfoForModel(model)
+	if err != nil {
+		return nil, err
+	}
+	filter := info.ModelFilter(model)
+	if filter == nil {
+		return nil, apperror.New("invalid_model_no_id", "You can't create a query for a model which does not have it's primary key set")
+	}
+
+	q := newQuery(b.backend, info.Collection())
+	q.SetModels([]interface{}{model})
+	q.FilterExpr(filter)
+	return q, nil
+}
+
+func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
+	if collection, ok := arg.(string); ok {
+		q, err := b.backend.NewQuery(collection)
+		if err != nil {
+			panic(err)
+		}
+
+		if len(args) > 0 {
+			r := reflector.Reflect(args[0])
+			if r.IsZero() {
+				panic("Can't create model query with zero id")
+			}
+			id, err := r.ConvertToType(q.modelInfo.PkAttribute().Type())
+			if err != nil {
+				panic("Could not convert id: " + err.Error())
+			}
+			q.Filter(q.modelInfo.PkAttribute().BackendName(), id)
+		}
+
+		return q
+	}
+
+	q, err := b.backend.NewModelQuery(arg)
+	if err != nil {
+		panic(err)
+	}
+	return q
+}
+
+func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
+	stmt := q.GetStatement()
+	result, err := b.backend.ExecQuery(stmt, false)
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]interface{}, 0)
+
+	for _, data := range result {
+		model, err := q.modelInfo.ModelFromMap(data)
+		if err != nil {
+			return nil, err
+		}
+		models = append(models, model)
+	}
+
+	if len(targetSlice) > 0 {
+		// TODO: assign result to target slice.
+		//SetSlicePointer(targetSlice[0], result)
+	}
+
+	return models, nil
+}
+
+func (b *BaseBackend) QueryCursor(q *Query) (Cursor, apperror.Error) {
+	panic("QueryCursor() not implemented!")
+}
+
+func (b *BaseBackend) QueryOne(q *Query, targetModels ...interface{}) (interface{}, apperror.Error) {
+	res, err := b.backend.Query(q.Limit(1))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res) == 0 {
+		return nil, nil
+	}
+
+	m := res[0]
+
+	if len(targetModels) > 0 {
+		SetPointer(targetModels[0], m)
+	}
+
+	return m, nil
+}
+
+func (b *BaseBackend) Last(q *Query, targetModels ...interface{}) (interface{}, apperror.Error) {
+	// Revers all sorts.
+	sorts := q.GetStatement().Sorts()
+	orderLen := len(sorts)
+	if orderLen > 0 {
+		for i := 0; i < orderLen; i++ {
+			sorts[i].SetAscending(!sorts[i].Ascending())
+		}
+	} else {
+		info := b.backend.ModelInfo(q.GetCollection())
+		q = q.Sort(info.PkAttribute().BackendName(), false)
+	}
+
+	model, err := b.backend.QueryOne(q)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targetModels) > 0 {
+		SetPointer(targetModels[0], model)
+	}
+
+	return model, nil
+}
+
+func (b *BaseBackend) FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
+	return b.backend.Q(collection).Filter(field, value).Find(targetSlice...)
+}
+
+func (b *BaseBackend) FindOne(collection string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
+	info := b.backend.ModelInfo(collection)
+	if info == nil {
+		return nil, b.unknownColErr(collection)
+	}
+
+	// Try to convert the id to the correct type.
+	id, err := reflector.Reflect(id).ConvertTo(info.PkAttribute().Type())
+	if err != nil {
+		return nil, apperror.Wrap(err, "id_conversion_error")
+	}
+
+	return b.backend.Q(collection).Filter(info.PkAttribute().BackendName(), id).First(targetModel...)
+}
+
+func (b *BaseBackend) FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
+	return b.backend.Q(collection).Filter(field, value).First(targetModel...)
+}
+
+func (b *BaseBackend) Count(q *Query) (int, apperror.Error) {
+	count := NameExpr("count", NewFuncExpr("COUNT", NewTextExpr("*")))
+	q.SetFieldExpressions([]Expression{count})
+
+	result, err := b.backend.Pluck(q)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(result) < 1 {
+		return 0, apperror.New("invalid_empty_result")
+	}
+	data := result[0]
+
+	countVal, ok := data["count"]
+	if !ok {
+		return 0, apperror.New("invalid_result_no_count_field")
+	}
+
+	r := reflector.Reflect(countVal)
+	if !r.IsNumeric() {
+		return 0, apperror.New("invalid_result_non_numeric_count")
+	}
+
+	x, err2 := r.ConvertTo(int(0))
+	if err2 != nil {
+		return 0, apperror.Wrap(err2, "count_conversion_error")
+	}
+
+	return x.(int), nil
+}
+
+func (b *BaseBackend) Pluck(q *Query) ([]map[string]interface{}, apperror.Error) {
+	return b.backend.ExecQuery(q.GetStatement(), true)
+}
+
+/**
+ * Relationship related methods.
+ */
+
 func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Error) {
 	baseQ := q.GetBaseQuery()
 	baseInfo := b.ModelInfo(baseQ.GetCollection())
@@ -536,72 +883,13 @@ func (b *BaseBackend) Related(model interface{}, name string) (*RelationQuery, a
 	return b.backend.Q(model).Related(name), nil
 }
 
-func (b *BaseBackend) QueryOne(q *Query, targetModels []interface{}) (interface{}, apperror.Error) {
-	res, err := b.backend.Query(q.Limit(1))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(res) == 0 {
-		return nil, nil
-	}
-
-	m := res[0]
-
-	if len(targetModels) > 0 {
-		SetPointer(targetModels[0], m)
-	}
-
-	return m, nil
+func (b *BaseBackend) M2M(model interface{}, name string) (M2MCollection, apperror.Error) {
+	return nil, nil
 }
 
-func (b *BaseBackend) Last(q *Query, targetModels []interface{}) (interface{}, apperror.Error) {
-	// Revers all sorts.
-	sorts := q.GetStatement().Sorts()
-	orderLen := len(sorts)
-	if orderLen > 0 {
-		for i := 0; i < orderLen; i++ {
-			sorts[i].SetAscending(!sorts[i].Ascending())
-		}
-	} else {
-		info := b.backend.ModelInfo(q.GetCollection())
-		q = q.Sort(info.PkAttribute().BackendName(), false)
-	}
-
-	model, err := b.backend.QueryOne(q)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(targetModels) > 0 {
-		SetPointer(targetModels[0], model)
-	}
-
-	return model, nil
-}
-
-func (b *BaseBackend) FindOne(collection string, id interface{}, targetModel []interface{}) (interface{}, apperror.Error) {
-	info := b.backend.ModelInfo(collection)
-	if info == nil {
-		return nil, b.unknownColErr(collection)
-	}
-
-	// Try to convert the id to the correct type.
-	id, err := reflector.Reflect(id).ConvertTo(info.PkAttribute().Type())
-	if err != nil {
-		return nil, apperror.Wrap(err, "id_conversion_error")
-	}
-
-	return b.backend.Q(collection).Filter(info.PkAttribute().BackendName(), id).First(targetModel...)
-}
-
-func (b *BaseBackend) FindBy(collection, field string, value interface{}, targetSlice []interface{}) ([]interface{}, apperror.Error) {
-	return b.backend.Q(collection).Filter(field, value).Find(targetSlice...)
-}
-
-func (b *BaseBackend) FindOneBy(collection, field string, value interface{}, targetModel []interface{}) (interface{}, apperror.Error) {
-	return b.backend.Q(collection).Filter(field, value).First(targetModel...)
-}
+/**
+ * Create, update, delete.
+ */
 
 func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	info, err := b.backend.InfoForModel(model)
@@ -636,7 +924,7 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	// Build a CreateStatement.
 	stmt := NewCreateStmt(info.BackendName(), values)
 
-	if _, err := b.backend.Exec(stmt); err != nil {
+	if err := b.backend.Exec(stmt); err != nil {
 		return err
 	}
 
@@ -696,7 +984,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	// Build a update statement.
 	stmt := NewUpdateStmt(info.BackendName(), values, info.ModelSelect(model))
 
-	if _, err := b.backend.Exec(stmt); err != nil {
+	if err := b.backend.Exec(stmt); err != nil {
 		return err
 	}
 
@@ -731,6 +1019,16 @@ func (b *BaseBackend) Save(model interface{}) apperror.Error {
 	} else {
 		return b.backend.Update(model)
 	}
+}
+
+func (b *BaseBackend) UpdateByMap(query *Query, data map[string]interface{}) apperror.Error {
+	values := make([]*FieldValueExpr, 0)
+	for key, val := range data {
+		values = append(values, NewFieldVal(key, val))
+	}
+	stmt := NewUpdateStmt(query.modelInfo.BackendName(), values, query.GetStatement())
+
+	return b.backend.Exec(stmt)
 }
 
 func (b *BaseBackend) Delete(model interface{}) apperror.Error {
@@ -775,7 +1073,7 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	}
 
 	stmt := info.ModelDeleteStmt(model)
-	if _, err := b.backend.Exec(stmt); err != nil {
+	if err := b.backend.Exec(stmt); err != nil {
 		return err
 	}
 
@@ -787,6 +1085,11 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 	}
 
 	return nil
+}
+
+func (b *BaseBackend) DeleteQ(query *Query) apperror.Error {
+	stmt := NewDeleteStmt(query.modelInfo.BackendName(), query.GetStatement())
+	return b.backend.Exec(stmt)
 }
 
 /**

@@ -18,7 +18,7 @@ type Query struct {
 	backend Backend
 
 	collection string
-	modelInfo  ModelInfo
+	modelInfo  *ModelInfo
 
 	// Models attached to this query.
 	models []interface{}
@@ -41,10 +41,11 @@ type Query struct {
 	errors []apperror.Error
 }
 
-func q(backend Backend, collection string) *Query {
+func newQuery(backend Backend, collection string) *Query {
 	info := backend.ModelInfo(collection)
 	return &Query{
 		backend:    backend,
+		modelInfo:  backend.ModelInfo(collection),
 		collection: collection,
 		statement:  NewSelectStmt(info.BackendName()),
 	}

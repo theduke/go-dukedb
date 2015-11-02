@@ -123,6 +123,10 @@ func (m *ModelInfo) New() interface{} {
 	return m.reflector.New().Interface()
 }
 
+func (m *ModelInfo) NewReflector() *reflector.StructReflector {
+	return m.reflector.New()
+}
+
 func (m *ModelInfo) NewSlice() *reflector.SliceReflector {
 	return m.reflector.Value().NewSlice()
 }
@@ -518,6 +522,42 @@ func (info *ModelInfo) ModelToMap(model interface{}, forBackend, marshal bool, i
 	return data, nil
 }
 
+func (info *ModelInfo) BuildCreateStmt(withReferences bool) *CreateCollectionStmt {
+	fieldsMap := make(map[string]*FieldExpr, 0)
+	constraints := make([]Expression, 0)
+
+	for name, attr := range info.Attributes() {
+		fieldsMap[name] = attr.BuildFieldExpression()
+
+		// Add unique fields constraint to collection if specified.
+		if len(attr.isUniqueWith) > 0 {
+			fields := make([]Expression, 0)
+			for _, name := range attr.isUniqueWith {
+				fields = append(fields, NewIdExpr(name))
+			}
+			constr := NewUniqueFieldsConstraint(fields)
+			constraints = append(constraints, constr)
+		}
+	}
+
+	if withReferences {
+		// Add reference constraints.
+		/*
+			for name, relation := range info.Relations() {
+
+			}
+		*/
+	}
+
+	fields := make([]*FieldExpr, 0)
+	for _, f := range fieldsMap {
+		fields = append(fields, f)
+	}
+
+	stmt := NewCreateColStmt(info.BackendName(), true, fields, constraints)
+	return stmt
+}
+
 func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]*FieldValueExpr, apperror.Error) {
 	exprs := make([]*FieldValueExpr, 0)
 
@@ -533,8 +573,12 @@ func (info *ModelInfo) ModelToFieldExpressions(model interface{}) ([]*FieldValue
 }
 
 func (info *ModelInfo) ModelFilter(model interface{}) Expression {
-	id := reflector.Reflect(model).MustStruct().UFieldValue(info.PkAttribute().Name())
-	f := NewFieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id)
+	id := reflector.Reflect(model).MustStruct().Field(info.PkAttribute().Name())
+	if id.IsZero() {
+		return nil
+	}
+
+	f := NewFieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id.Interface())
 	return f
 }
 
@@ -547,6 +591,26 @@ func (info *ModelInfo) ModelSelect(model interface{}) *SelectStmt {
 func (info *ModelInfo) ModelDeleteStmt(model interface{}) *DeleteStmt {
 	stmt := NewDeleteStmt(info.BackendName(), info.ModelSelect(model))
 	return stmt
+}
+
+// ModelFromMap creates a new model, fills it with data from the map, and returns a pointer to the new model struct.
+// Data may contain the struct field names, the backend names or the marshal names as keys.
+func (info *ModelInfo) ModelFromMap(data map[string]interface{}) (interface{}, apperror.Error) {
+	r := info.NewReflector()
+
+	for name, value := range data {
+		attr := info.FindAttribute(name)
+		if attr == nil {
+			continue
+		}
+
+		if err := r.SetFieldValue(attr.Name(), value, true); err != nil {
+			msg := fmt.Sprintf("Field %v contained data of type %v, which can not be converted to %v",
+				name, reflect.TypeOf(value), attr.Type())
+			return nil, apperror.Wrap(err, "unconvertable_field_value", msg)
+		}
+	}
+	return r.Value().Addr().Interface(), nil
 }
 
 func (info *ModelInfo) ValidateModel(m interface{}) apperror.Error {

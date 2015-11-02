@@ -87,7 +87,7 @@ type Backend interface {
 	//
 	// The first argument must be a pointer to an instance of the model,
 	// for example: &MyModel{}
-	RegisterModel(model interface{})
+	RegisterModel(model interface{}) *ModelInfo
 
 	// Build analyzes the relationships between models and does all neccessary
 	// preparations for using the backend.
@@ -97,10 +97,10 @@ type Backend interface {
 	Build()
 
 	// NewModel creates a new model instance of the specified collection.
-	NewModel(collection string) interface{}
+	NewModel(collection string) (interface{}, apperror.Error)
 
 	// Build a slice of a model for model Collection.
-	NewModelSlice(collection string) interface{}
+	NewModelSlice(collection string) (interface{}, apperror.Error)
 
 	// ModelToMap converts a model to a map.
 	ModelToMap(model interface{}, marshal bool, includeRelations bool) (map[string]interface{}, apperror.Error)
@@ -111,9 +111,9 @@ type Backend interface {
 
 	// Exec executes an expression.
 	// The result will be nil for all statements except a SelectStatement.
-	// For a select statement, it should hold either the found models, or
-	// a map[string]interface{}.
-	Exec(statement Expression) (result interface{}, err apperror.Error)
+	Exec(statement Expression) apperror.Error
+
+	ExecQuery(statement *SelectStmt, resultAsMap bool) (result []map[string]interface{}, err apperror.Error)
 
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)
@@ -121,7 +121,7 @@ type Backend interface {
 
 	// RenameCollection renames a collection to a new name.
 	RenameCollection(collection, newName string) apperror.Error
-	DropCollection(collection string) apperror.Error
+	DropCollection(collection string, ifExists, cascade bool) apperror.Error
 	DropAllCollections() apperror.Error
 
 	// CreateField creates the specified field on a collection.
@@ -147,13 +147,16 @@ type Backend interface {
 	// Drop an index.
 	DropIndex(indexName string) apperror.Error
 
+	NewQuery(collection string) (*Query, apperror.Error)
+	NewModelQuery(model interface{}) (*Query, apperror.Error)
+
 	// Create a new query.
 	//
 	// Can be used with different signatures:
 	// backend.Q("collection_name") => Get a query for a collection.
 	// backend.Q("collection_name", ID) => Get a query for a model in a collection. ID must be numeric or string.
 	// backend.Q(&myModel) => Get a query for a model.
-	Q(...interface{}) *Query
+	Q(collectionOrModel interface{}, extraModels ...interface{}) *Query
 
 	// Executes a query, fetches ALL results and returns them.
 	// If you expect a large number of results, you should use QueryCursor(), which
@@ -183,7 +186,7 @@ type Backend interface {
 
 	// Pluck retrieves all fields specified on a query, and returns them as a
 	// map.
-	Pluck(q *Query) (map[string]interface{}, apperror.Error)
+	Pluck(q *Query) ([]map[string]interface{}, apperror.Error)
 
 	// Based on a RelationQuery, return a query for the specified
 	// relation.
@@ -210,7 +213,7 @@ type Backend interface {
 
 	// Update a model by values in a map.
 	// Note that this will only update the backend, not the model instance.
-	UpdateByMap(model interface{}, data map[string]interface{}) apperror.Error
+	UpdateByMap(query *Query, data map[string]interface{}) apperror.Error
 
 	// Delete deletes the model from the backend.
 	Delete(model interface{}) apperror.Error

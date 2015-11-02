@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/theduke/go-apperror"
+
+	. "github.com/theduke/go-dukedb/expressions"
 )
 
 /**
@@ -372,7 +374,9 @@ func (a *Attribute) readTag() {
 	a.isRequired = tag.required
 	a.isIndex = tag.index
 	a.indexName = tag.indexName
-	a.defaultValue = tag.defaultVal
+	if tag.defaultVal != "" {
+		a.defaultValue = tag.defaultVal
+	}
 	a.min = tag.min
 	a.max = tag.max
 
@@ -550,6 +554,28 @@ func (a *Attribute) DefaultValue() interface{} {
 
 func (a *Attribute) SetDefaultValue(val interface{}) {
 	a.defaultValue = val
+}
+
+func (a *Attribute) BuildFieldExpression() *FieldExpr {
+	constraints := make([]Expression, 0)
+
+	if a.isPrimaryKey {
+		constraints = append(constraints, NewConstraintExpr(CONSTRAINT_PRIMARY_KEY))
+	}
+	if a.autoIncrement {
+		constraints = append(constraints, NewConstraintExpr(CONSTRAINT_AUTO_INCREMENT))
+	}
+	if a.isUnique && len(a.isUniqueWith) == 0 {
+		constraints = append(constraints, NewConstraintExpr(CONSTRAINT_UNIQUE))
+	}
+	if a.isRequired {
+		constraints = append(constraints, NewConstraintExpr(CONSTRAINT_NOT_NULL))
+	}
+
+	typ := NewFieldTypeExpr(a.backendType, a.typ)
+	e := NewFieldExpr(a.BackendName(), typ, constraints...)
+
+	return e
 }
 
 /**
