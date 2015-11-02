@@ -52,6 +52,10 @@ type Backend interface {
 	Logger() *logrus.Logger
 	SetLogger(*logrus.Logger)
 
+	ProfilingEnabled() bool
+	EnableProfiling()
+	DisableProfiling()
+
 	// Duplicate the backend.
 	Clone() Backend
 

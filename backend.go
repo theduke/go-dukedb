@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/theduke/go-apperror"
@@ -46,10 +47,11 @@ func (c BaseM2MCollection) GetByID(id interface{}) interface{} {
 }
 
 type BaseBackend struct {
-	name      string
-	debug     bool
-	logger    *logrus.Logger
-	modelInfo ModelInfos
+	name             string
+	debug            bool
+	logger           *logrus.Logger
+	modelInfo        ModelInfos
+	profilingEnabled bool
 
 	HasNativeJoins bool
 
@@ -112,6 +114,18 @@ func (b *BaseBackend) BuildLogger() {
 	}
 	//l = l.WithField("scope", b.name)
 	b.logger = l
+}
+
+func (b *BaseBackend) ProfilingEnabled() bool {
+	return b.profilingEnabled
+}
+
+func (b *BaseBackend) EnableProfiling() {
+	b.profilingEnabled = true
+}
+
+func (b *BaseBackend) DisableProfiling() {
+	b.profilingEnabled = false
 }
 
 func (b *BaseBackend) Clone() *BaseBackend {
@@ -430,6 +444,12 @@ func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
 }
 
 func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
+	var started time.Time
+	b.Logger().Infof("profiling: %v - name: %v", b.profilingEnabled, q.GetName())
+	if b.profilingEnabled && q.GetName() != "" {
+		started = time.Now()
+	}
+
 	stmt := q.GetStatement()
 	result, err := b.backend.ExecQuery(stmt, false)
 	if err != nil {
@@ -448,7 +468,18 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 
 	if len(targetSlice) > 0 {
 		// TODO: assign result to target slice.
-		//SetSlicePointer(targetSlice[0], result)
+		SetSlicePointer(targetSlice[0], models)
+	}
+
+	if !started.IsZero() {
+		timeTaken := time.Now().Sub(started)
+		ms := timeTaken.Nanoseconds() / 1000
+		b.Logger().WithFields(logrus.Fields{
+			"backend":    b.name,
+			"action":     "query",
+			"query_name": q.GetName(),
+			"ms":         ms,
+		}).Debugf("Executed query %v on collection %v in %v ms", q.GetName(), q.GetCollection(), ms)
 	}
 
 	return models, nil

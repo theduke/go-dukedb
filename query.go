@@ -14,6 +14,8 @@ import (
  */
 
 type Query struct {
+	name string
+
 	// backend holds the queries backend.
 	backend Backend
 
@@ -68,11 +70,16 @@ func (q *Query) SetModels(x []interface{}) {
 }
 
 func (q *Query) GetName() string {
-	return q.statement.Name()
+	return q.name
 }
 
-func (q *Query) SetName(x string) {
-	q.statement.SetName(x)
+func (q *Query) SetName(name string) {
+	q.name = name
+}
+
+func (q *Query) Name(x string) *Query {
+	q.name = x
+	return q
 }
 
 func (q *Query) GetJoinResultAssigner() JoinAssigner {
