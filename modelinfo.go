@@ -321,7 +321,7 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 		if fieldR.IsStruct() {
 			structType = fieldR.Type()
 		} else if fieldR.IsStructPtr() {
-			structType = fieldR.Elem().Type()
+			structType = fieldR.Type().Elem()
 		} else if fieldR.IsSlice() {
 			sliceItemType := fieldR.Type().Elem()
 			if sliceItemType.Kind() == reflect.Struct {
@@ -610,7 +610,7 @@ func (info *ModelInfo) ModelFromMap(data map[string]interface{}) (interface{}, a
 			return nil, apperror.Wrap(err, "unconvertable_field_value", msg)
 		}
 	}
-	return r.Value().Addr().Interface(), nil
+	return r.AddrInterface(), nil
 }
 
 func (info *ModelInfo) ValidateModel(m interface{}) apperror.Error {
@@ -735,10 +735,11 @@ func (m ModelInfos) AnalyzeRelations() apperror.Error {
 // relations.
 func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 	for fieldName, field := range model.transientFields {
+
 		relatedItem := reflect.New(field.structType)
 
 		// Try to determine the collection of the related struct.
-		relatedCollection, err := GetModelCollection(relatedItem)
+		relatedCollection, err := GetModelCollection(relatedItem.Interface())
 		if err != nil {
 			panic(fmt.Sprintf("Could not determine collection name for struct %v", field.structName))
 		}
@@ -749,6 +750,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			// This is not a relation, but an attribute.
 			// We need to build the attribute now and add it to the attributes
 			// map.
+			//
 
 			attr := buildAttribute(field)
 			model.attributes[attr.Name()] = attr
@@ -776,6 +778,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 				}
 
 				// Valid m2m, all done.
+				model.relations[fieldName] = relation
 				continue
 			}
 
@@ -794,6 +797,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			}
 
 			// All is verified, nothing more to do.
+			model.relations[fieldName] = relation
 			continue
 		}
 
@@ -803,7 +807,34 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			// Since relation is many, it must be has-many, since m2m needs
 			// to be set explicitly.
 			relation.SetRelationType(RELATION_TYPE_HAS_MANY)
-			// TODO: determine fields.
+
+			if relation.LocalField() == "" {
+				relation.SetLocalField(model.PkAttribute().Name())
+			}
+
+			relField := ""
+			if relation.ForeignField() == "" {
+				// Try to find foreign key field.
+				// We check modelNameID, modelNameId.
+				relField = modelName + "ID"
+				if !relatedInfo.HasAttribute(relField) {
+					relField = modelName + "Id"
+					if !relatedInfo.HasAttribute(relField) {
+						relField = ""
+					}
+				}
+
+				if relField == "" {
+					msg := fmt.Sprintf("Model %v has has-many relationship to %v in field %v, but could not determine the relationship type. Specify explicitly with has-many:LocalField:ForeignField", modelName, relatedName, fieldName)
+					return apperror.New("relationship_not_determined", msg)
+				}
+			} else if !relatedInfo.HasAttribute(relation.ForeignField()) {
+				msg := fmt.Sprintf("%v.%v was specified for has-many relationship, but does not exist", relatedInfo.StructName(), relation.ForeignField())
+				return apperror.New("invalid_relationship", msg)
+			}
+
+			relation.SetForeignField(relField)
+			model.relations[fieldName] = relation
 			continue
 		}
 
@@ -835,6 +866,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			relation.SetLocalField(relField)
 			relation.SetForeignField(relatedInfo.PkAttribute().Name())
 			// Valid has-one, all done.
+			model.relations[fieldName] = relation
 			continue
 		}
 
@@ -856,6 +888,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			relation.SetLocalField(model.PkAttribute().Name())
 
 			// Valid belongs-to. All done.
+			model.relations[fieldName] = relation
 			continue
 		}
 

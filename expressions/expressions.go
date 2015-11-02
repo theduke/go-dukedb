@@ -31,6 +31,32 @@ func getIdentifiers(expr Expression) []Expression {
 }
 
 /**
+ * FieldedExpression.
+ */
+
+type FieldedExpression interface {
+	Fields() []Expression
+	AddField(field Expression)
+	SetFields(fields []Expression)
+}
+
+type fieldedExprMixin struct {
+	fields []Expression
+}
+
+func (e *fieldedExprMixin) Fields() []Expression {
+	return e.fields
+}
+
+func (e *fieldedExprMixin) AddField(field Expression) {
+	e.fields = append(e.fields, field)
+}
+
+func (e *fieldedExprMixin) SetFields(fields []Expression) {
+	e.fields = fields
+}
+
+/**
  * NamedExpression.
  */
 
@@ -330,9 +356,29 @@ func NewColFieldIdExpr(collection, field string) *ColFieldIdentifierExpr {
 	}
 }
 
-func NewFieldSelectorExpr(name, collection, field string, typ reflect.Type) NamedTypedExpression {
-	colId := NewColFieldIdExpr(collection, field)
-	return NameExpr(name, colId, typ)
+/**
+ * FieldSelectorExpr
+ */
+
+type FieldSelectorExpr struct {
+	NamedNestedExpr
+}
+
+func NewFieldSelectorExpr(name string, expr Expression, typ reflect.Type) *FieldSelectorExpr {
+	e := &FieldSelectorExpr{}
+	e.name = name
+	e.expression = expr
+	e.typ = typ
+	return e
+}
+
+func NewFieldSelector(name, collection, field string, typ reflect.Type) *FieldSelectorExpr {
+	id := BuildIdExpr(collection, field)
+	e := &FieldSelectorExpr{}
+	e.name = name
+	e.expression = id
+	e.typ = typ
+	return e
 }
 
 // BuildIdExpr is a convenience function for creating either an IdentiferExpression or a CollectionFieldIdentifierExpression.

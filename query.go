@@ -2,6 +2,7 @@ package dukedb
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/theduke/go-apperror"
 	"github.com/theduke/go-utils"
@@ -150,9 +151,11 @@ func (q *Query) Field(fields ...string) *Query {
 
 		// Check if the field exists.
 		attr := q.modelInfo.FindAttribute(field)
+		var typ reflect.Type
 		if attr != nil {
 			// Field exists, so use it's backend name.
 			field = attr.BackendName()
+			typ = attr.Type()
 		}
 
 		// Still add the field, even if it is not found on the model info.
@@ -161,7 +164,7 @@ func (q *Query) Field(fields ...string) *Query {
 		// Use a named expression to allow join queries without extra work.
 		// Named queries will construct a SQL query with '"collection"."field" AS "collection.field"'
 		fieldName := q.modelInfo.BackendName() + "." + field
-		expr := NameExpr(fieldName, NewColFieldIdExpr(q.modelInfo.BackendName(), field))
+		expr := NewFieldSelector(fieldName, q.modelInfo.BackendName(), field, typ)
 		q.statement.AddField(expr)
 	}
 	return q

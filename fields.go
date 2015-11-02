@@ -696,7 +696,7 @@ func (f *Relation) IsMany() bool {
 	} else {
 		// Type not determined yet.
 		// Assume that a many relationship requires a slice.
-		return f.structType.Kind() == reflect.Slice
+		return f.Type().Kind() == reflect.Slice
 	}
 }
 

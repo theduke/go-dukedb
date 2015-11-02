@@ -166,6 +166,13 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		}
 		t.WQ(e.Field())
 
+	case *FieldSelectorExpr:
+		if err := t.translator.Translate(e.expression); err != nil {
+			return err
+		}
+		t.W(" AS ")
+		t.WQ(e.name)
+
 	case *ConstraintExpr:
 		switch e.Constraint() {
 		case CONSTRAINT_NOT_NULL:
@@ -441,10 +448,6 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			if err := t.translator.Translate(expr); err != nil {
 				return err
 			}
-			if named, ok := expr.(NamedExpression); ok {
-				t.W(" AS ")
-				t.WQ(named.Name())
-			}
 			if i < lastIndex {
 				t.W(", ")
 			}
@@ -457,10 +460,6 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			for i, field := range join.Fields() {
 				if err := t.translator.Translate(field); err != nil {
 					return err
-				}
-				if named, ok := field.(NamedExpression); ok {
-					t.W(" AS ")
-					t.WQ(named.Name())
 				}
 				if i < lastIndex {
 					t.W(", ")

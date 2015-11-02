@@ -638,7 +638,7 @@ func (e *mutationStmt) SetFields(fields []Expression) {
 	e.returnFields = fields
 }
 
-func (e *mutationStmt) GetFields() []Expression {
+func (e *mutationStmt) Fields() []Expression {
 	return e.returnFields
 }
 
@@ -657,6 +657,9 @@ func (s mutationStmt) GetIdentifiers() []Expression {
 type CreateStmt struct {
 	mutationStmt
 }
+
+// Ensure CreateStatement implements FieldedExpression.
+var _ FieldedExpression = (*CreateStmt)(nil)
 
 func NewCreateStmt(collection string, values []*FieldValueExpr) *CreateStmt {
 	stmt := &CreateStmt{}

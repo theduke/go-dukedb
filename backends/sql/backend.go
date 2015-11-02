@@ -79,16 +79,18 @@ func (b *Backend) Clone() db.Backend {
 	}
 }
 
-func (b *Backend) RegisterModel(model interface{}) *db.ModelInfo {
-	info := b.BaseBackend.RegisterModel(model)
-	for _, attr := range info.Attributes() {
-		typ, err := b.dialect.DetermineColumnType(attr)
-		if err != nil {
-			panic(err)
+func (b *Backend) Build() {
+	b.BaseBackend.Build()
+
+	for _, info := range b.ModelInfos() {
+		for _, attr := range info.Attributes() {
+			typ, err := b.dialect.DetermineColumnType(attr)
+			if err != nil {
+				panic(err)
+			}
+			attr.SetBackendType(typ)
 		}
-		attr.SetBackendType(typ)
 	}
-	return info
 }
 
 func (b *Backend) SqlExec(query string, args ...interface{}) (sql.Result, error) {
@@ -154,6 +156,12 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 }
 
 func (b *Backend) Exec(statement Expression) apperror.Error {
+	if s, ok := statement.(*CreateCollectionStmt); ok {
+		for _, f := range s.Fields() {
+			b.Logger().Infof("building stmt %v: %+v\n", f.Name(), f.FieldType())
+		}
+	}
+
 	dialect := b.dialect.New()
 	if err := dialect.PrepareExpression(statement); err != nil {
 		return err

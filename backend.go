@@ -213,7 +213,7 @@ func (b *BaseBackend) RegisterModel(model interface{}) *ModelInfo {
 
 func (b *BaseBackend) Build() {
 	if err := b.modelInfo.AnalyzeRelations(); err != nil {
-		panic(fmt.Sprintf("Analyzing relationship info failed: %v", err))
+		panic(fmt.Sprintf("Analyzing relationships failed: %v", err))
 	}
 }
 
@@ -445,7 +445,6 @@ func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
 
 func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
 	var started time.Time
-	b.Logger().Infof("profiling: %v - name: %v", b.profilingEnabled, q.GetName())
 	if b.profilingEnabled && q.GetName() != "" {
 		started = time.Now()
 	}
@@ -557,7 +556,7 @@ func (b *BaseBackend) FindOneBy(collection, field string, value interface{}, tar
 }
 
 func (b *BaseBackend) Count(q *Query) (int, apperror.Error) {
-	count := NameExpr("count", NewFuncExpr("COUNT", NewTextExpr("*")))
+	count := NewFieldSelectorExpr("count", NewFuncExpr("COUNT", NewTextExpr("*")), reflect.TypeOf(1))
 	q.SetFieldExpressions([]Expression{count})
 
 	result, err := b.backend.Pluck(q)
@@ -707,196 +706,232 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
  * Convenience functions.
  */
 
-//
-// action may be either "create", "update" or "delete"
-func (b *BaseBackend) PersistRelations(action string, info *ModelInfo, m interface{}, beforeCreate bool) apperror.Error {
-	/*
-		modelVal := reflect.ValueOf(m)
-		if modelVal.Type().Kind() == reflect.Ptr {
-			modelVal = modelVal.Elem()
+func (b *BaseBackend) persistBelongsToRelation(
+	action string,
+	beforePersist bool,
+	info *ModelInfo,
+	r *reflector.StructReflector,
+	relation *Relation,
+	related *reflector.StructReflector) apperror.Error {
+
+	relatedInfo := relation.RelatedModel()
+
+	// Create or update belongs-to relation after persist.
+	if (action == "create" || action == "update") && !beforePersist {
+		hasId, err := relatedInfo.ModelHasId(related.AddrInterface())
+		if err != nil {
+			// Should never happen, just be save.
+			return apperror.Wrap(err, "invalid_related_model")
 		}
 
-		for name, relation := range info.Relations() {
-			// Handle has-one.
-			if relation.RelationType() == RELATION_TYPE_HAS_ONE {
-				relationVal := modelVal.FieldByName(name)
-				relationKind := relationVal.Type().Kind()
-
-				if !relationVal.IsValid() || (relationKind == reflect.Ptr && relationVal.IsNil()) {
-					continue
-				}
-
-				if relationKind == reflect.Ptr {
-					relationVal = relationVal.Elem()
-				}
-
-				relatedValue := relationVal.Addr().Interface()
-
-				if IsZero(relatedValue) {
-					continue
-				}
-
-				// Auto-persist related model if neccessary.
-
-				if IsZero(b.MustModelID(relatedValue)) && relation.AutoCreate() {
-					// Related model does not have an id, and relation has auto
-					// create enabled, so persist the related model.
-					err := b.backend.Create(relatedValue)
-					if err != nil {
-						return err
-					}
-
-					// Update the foreign key field on the base model with the new
-					// related id.
-					key, _ := GetStructFieldValue(relatedValue, fieldInfo.HasOneForeignField)
-					modelVal.FieldByName(fieldInfo.HasOneField).Set(reflect.ValueOf(key))
-				} else if relation.AutoUpdate() {
-					// Auto-update enabled, so update the relation.
-					if err := b.backend.Update(relatedValue); err != nil {
-						return err
-					}
-				}
-			}
-
-			if relation.RelationType() == RELATION_TYPE_HAS_MANY {
-			}
-
-			// Handle belongs-to.
-			if fieldInfo.BelongsTo {
-				localField, _ := GetStructFieldValue(m, relation.LocalField())
-
-				// belongsto relationships can only be handled if the model itself has an id
-				// already. So skip if otherwise.
-				if IsZero(localField) {
-					continue
-				}
-
-				relationCollection := fieldInfo.RelationCollection
-				foreignFieldName := b.ModelInfo(relationCollection).GetField(fieldInfo.BelongsToForeignField).BackendName
-
-				items := make([]reflect.Value, 0)
-
-				if !fieldInfo.RelationIsMany {
-					items = append(items, modelVal.FieldByName(name))
-				} else {
-					// Code is same as above, but handling each relation item in the slice.
-					sliceVal := modelVal.FieldByName(name)
-					if !sliceVal.IsValid() {
-						continue
-					}
-
-					for i := 0; i < sliceVal.Len(); i++ {
-						items = append(items, sliceVal.Index(i))
-					}
-				}
-
-				for _, relationVal := range items {
-					relationKind := relationVal.Type().Kind()
-					if !relationVal.IsValid() || (relationKind == reflect.Ptr && relationVal.IsNil()) {
-						continue
-					}
-
-					if relationKind == reflect.Ptr {
-						relationVal = relationVal.Elem()
-					}
-
-					relation := relationVal.Addr().Interface()
-					relationId := b.MustModelID(relation)
-
-					foreignField := relationVal.FieldByName(fieldInfo.BelongsToForeignField)
-					if reflect.DeepEqual(foreignField.Interface(), belongsToKey) && !IsZero(relationId) {
-						// Relation is persisted and has the right id, so nothing to do.
-						continue
-					}
-
-					// Update key on relation.
-					foreignField.Set(reflect.ValueOf(belongsToKey))
-
-					// Auto-persist related model if neccessary.
-					if IsZero(relationId) {
-						err := b.Create(relation)
-						if err != nil {
-							return err
-						}
-					} else {
-						// Relation already exists! Just update the foreign field.
-						err := b.UpdateByMap(relation, map[string]interface{}{
-							foreignFieldName: belongsToKey,
-						})
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
-
-			// Handle m2m
-			if !beforeCreate && fieldInfo.M2M {
-				// m2m relationships can only be handled if the model itself has an id
-				// already. So skip if otherwise.
-				if IsZero(b.MustModelID(m)) {
-					continue
-				}
-
-				val, _ := GetStructFieldValue(m, fieldInfo.Name)
-
-				models, err := ConvertInterfaceToSlice(val)
-				if err != nil {
-					return apperror.Wrap(err, "invalid_m2m_slice")
-				}
-
-				// First, persist all unpersisted m2m models.
-				for _, model := range models {
-					id := b.MustModelID(model)
-					if IsZero(id) {
-						if err := b.Create(model); err != nil {
-							return err
-						}
-					}
-				}
-
-				m2m, err2 := b.M2M(m, fieldInfo.Name)
-				if err2 != nil {
-					return err2
-				}
-				err2 = m2m.Replace(models)
-				if err2 != nil {
-					return err2
-				}
-			}
+		isNew := !hasId
+		if isNew && !relation.AutoCreate() {
+			// Auto-create disabled, so ignore.
+			return nil
+		} else if !isNew && !relation.AutoUpdate() {
+			return nil
 		}
 
-	*/
+		// First, set the foreign key.
+		if err := related.SetField(relation.ForeignField(), r.Field(relation.LocalField())); err != nil {
+			// Should never happen, just be save.
+			return apperror.Wrap(err, "foreign_key_update_error")
+		}
+
+		if err := b.backend.Save(related.AddrInterface()); err != nil {
+			return err
+		}
+	} else if action == "delete" && beforePersist && relation.AutoDelete() {
+		// Main model is being deleted, we are before persist, and auto-delete is on.
+		// This means we need to delete the related model.
+		if err := b.backend.Delete(related.AddrInterface()); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
-/*
-func (b *BaseBackend) Query(query *Query, targetSlice []interface{}) ([]interface{}, apperror.Error) {
-	info := b.ModelInfo(query.GetCollection())
-	if info == nil {
-		return nil, b.unknownColErr(collection)
-	}
+//
+// action may be either "create", "update" or "delete"
+func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *ModelInfo, model interface{}) apperror.Error {
 
-	result, err := b.backend.Exec(query.GetStatement())
+	r, err := reflector.Reflect(model).Struct()
 	if err != nil {
-		return err
+		return apperror.Wrap(err, "invalid_model")
 	}
 
-	for _, m := range models {
-		// Call AfterQuery hook.
-		CallModelHook(b, m, "AfterQuery")
+	for _, relation := range info.Relations() {
+		relatedInfo := relation.RelatedModel()
+
+		// Handle has-one.
+		// Only need to check has-one before persist, since we can do everything there.
+		if relation.RelationType() == RELATION_TYPE_HAS_ONE && beforePersist {
+			relatedVal := r.Field(relation.Name())
+			if relatedVal.IsZero() {
+				continue
+			}
+			related, err := relatedVal.Struct()
+			if err != nil {
+				continue
+			}
+
+			if action == "create" || action == "update" {
+				// Action is create or update, so see if we need to save/update the related model.
+
+				hasId, err := relatedInfo.ModelHasId(related.AddrInterface())
+				if err != nil {
+					// Should never happen, just be save.
+					return apperror.Wrap(err, "invalid_related_model")
+				}
+
+				isNew := !hasId
+
+				if !isNew {
+					// Related model is new.
+					if !relation.AutoCreate() {
+						// Auto-create disabled, so ignore.
+						continue
+					}
+
+					// Auto-creating enabled, so save model.
+					if err := b.backend.Create(related.AddrInterface()); err != nil {
+						return err
+					}
+				}
+
+				// Update has one field.
+				foreignKey := related.Field(relation.ForeignField())
+				if err := r.SetField(relation.LocalField(), foreignKey); err != nil {
+					// This should never happen. Just be save.
+					return apperror.Wrap(err, "foreign_key_update_error")
+				}
+
+				if relation.AutoUpdate() {
+					// Auto-update enabled, so update the related model.
+					if err := b.backend.Update(related.AddrInterface()); err != nil {
+						return err
+					}
+				}
+			} else if action == "delete" && relation.AutoDelete() {
+				// Auto-delete enabled, so delete the relation.
+				if err := b.backend.Delete(related.AddrInterface()); err != nil {
+					return err
+				}
+			}
+		}
+
+		if relation.RelationType() == RELATION_TYPE_BELONGS_TO {
+			relatedVal := r.Field(relation.Name())
+			if relatedVal.IsZero() {
+				return nil
+			}
+			related, err := relatedVal.Struct()
+			if err != nil {
+				return nil
+			}
+
+			if err := b.persistBelongsToRelation(action, beforePersist, info, r, relation, related); err != nil {
+				return err
+			}
+		}
+
+		if relation.RelationType() == RELATION_TYPE_HAS_MANY {
+			slice, err := r.Field(relation.Name()).Slice()
+			if err != nil {
+				// This should never happen, just be save.
+				return apperror.Wrap(err, "invalid_slice_field")
+			}
+
+			for _, item := range slice.Items() {
+				if item.IsZero() {
+					continue
+				}
+				related, err := item.Struct()
+				if err != nil {
+					// This should never happen, just be save.
+					return apperror.Wrap(err, "invalid_has_many_struct")
+				}
+
+				if err := b.persistBelongsToRelation(action, beforePersist, info, r, relation, related); err != nil {
+					return err
+				}
+			}
+		}
+
+		if relation.RelationType() == RELATION_TYPE_M2M {
+			if (action == "create" && relation.AutoCreate()) || (action == "update" && relation.AutoUpdate()) && !beforePersist {
+				slice, err := r.Field(relation.Name()).Slice()
+				if err != nil {
+					// This should never happen, just be save.
+					return apperror.Wrap(err, "invalid_slice_field")
+				}
+
+				if slice.Len() < 1 {
+					// Ignore when empty.
+					continue
+				}
+
+				newModels := make([]interface{}, 0)
+
+				for _, item := range slice.Items() {
+					if item.IsZero() {
+						continue
+					}
+
+					related, err := item.Struct()
+					if err != nil {
+						// Should never happen, just be save.
+						return apperror.Wrap(err, "invalid_m2m_struct")
+					}
+
+					hasId, err2 := relatedInfo.ModelHasId(related.AddrInterface())
+					if err2 != nil {
+						// Should never happen, just be save.
+						return err2
+					}
+
+					if !hasId {
+						// Related model does is new.
+						if !relation.AutoCreate() {
+							// No auto-create enabled, so ignore.
+							continue
+						}
+
+						// Create related model.
+						if err := b.backend.Create(related.AddrInterface()); err != nil {
+							return err
+						}
+					}
+
+					newModels = append(newModels, related.AddrInterface())
+				}
+
+				m2m, err2 := b.backend.M2M(model, relation.Name())
+				if err2 != nil {
+					return err2
+				}
+
+				if err := m2m.Replace(newModels); err != nil {
+					return err
+				}
+			}
+
+			if action == "delete" && beforePersist {
+				m2m, err := b.backend.M2M(model, relation.Name())
+				if err != nil {
+					return err
+				}
+
+				if err := m2m.Clear(); err != nil {
+					return err
+				}
+			}
+		}
 	}
 
-	// If a target slice was specified, build up a new slice
-	// with the correct type, fill it, and set the pointer.
-	if len(targetSlice) > 0 {
-		SetSlicePointer(targetSlice[0], models)
-	}
-
-	return models, nil
+	return nil
 }
-*/
 
 func (b *BaseBackend) Related(model interface{}, name string) (*RelationQuery, apperror.Error) {
 	info, err := b.InfoForModel(model)
@@ -939,7 +974,7 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	}
 
 	// Persist relationships before create.
-	if err := b.PersistRelations("create", info, model, true); err != nil {
+	if err := b.PersistRelations("create", true, info, model); err != nil {
 		return err
 	}
 
@@ -960,7 +995,7 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	}
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.
-	if err := b.PersistRelations("create", info, model, false); err != nil {
+	if err := b.PersistRelations("create", false, info, model); err != nil {
 		return err
 	}
 
@@ -1002,8 +1037,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 		handler(b.backend, model)
 	}
 
-	// Persist relationships before create.
-	if err := b.PersistRelations("update", info, model, false); err != nil {
+	if err := b.PersistRelations("update", true, info, model); err != nil {
 		return err
 	}
 
@@ -1020,7 +1054,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	}
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.
-	if err := b.PersistRelations("update", info, model, false); err != nil {
+	if err := b.PersistRelations("update", false, info, model); err != nil {
 		return err
 	}
 
@@ -1045,7 +1079,7 @@ func (b *BaseBackend) Save(model interface{}) apperror.Error {
 		return err
 	}
 
-	if hasId {
+	if !hasId {
 		return b.backend.Create(model)
 	} else {
 		return b.backend.Update(model)
@@ -1085,26 +1119,16 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 		handler(b.backend, model)
 	}
 
-	// Handle relationships.
-	for name, relation := range info.Relations() {
-		if !relation.AutoDelete() {
-			continue
-		}
-
-		if relation.RelationType() == RELATION_TYPE_M2M {
-			// Clear m2m collection.
-			m2m, err := b.backend.M2M(model, name)
-			if err != nil {
-				return err
-			}
-			if err := m2m.Clear(); err != nil {
-				return err
-			}
-		}
+	if err := b.PersistRelations("delete", true, info, model); err != nil {
+		return err
 	}
 
 	stmt := info.ModelDeleteStmt(model)
 	if err := b.backend.Exec(stmt); err != nil {
+		return err
+	}
+
+	if err := b.PersistRelations("delete", false, info, model); err != nil {
 		return err
 	}
 

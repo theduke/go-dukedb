@@ -113,7 +113,7 @@ func (d *PostgresDialect) PrepareExpression(expression Expression) apperror.Erro
 		info := d.modelInfo.Find(e.Collection())
 		if info != nil {
 			pk := info.PkAttribute()
-			e.AddField(NameExpr(pk.Name(), NewIdExpr(pk.BackendName()), pk.Type()))
+			e.AddField(NewFieldSelector(pk.Name(), info.BackendName(), pk.BackendName(), pk.Type()))
 		}
 
 	case *SelectStmt:
@@ -122,7 +122,7 @@ func (d *PostgresDialect) PrepareExpression(expression Expression) apperror.Erro
 			info := d.modelInfo.Find(e.Collection())
 			if info != nil {
 				for name, attr := range info.Attributes() {
-					e.AddField(NewFieldSelectorExpr(name, info.BackendName(), attr.BackendName(), attr.Type()))
+					e.AddField(NewFieldSelector(name, info.BackendName(), attr.BackendName(), attr.Type()))
 				}
 			}
 		}
@@ -149,7 +149,7 @@ func (d *PostgresDialect) Translate(expression Expression) apperror.Error {
 		d.SqlTranslator.Translate(e)
 
 		// Add returning fields.
-		fields := e.GetFields()
+		fields := e.Fields()
 		if len(fields) > 0 {
 			d.W(" RETURNING ")
 			for _, f := range fields {
