@@ -990,8 +990,15 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	// Build a CreateStatement.
 	stmt := NewCreateStmt(info.BackendName(), values)
 
-	if err := b.backend.Exec(stmt); err != nil {
+	res, err := b.backend.ExecQuery(stmt, true)
+	if err != nil {
 		return err
+	}
+
+	if len(res) == 1 {
+		if err := info.UpdateModelFromData(model, res[0]); err != nil {
+			return err
+		}
 	}
 
 	// Persist relationships again since m2m can only be handled  when an ID is set.

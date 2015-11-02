@@ -181,7 +181,7 @@ func (b *Backend) Exec(statement Expression) apperror.Error {
 	return nil
 }
 
-func (b *Backend) ExecQuery(statement *SelectStmt, resultAsMap bool) ([]map[string]interface{}, apperror.Error) {
+func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]map[string]interface{}, apperror.Error) {
 	dialect := b.dialect.New()
 	if err := dialect.PrepareExpression(statement); err != nil {
 		return nil, err

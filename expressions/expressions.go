@@ -36,7 +36,7 @@ func getIdentifiers(expr Expression) []Expression {
 
 type FieldedExpression interface {
 	Fields() []Expression
-	AddField(field Expression)
+	AddField(field ...Expression)
 	SetFields(fields []Expression)
 }
 
@@ -48,8 +48,10 @@ func (e *fieldedExprMixin) Fields() []Expression {
 	return e.fields
 }
 
-func (e *fieldedExprMixin) AddField(field Expression) {
-	e.fields = append(e.fields, field)
+func (e *fieldedExprMixin) AddField(fields ...Expression) {
+	for _, field := range fields {
+		e.fields = append(e.fields, field)
+	}
 }
 
 func (e *fieldedExprMixin) SetFields(fields []Expression) {

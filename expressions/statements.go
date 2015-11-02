@@ -598,11 +598,9 @@ func NewJoinStmt(collection, joinType string, joinCondition Expression) *JoinStm
 
 type mutationStmt struct {
 	namedExprMixin
+	fieldedExprMixin
 	collection string
 	values     []*FieldValueExpr
-
-	// returnFields are field expressions that should be returned by the backend.
-	returnFields []Expression
 }
 
 func (e *mutationStmt) Validate() apperror.Error {
@@ -628,18 +626,6 @@ func (e mutationStmt) Values() []*FieldValueExpr {
 
 func (e *mutationStmt) SetValues(vals []*FieldValueExpr) {
 	e.values = vals
-}
-
-func (e *mutationStmt) AddField(field Expression) {
-	e.returnFields = append(e.returnFields, field)
-}
-
-func (e *mutationStmt) SetFields(fields []Expression) {
-	e.returnFields = fields
-}
-
-func (e *mutationStmt) Fields() []Expression {
-	return e.returnFields
 }
 
 func (s mutationStmt) GetIdentifiers() []Expression {

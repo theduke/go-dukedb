@@ -117,7 +117,7 @@ type Backend interface {
 	// The result will be nil for all statements except a SelectStatement.
 	Exec(statement Expression) apperror.Error
 
-	ExecQuery(statement *SelectStmt, resultAsMap bool) (result []map[string]interface{}, err apperror.Error)
+	ExecQuery(statement FieldedExpression, resultAsMap bool) (result []map[string]interface{}, err apperror.Error)
 
 	// Create the specified collection in the backend.
 	// (eg the table or the mongo collection)

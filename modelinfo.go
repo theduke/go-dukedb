@@ -522,6 +522,27 @@ func (info *ModelInfo) ModelToMap(model interface{}, forBackend, marshal bool, i
 	return data, nil
 }
 
+func (info *ModelInfo) UpdateModelFromData(model interface{}, data map[string]interface{}) apperror.Error {
+	r, err := reflector.Reflect(model).Struct()
+	if err != nil {
+		return apperror.Wrap(err, "invalid_model")
+	}
+
+	for key, val := range data {
+		attr := info.FindAttribute(key)
+		if attr == nil {
+			continue
+		}
+
+		if err := r.SetFieldValue(attr.Name(), val, true); err != nil {
+			msg := fmt.Sprintf("Data for field %v (%v) could not be converted to %v", attr.Name(), val, attr.Type())
+			return apperror.Wrap(err, "unconvertable_field_value", msg)
+		}
+	}
+
+	return nil
+}
+
 func (info *ModelInfo) BuildCreateStmt(withReferences bool) *CreateCollectionStmt {
 	fieldsMap := make(map[string]*FieldExpr, 0)
 	constraints := make([]Expression, 0)
