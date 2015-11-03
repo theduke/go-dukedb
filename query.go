@@ -51,6 +51,7 @@ func newQuery(backend Backend, collection string) *Query {
 		modelInfo:  backend.ModelInfo(collection),
 		collection: collection,
 		statement:  NewSelectStmt(info.BackendName()),
+		joins:      make(map[string]*RelationQuery),
 	}
 }
 
@@ -266,6 +267,11 @@ func (q *Query) FilterCond(field string, condition string, val interface{}) *Que
 		q.addError("unknown_operator", fmt.Sprintf("Unknown operator %v", condition))
 		return q
 	}
+
+	if attr := q.modelInfo.FindAttribute(field); attr != nil {
+		field = attr.BackendName()
+	}
+
 	return q.FilterExpr(NewFieldValFilter(q.modelInfo.BackendName(), field, operator, val))
 }
 
@@ -496,6 +502,9 @@ func RelQ(q *Query, name, backendName string, joinType string) *RelationQuery {
 	stmt.SetName(name)
 
 	relQ := &RelationQuery{
+		Query: Query{
+			joins: make(map[string]*RelationQuery),
+		},
 		baseQuery:    q,
 		relationName: name,
 		statement:    stmt,

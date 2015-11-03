@@ -258,6 +258,7 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 
 	fieldMap := make(map[string]reflect.Type)
 	for _, field := range statement.Fields() {
+		continue
 		if e, ok := field.(NamedTypedExpression); ok && e.Type() != nil && e.Name() != "" {
 			if _, ok := colMap[e.Name()]; ok {
 				fieldMap[e.Name()] = e.Type()
@@ -267,7 +268,8 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 
 	result := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		values := make([]reflect.Value, len(cols), len(cols))
+		//values := make([]reflect.Value, len(cols), len(cols))
+		values := make([]interface{}, len(cols), len(cols))
 		pointers := make([]interface{}, len(cols), len(cols))
 
 		for i, col := range cols {
@@ -276,8 +278,9 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 				values[i] = r
 				pointers[i] = r.Interface()
 			} else {
-				r := reflect.ValueOf(pointers[i]).Addr()
-				pointers[i] = r.Interface()
+				//r := reflect.ValueOf(pointers[i]).Addr()
+				//pointers[i] = r.Interface()
+				pointers[i] = &values[i]
 			}
 		}
 
@@ -287,7 +290,8 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 
 		m := make(map[string]interface{})
 		for i, col := range cols {
-			m[col] = values[i].Elem().Interface()
+			//m[col] = values[i].Elem().Interface()
+			m[col] = values[i]
 		}
 
 		result = append(result, m)

@@ -44,7 +44,7 @@ func NewM2MCollection(backend Backend, relation *Relation, model interface{}) (M
 		backend:         backend,
 		relation:        relation,
 		model:           model,
-		localFieldValue: id,
+		localFieldValue: id.Interface(),
 
 		localFieldName:   relation.Model().BackendName() + "." + relation.Model().Attribute(relation.LocalField()).BackendName(),
 		foreignFieldName: relation.RelatedModel().BackendName() + "." + relation.RelatedModel().Attribute(relation.ForeignField()).BackendName(),
@@ -667,12 +667,12 @@ func (b *BaseBackend) FindOne(collection string, id interface{}, targetModel ...
 	}
 
 	// Try to convert the id to the correct type.
-	id, err := reflector.Reflect(id).ConvertTo(info.PkAttribute().Type())
+	convertedId, err := reflector.Reflect(id).ConvertTo(info.PkAttribute().Type())
 	if err != nil {
 		return nil, apperror.Wrap(err, "id_conversion_error")
 	}
 
-	return b.backend.Q(collection).Filter(info.PkAttribute().BackendName(), id).First(targetModel...)
+	return b.backend.Q(collection).Filter(info.PkAttribute().BackendName(), convertedId).First(targetModel...)
 }
 
 func (b *BaseBackend) FindOneBy(collection, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
@@ -1028,7 +1028,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 						}
 					}
 
-					newModels = append(newModels, related.AddrInterface())
+					newModels = append(newModels, item.Interface())
 				}
 
 				m2m, err2 := b.backend.M2M(model, relation.Name())

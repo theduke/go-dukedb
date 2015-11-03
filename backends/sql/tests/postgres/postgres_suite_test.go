@@ -23,6 +23,8 @@ var serverCmd *exec.Cmd
 var tmpDir string
 var finishedChannel chan bool
 
+var setupFailed bool = true
+
 var _ = BeforeSuite(func() {
 	tmpDir = path.Join(os.TempDir(), "dukedb_backend_postgres_test")
 	// Ensure that tmp dir is deleted.
@@ -56,14 +58,20 @@ var _ = BeforeSuite(func() {
 
 	fmt.Printf("Connecting to postgres database\n")
 	backend, err := sql.New("postgres", "postgres://@localhost:10001/postgres?sslmode=disable")
+	//backend, err := sql.New("postgres", "postgres://theduke:theduke@localhost/test")
 	Expect(err).ToNot(HaveOccurred())
 	Expect(backend).ToNot(BeNil())
 
+	fmt.Println("Creating test database.")
 	_, err = backend.SqlExec("CREATE DATABASE test")
 	Expect(err).ToNot(HaveOccurred())
+
+	setupFailed = false
 })
 
 var _ = AfterSuite(func() {
-	serverCmd.Process.Kill()
+	if serverCmd != nil {
+		serverCmd.Process.Kill()
+	}
 	os.RemoveAll(tmpDir)
 })

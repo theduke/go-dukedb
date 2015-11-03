@@ -330,11 +330,6 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 			} else if sliceItemType.Kind() == reflect.Ptr && sliceItemType.Elem().Kind() == reflect.Struct {
 				structType = sliceItemType.Elem()
 			}
-
-			if structType == nil {
-				panic("slice: " + name + "| " + structType.String())
-
-			}
 		}
 
 		// Build the base field.
@@ -533,15 +528,39 @@ func (info *ModelInfo) ModelToMap(model interface{}, forBackend, marshal bool, i
 }
 
 func (info *ModelInfo) UpdateModelFromData(model interface{}, data map[string]interface{}) apperror.Error {
-	r, err := reflector.Reflect(model).Struct()
-	if err != nil {
-		return apperror.Wrap(err, "invalid_model")
+	var r *reflector.StructReflector
+	if x, ok := model.(*reflector.StructReflector); ok {
+		r = x
+	} else {
+		x, err := reflector.Reflect(model).Struct()
+		if err != nil {
+			return apperror.Wrap(err, "invalid_model")
+		}
+		r = x
 	}
 
 	for key, val := range data {
+		if val == nil {
+			continue
+		}
 		attr := info.FindAttribute(key)
 		if attr == nil {
 			continue
+		}
+
+		if attr.BackendMarshal() {
+			var js []byte
+			if slice, ok := val.([]uint8); ok {
+				js = []byte(slice)
+			} else if str, ok := val.(string); ok {
+				js = []byte(str)
+			}
+			if js != nil {
+				if err := json.Unmarshal(js, r.Field(attr.Name()).Addr().Interface()); err != nil {
+					return apperror.Wrap(err, "json_unmarshal_error")
+				}
+				continue
+			}
 		}
 
 		if err := r.SetFieldValue(attr.Name(), val, true); err != nil {
@@ -609,7 +628,7 @@ func (info *ModelInfo) ModelFilter(model interface{}) Expression {
 		return nil
 	}
 
-	f := NewFieldValFilter(info.BackendName(), info.PkAttribute().Name(), OPERATOR_EQ, id.Interface())
+	f := NewFieldValFilter(info.BackendName(), info.PkAttribute().BackendName(), OPERATOR_EQ, id.Interface())
 	return f
 }
 
@@ -629,18 +648,10 @@ func (info *ModelInfo) ModelDeleteStmt(model interface{}) *DeleteStmt {
 func (info *ModelInfo) ModelFromMap(data map[string]interface{}) (interface{}, apperror.Error) {
 	r := info.NewReflector()
 
-	for name, value := range data {
-		attr := info.FindAttribute(name)
-		if attr == nil {
-			continue
-		}
-
-		if err := r.SetFieldValue(attr.Name(), value, true); err != nil {
-			msg := fmt.Sprintf("Field %v contained data of type %v, which can not be converted to %v",
-				name, reflect.TypeOf(value), attr.Type())
-			return nil, apperror.Wrap(err, "unconvertable_field_value", msg)
-		}
+	if err := info.UpdateModelFromData(r, data); err != nil {
+		return nil, err
 	}
+
 	return r.AddrInterface(), nil
 }
 
@@ -665,7 +676,7 @@ func (info *ModelInfo) ValidateModel(m interface{}) apperror.Error {
 		// not zero.
 		// Note: numeric fields will not be checked, since their zero value is "0", which might
 		// be a valid field value.
-		if !field.IsNumeric() || fieldInfo.IsRequired() && !(fieldInfo.IsPrimaryKey() && fieldInfo.AutoIncrement()) {
+		if !field.IsNumeric() && fieldInfo.IsRequired() && !fieldInfo.AutoIncrement() {
 			if field.IsZero() {
 				return &apperror.Err{
 					Code:    "empty_required_field",

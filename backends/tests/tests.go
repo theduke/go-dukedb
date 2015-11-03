@@ -13,26 +13,39 @@ import (
 
 var _ = fmt.Printf
 
-func TestBackend(backend db.Backend) {
+func TestBackend(backend db.Backend, skipFlag *bool) {
+	doSkip := false
+	BeforeEach(func() {
+		if *skipFlag || doSkip {
+			Skip("Skipping due to previous error.")
+		}
+	})
+
 	It("Should configure backend", func() {
+		doSkip = true
 		backend.SetDebug(true)
 		backend.RegisterModel(&TestModel{})
 		backend.RegisterModel(&TestParent{})
 		backend.RegisterModel(&HooksModel{})
 		backend.RegisterModel(&ValidationsModel{})
-		backend.BuildRelationshipInfo()
+		backend.Build()
 
-		Expect(backend.GetDebug()).To(Equal(true))
+		Expect(backend.Debug()).To(Equal(true))
+		doSkip = false
 	})
 
 	It("Should drop all collections", func() {
+		doSkip = true
 		err := backend.DropAllCollections()
 		Expect(err).ToNot(HaveOccurred())
+		doSkip = false
 	})
 
 	It("Should create collections", func() {
-		err := backend.CreateCollections("test_models", "test_parents", "hooks_models", "validations_models")
+		doSkip = true
+		err := backend.CreateCollection("test_models", "test_parents", "hooks_models", "validations_models")
 		Expect(err).ToNot(HaveOccurred())
+		doSkip = false
 	})
 
 	It("Should count with zero entries", func() {
@@ -119,7 +132,7 @@ func TestBackend(backend db.Backend) {
 
 		It("Should create collection with marshalled fields", func() {
 			backend.RegisterModel(&MarshalledModel{})
-			backend.BuildRelationshipInfo()
+			backend.Build()
 			Expect(backend.CreateCollection("marshalled_models")).ToNot(HaveOccurred())
 		})
 
@@ -206,7 +219,7 @@ func TestBackend(backend db.Backend) {
 
 			var models []TestModel
 
-			_, err := backend.Query(db.Q("test_models").Filter("id", model.ID), &models)
+			_, err := backend.Query(backend.Q("test_models").Filter("id", model.ID), &models)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(models)).To(Equal(1))
 		})
@@ -217,7 +230,7 @@ func TestBackend(backend db.Backend) {
 
 			var models []*TestModel
 
-			_, err := backend.Query(db.Q("test_models").Filter("id", model.ID), &models)
+			_, err := backend.Query(backend.Q("test_models").Filter("id", model.ID), &models)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(models[0]).To(Equal(&model))
 		})
@@ -231,7 +244,7 @@ func TestBackend(backend db.Backend) {
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 			Expect(backend.Create(&m2)).ToNot(HaveOccurred())
 
-			res, err := backend.QueryOne(db.Q("test_models").Filter("int_val", 70))
+			res, err := backend.QueryOne(backend.Q("test_models").Filter("int_val", 70))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res).To(Equal(&m))
 		})
@@ -242,7 +255,7 @@ func TestBackend(backend db.Backend) {
 
 			var model TestModel
 
-			_, err := backend.QueryOne(db.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.ID), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -253,7 +266,7 @@ func TestBackend(backend db.Backend) {
 
 			var model *TestModel
 
-			_, err := backend.QueryOne(db.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.ID), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -267,7 +280,7 @@ func TestBackend(backend db.Backend) {
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 			Expect(backend.Create(&m2)).ToNot(HaveOccurred())
 
-			res, err := backend.Last(db.Q("test_models").Filter("int_val", 71))
+			res, err := backend.Last(backend.Q("test_models").Filter("int_val", 71))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res).To(Equal(&m2))
 		})
@@ -277,7 +290,7 @@ func TestBackend(backend db.Backend) {
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model TestModel
-			_, err := backend.Last(db.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.Last(backend.Q("test_models").Filter("id", m.ID), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -287,7 +300,7 @@ func TestBackend(backend db.Backend) {
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model *TestModel
-			_, err := backend.Last(db.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.Last(backend.Q("test_models").Filter("id", m.ID), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -446,6 +459,7 @@ func TestBackend(backend db.Backend) {
 
 			m, err := backend.FindOne("test_models", model.ChildPtr.ID)
 			Expect(err).ToNot(HaveOccurred())
+			Expect(m).ToNot(BeNil())
 			Expect(m.(*TestModel).TestParentID).To(Equal(model.ID))
 		})
 
@@ -502,7 +516,9 @@ func TestBackend(backend db.Backend) {
 			m2m, err := backend.M2M(&model, "ChildSlicePtr")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m2m.Count()).To(Equal(1))
-			Expect(m2m.All()[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
+			res, err := m2m.All()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
 		})
 
 		It("Should join m2m", func() {
@@ -532,7 +548,8 @@ func TestBackend(backend db.Backend) {
 				Skip("Not a transaction backend")
 			}
 
-			tx := transactionBackend.Begin()
+			tx, err := transactionBackend.Begin()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tx).ToNot(BeNil())
 
 			model := NewTestModel(100)
@@ -550,7 +567,8 @@ func TestBackend(backend db.Backend) {
 				Skip("Not a transaction backend")
 			}
 
-			tx := transactionBackend.Begin()
+			tx, err := transactionBackend.Begin()
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tx).ToNot(BeNil())
 
 			model := NewTestModel(101)

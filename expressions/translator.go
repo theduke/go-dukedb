@@ -565,7 +565,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		sel := e.Select()
 		if sel != nil {
 			if sel.Filter() != nil {
-				t.W("WHERE ")
+				t.W(" WHERE ")
 				if err := t.translator.Translate(sel.Filter()); err != nil {
 					return err
 				}
@@ -574,6 +574,40 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 
 			if len(sel.Sorts()) > 0 {
 				t.W("ORDER BY ")
+				lastIndex := len(sel.Sorts()) - 1
+				for i, sort := range sel.Sorts() {
+					if err := t.translator.Translate(sort); err != nil {
+						return nil
+					}
+					if i < lastIndex {
+						t.W(", ")
+					}
+				}
+			}
+
+			if sel.Limit() > 0 {
+				t.W(" LIMIT ", strconv.Itoa(sel.Limit()))
+			}
+			if sel.Offset() > 0 {
+				t.W(" OFFSET ", strconv.Itoa(sel.Offset()))
+			}
+		}
+
+	case *DeleteStmt:
+		t.W("DELETE FROM ")
+		t.WQ(e.Collection())
+
+		sel := e.SelectStmt()
+		if sel != nil {
+			if sel.Filter() != nil {
+				t.W(" WHERE ")
+				if err := t.translator.Translate(sel.Filter()); err != nil {
+					return err
+				}
+			}
+
+			if len(sel.Sorts()) > 0 {
+				t.W(" ORDER BY ")
 				lastIndex := len(sel.Sorts()) - 1
 				for i, sort := range sel.Sorts() {
 					if err := t.translator.Translate(sort); err != nil {

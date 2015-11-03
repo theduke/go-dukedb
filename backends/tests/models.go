@@ -76,8 +76,8 @@ func (h *HooksModel) AfterQuery(Backend) {
 type ValidationsModel struct {
 	TestModel
 
-	NotNullString string `db:"not-null"`
-	NotNullInt    int    `db:"not-null"`
+	NotNullString string `db:"required"`
+	NotNullInt    int    `db:"required"`
 
 	ValidatedString string `db:"min:5;max:10"`
 	ValidatedInt    int    `db:"min:5;max:10"`
