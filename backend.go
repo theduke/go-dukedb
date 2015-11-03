@@ -772,7 +772,7 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 		return nil, b.unknownColErr(baseQ.GetCollection())
 	}
 
-	baseModels := q.GetModels()
+	baseModels := baseQ.GetModels()
 
 	// If baseModels is empty, check if we need to load them first.
 	if len(baseModels) < 1 && !b.backend.HasNativeJoins() {
@@ -822,16 +822,24 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 		}
 	}
 
+	b.Logger().Errorf("join query: models: %v - filterArgs: %v", len(baseModels), filterArgs)
+
 	resultQuery := &q.Query
 
 	if relation.RelationType() != RELATION_TYPE_M2M {
 		if len(baseModels) > 0 {
 			// Basemodels present, so just use the data from them.
 			operator := OPERATOR_EQ
+			var filterVal interface{}
 			if len(filterArgs) > 1 {
 				operator = OPERATOR_IN
+				filterVal = filterArgs
+			} else {
+				filterVal = filterArgs[0]
 			}
-			filter := NewFieldValFilter(relatedInfo.BackendName(), relation.ForeignField(), operator, filterArgs)
+
+			foreignField := relatedInfo.Attribute(relation.ForeignField()).BackendName()
+			filter := NewFieldValFilter(relatedInfo.BackendName(), foreignField, operator, filterVal)
 			resultQuery.FilterExpr(filter)
 		} else {
 			// No basemodels, so do a native join!
@@ -843,7 +851,9 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 			}
 
 			// Join base query collection on this query.
-			resultQuery.JoinQ(RelQCustom(resultQuery, baseInfo.BackendName(), relation.ForeignField(), relation.LocalField(), JOIN_INNER))
+			localField := baseInfo.Attribute(relation.LocalField()).BackendName()
+			foreignField := relatedInfo.Attribute(relation.ForeignField()).BackendName()
+			resultQuery.JoinQ(RelQCustom(resultQuery, baseInfo.BackendName(), foreignField, localField, JOIN_INNER))
 		}
 	} else {
 		// M2M query!
@@ -1012,10 +1022,17 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 				panic(err)
 			}
 
+			if slice.Len() < 1 {
+				// Ignore empty slice.
+				continue
+			}
+
 			for _, item := range slice.Items() {
-				if item.IsZero() {
+				if item.IsPtr() && item.IsZero() {
+					// Ignore zero pointers to be quicker.
 					continue
 				}
+
 				related, err := item.Struct()
 				if err != nil {
 					// This should never happen, just be save.
@@ -1044,14 +1061,14 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 				newModels := make([]interface{}, 0)
 
 				for _, item := range slice.Items() {
-					if item.IsZero() {
+					if item.IsPtr() && item.IsZero() {
 						continue
 					}
 
 					related, err := item.Struct()
 					if err != nil {
 						// Should never happen, just be save.
-						return apperror.Wrap(err, "invalid_m2m_struct")
+						panic(err)
 					}
 
 					hasId, err2 := relatedInfo.ModelHasId(related.AddrInterface())
@@ -1456,6 +1473,11 @@ func (b *BaseBackend) DoJoins(baseInfo *ModelInfo, q *Query, models []interface{
 	if len(models) < 1 {
 		return nil
 	}
+
+	// Set models on the query so BuildRelationQuery has access.
+	q.SetModels(models)
+	b.Logger().Infof("settings models: %v", len(models))
+
 	for _, jq := range q.GetJoins() {
 		if err := b.DoJoin(baseInfo, models, jq); err != nil {
 			return err
@@ -1499,42 +1521,66 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 		if assigner := resultQuery.GetJoinResultAssigner(); assigner != nil {
 			assigner(objs, res, joinQ)
 		} else {
-			assignJoinModels(objs, res, joinQ)
+			assignJoinModels(relation, joinQ, objs, res)
 		}
-	}
 
-	// Process nested joins.
-	for _, jq := range joinQ.GetJoins() {
-		if err := b.DoJoin(baseInfo, res, jq); err != nil {
-			return nil
+		// Process nested joins.
+		if nestedJoins := joinQ.GetJoins(); len(nestedJoins) > 0 {
+			// Set models so BuildRelationQuery has access.
+			joinQ.SetModels(res)
+			for _, jq := range nestedJoins {
+				if err := b.DoJoin(relation.RelatedModel(), res, jq); err != nil {
+					return nil
+				}
+			}
 		}
 	}
 
 	return nil
 }
 
-func assignJoinModels(objs, joinedModels []interface{}, joinQ *RelationQuery) {
-	/*
-		targetField := joinQ.GetRelationName()
-		joinedField := "" // joinQ.GetJoinFieldName()
-		joinField := ""   //joinQ.GetForeignFieldName()
+func assignJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{}) {
+	targetField := relation.Name()
 
+	joinField := joinQ.localField
+	if joinField == "" {
+		joinField = relation.ForeignField()
+	}
+	joinedField := joinQ.foreignField
+	if joinedField == "" {
+		joinedField = relation.LocalField()
+	}
 
-		mapper := make(map[interface{}][]interface{})
-		for _, model := range joinedModels {
-			val, _ := GetStructFieldValue(model, joinField)
-			mapper[val] = append(mapper[val], model)
+	mapper := make(map[interface{}][]interface{})
+	for _, model := range joinedModels {
+		val, err := reflector.Reflect(model).MustStruct().FieldValue(joinField)
+		if err != nil {
+			panic(err)
+		}
+		mapper[val] = append(mapper[val], model)
+	}
+
+	for _, model := range objs {
+		r := reflector.Reflect(model).MustStruct()
+
+		val, err := r.FieldValue(joinedField)
+		if err != nil {
+			panic(err)
+		}
+		if err != nil {
+			panic("Join result assignment error: " + err.Error())
 		}
 
-		for _, model := range objs {
-			val, err := GetStructFieldValue(model, joinedField)
-			if err != nil {
-				panic("Join result assignment error: " + err.Error())
-			}
-
-			if joins, ok := mapper[val]; ok && len(joins) > 0 {
-				SetStructModelField(model, targetField, joins)
+		if joins, ok := mapper[val]; ok && len(joins) > 0 {
+			if relation.IsMany() {
+				if err := r.Field(targetField).SetValue(joins, true); err != nil {
+					panic(err)
+				}
+			} else {
+				if err := r.Field(targetField).SetValue(joins[0], true); err != nil {
+					panic(err)
+				}
 			}
 		}
-	*/
+	}
 }

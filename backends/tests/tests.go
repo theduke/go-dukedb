@@ -696,6 +696,132 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			})
 		})
 
+		Describe("has-many", func() {
+			It("Should ignore unpersisted has-many", func() {
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+				Expect(backend.Q("tasks").Count()).To(Equal(0))
+			})
+
+			It("Should set key for has-many relationship", func() {
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(&p.Todos[0])).ToNot(HaveOccurred())
+				Expect(backend.Create(&p.Todos[1])).ToNot(HaveOccurred())
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				tasks, err := backend.Q("tasks").Find()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(tasks).To(HaveLen(2))
+				Expect(tasks[0].(*Task).ProjectId).To(Equal(p.Id))
+				Expect(tasks[1].(*Task).ProjectId).To(Equal(p.Id))
+			})
+
+			It("Should auto-persist has-many", func() {
+				// Enable auto-create.
+				backend.ModelInfo("projects").Relation("Todos").SetAutoCreate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+				Expect(p.Todos[0].Id).ToNot(BeZero())
+				Expect(p.Todos[1].Id).ToNot(BeZero())
+
+				tasks, err := backend.Q("tasks").Find()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(tasks).To(HaveLen(2))
+				Expect(tasks[0].(*Task).ProjectId).To(Equal(p.Id))
+				Expect(tasks[1].(*Task).ProjectId).To(Equal(p.Id))
+			})
+
+			It("Should auto-update has-many", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+				rel.SetAutoUpdate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				p.Todos[0].Name = "X1"
+				p.Todos[1].Name = "X2"
+				Expect(backend.Update(p)).ToNot(HaveOccurred())
+
+				tasks, err := backend.Q("tasks").Find()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(tasks).To(HaveLen(2))
+				Expect(tasks[0].(*Task).Name).To(Equal("X1"))
+				Expect(tasks[1].(*Task).Name).To(Equal("X2"))
+			})
+
+			It("Should auto-delete has-many", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+				rel.SetAutoDelete(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+				Expect(backend.Delete(p)).ToNot(HaveOccurred())
+
+				Expect(backend.Q("tasks").Count()).To(Equal(0))
+			})
+
+			It("Should not delete with auto-delete disabled", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+				Expect(backend.Delete(p)).ToNot(HaveOccurred())
+
+				Expect(backend.Q("tasks").Count()).To(Equal(2))
+			})
+
+			It("Should join has-many", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("projects").Filter("id", p.Id).Join("Todos").First()
+				Expect(err).ToNot(HaveOccurred())
+
+				todos := m.(*Project).Todos
+				Expect(todos).To(HaveLen(2))
+			})
+		})
+
 		/*
 			It("Should auto-persist has-one", func() {
 				model := NewTestParent(1, true)

@@ -397,6 +397,9 @@ type RelationQuery struct {
 	relationName string
 	baseQuery    *Query
 	statement    *JoinStmt
+
+	localField   string
+	foreignField string
 }
 
 func RelQ(q *Query, relationName string, collection string, joinType string) *RelationQuery {
@@ -422,7 +425,11 @@ func RelQCustom(q *Query, collection, joinKey, foreignKey, typ string) *Relation
 		OPERATOR_EQ,
 		NewColFieldIdExpr(collection, foreignKey))
 
-	return RelQExpr(q, collection, typ, joinCondition)
+	jq := RelQExpr(q, collection, typ, joinCondition)
+	jq.localField = foreignKey
+	jq.foreignField = joinKey
+
+	return jq
 }
 
 // RelQExpr creates a new relation query for a collection with an arbitrary
