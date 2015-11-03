@@ -69,7 +69,7 @@ func ParseQuery(backend Backend, data map[string]interface{}) (*Query, apperror.
 		return nil, apperror.New("no_collection", "Query must contain a 'collection' key.")
 	}
 
-	q := newQuery(backend, collection)
+	q := backend.Q(collection)
 
 	// First, Handle joins so query and field specification parsing can use
 	// join info.

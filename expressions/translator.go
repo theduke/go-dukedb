@@ -455,6 +455,10 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 
 		// Join fields.
 		for _, join := range e.Joins() {
+			if len(join.Fields()) < 1 {
+				continue
+			}
+
 			t.W(", ")
 			lastIndex := len(join.Fields()) - 1
 			for i, field := range join.Fields() {
@@ -512,12 +516,8 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		}
 
 	case *JoinStmt:
-		name := e.Name()
-		if name == "" {
-			name = e.Collection()
-		}
-		t.W(JOIN_MAP[e.JoinType()])
-		t.WQ(name)
+		t.W(JOIN_MAP[e.JoinType()], " ")
+		t.WQ(e.Collection())
 		t.W(" ON ")
 		if err := t.translator.Translate(e.JoinCondition()); err != nil {
 			return err

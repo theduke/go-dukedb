@@ -41,6 +41,8 @@ type Backend interface {
 	// Returns true if the backend uses string IDs like MongoDB.
 	HasStringIds() bool
 
+	HasNativeJoins() bool
+
 	// Debug returns true if debugging is enabled.
 	Debug() bool
 

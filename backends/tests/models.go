@@ -2,11 +2,64 @@ package tests
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/theduke/go-dukedb"
 
 	"github.com/theduke/go-apperror"
 )
+
+type Tag struct {
+	Id  uint64
+	Tag string
+}
+
+type Project struct {
+	Id uint64
+
+	Name        string `db:"required"`
+	Description string
+
+	CreatedAt time.Time
+	UpdatedAt *time.Time
+
+	// has-many with struct slice.
+	Todos []Task
+
+	// has-many with struct pointer slice
+	ArchviedTodos []*Task
+}
+
+type Task struct {
+	Id uint64
+
+	Name        string `db:"required"`
+	Description string
+	Priority    int
+
+	// has-one with struct.
+	Project   Project
+	ProjectId uint64
+
+	// has-one with struct pointer.
+	Project2   *Project
+	Project2ID *Project
+
+	// belongs-to with struct.
+	File *File
+
+	// m2m with struct slice.
+	tags []Tag `db:"m2m"`
+
+	// m2m with struct pointer slice.
+	categories []*Tag `db:"m2m"`
+}
+
+type File struct {
+	ID       uint64
+	TaskId   uint64
+	Filename string `db:"required"`
+}
 
 type TestModel struct {
 	ID uint64
@@ -90,10 +143,10 @@ func (m *ValidationsModel) Collection() string {
 type TestParent struct {
 	TestModel
 
-	Child   TestModel
+	Child   TestModel `db:"has-one:ChildID:ID;auto-persist;"`
 	ChildID uint64
 
-	ChildPtr *TestModel
+	ChildPtr *TestModel `db:"belongs-to:ID:ID;auto-persist;"`
 
 	ChildSlice    []TestModel
 	ChildSlice2   []TestModel  `db:"belongs-to:ID:MyParentID"`

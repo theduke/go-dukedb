@@ -63,6 +63,10 @@ func (b *Backend) HasStringIds() bool {
 	return false
 }
 
+func (b *Backend) HasNativeJoins() bool {
+	return true
+}
+
 func (b *Backend) IsSqlProfilingEnabled() bool {
 	return b.sqlProfilingEnabled
 }

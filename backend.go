@@ -9,6 +9,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/theduke/go-apperror"
 	"github.com/theduke/go-reflector"
+	"github.com/theduke/go-utils"
 
 	. "github.com/theduke/go-dukedb/expressions"
 )
@@ -153,8 +154,6 @@ type BaseBackend struct {
 	modelInfo        ModelInfos
 	profilingEnabled bool
 
-	HasNativeJoins bool
-
 	// Parent backend reference.
 	backend Backend
 
@@ -197,6 +196,10 @@ func (b *BaseBackend) SetDebug(x bool) {
 	b.debug = x
 }
 
+func (b *BaseBackend) HasNativeJoins() bool {
+	return false
+}
+
 func (b *BaseBackend) Logger() *logrus.Logger {
 	return b.logger
 }
@@ -230,13 +233,12 @@ func (b *BaseBackend) DisableProfiling() {
 
 func (b *BaseBackend) Clone() *BaseBackend {
 	return &BaseBackend{
-		name:           b.name,
-		debug:          b.debug,
-		logger:         b.logger,
-		modelInfo:      b.modelInfo,
-		HasNativeJoins: b.HasNativeJoins,
-		backend:        b.backend,
-		hooks:          b.hooks,
+		name:      b.name,
+		debug:     b.debug,
+		logger:    b.logger,
+		modelInfo: b.modelInfo,
+		backend:   b.backend,
+		hooks:     b.hooks,
 	}
 }
 
@@ -506,7 +508,7 @@ func (b *BaseBackend) NewQuery(collection string) (*Query, apperror.Error) {
 	if info == nil {
 		return nil, b.unknownColErr(collection)
 	}
-	return newQuery(b.backend, collection), nil
+	return NewQuery(collection, b.backend), nil
 }
 
 func (b *BaseBackend) NewModelQuery(model interface{}) (*Query, apperror.Error) {
@@ -519,7 +521,7 @@ func (b *BaseBackend) NewModelQuery(model interface{}) (*Query, apperror.Error) 
 		return nil, apperror.New("invalid_model_no_id", "You can't create a query for a model which does not have it's primary key set")
 	}
 
-	q := newQuery(b.backend, info.Collection())
+	q := NewQuery(info.Collection(), b.backend)
 	q.SetModels([]interface{}{model})
 	q.FilterExpr(filter)
 	return q, nil
@@ -533,15 +535,19 @@ func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
 		}
 
 		if len(args) > 0 {
+			info := b.ModelInfo(collection)
+			if info == nil {
+				panic(b.unknownColErr(collection))
+			}
 			r := reflector.Reflect(args[0])
 			if r.IsZero() {
 				panic("Can't create model query with zero id")
 			}
-			id, err := r.ConvertToType(q.modelInfo.PkAttribute().Type())
+			id, err := r.ConvertToType(info.PkAttribute().Type())
 			if err != nil {
 				panic("Could not convert id: " + err.Error())
 			}
-			q.Filter(q.modelInfo.PkAttribute().BackendName(), id)
+			q.Filter(info.PkAttribute().BackendName(), id)
 		}
 
 		return q
@@ -554,18 +560,44 @@ func (b *BaseBackend) Q(arg interface{}, args ...interface{}) *Query {
 	return q
 }
 
+type QueryStat struct {
+	Name        string
+	Started     time.Time
+	Finished    time.Time
+	Total       time.Duration
+	Normalizing time.Duration
+	Joining     time.Duration
+	Execution   time.Duration
+	ModelBuild  time.Duration
+}
+
 func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
-	if errs := q.GetErrors(); len(errs) > 0 {
-		msg := ""
-		for _, e := range errs {
-			msg += e.Error() + " | "
+	var stats *QueryStat
+	if b.profilingEnabled && q.GetName() != "" {
+		stats = &QueryStat{
+			Name:    q.GetName(),
+			Started: time.Now(),
 		}
-		return nil, apperror.New("invalid_query", "Query contained errors: ", msg)
 	}
 
-	var started time.Time
-	if b.profilingEnabled && q.GetName() != "" {
-		started = time.Now()
+	info := b.ModelInfo(q.GetCollection())
+	if info == nil {
+		return nil, b.unknownColErr(q.GetCollection())
+	}
+
+	// Normalize query.
+	// Ensure backend is set.
+	q.SetBackend(b.backend)
+	if err := q.Normalize(); err != nil {
+		return nil, err
+	}
+
+	if err := b.BuildJoins(info, q); err != nil {
+		return nil, err
+	}
+
+	if stats != nil {
+		stats.Normalizing = time.Now().Sub(stats.Started)
 	}
 
 	stmt := q.GetStatement()
@@ -574,35 +606,49 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 		return nil, err
 	}
 
+	if stats != nil {
+		stats.Execution = time.Now().Sub(stats.Started) - stats.Normalizing
+	}
+
 	models := make([]interface{}, 0)
 
 	for _, data := range result {
-		model, err := q.modelInfo.ModelFromMap(data)
+		model, err := info.ModelFromMap(data)
 		if err != nil {
 			return nil, err
 		}
 		models = append(models, model)
 	}
 
+	if stats != nil {
+		stats.ModelBuild = time.Now().Sub(stats.Started) - stats.Normalizing - stats.Execution
+	}
+
 	if len(q.GetJoins()) > 0 {
-		if err := b.DoJoins(q, models); err != nil {
+		if err := b.DoJoins(info, q, models); err != nil {
 			return nil, err
 		}
 	}
 
-	if len(targetSlice) > 0 {
-		SetSlicePointer(targetSlice[0], models)
+	if stats != nil {
+		stats.Finished = time.Now()
+		stats.Joining = stats.Finished.Sub(stats.Started) - stats.Normalizing - stats.Execution - stats.ModelBuild
+		stats.Total = stats.Finished.Sub(stats.Started)
+
+		b.backend.Logger().WithFields(logrus.Fields{
+			"backend":     b.name,
+			"action":      "query",
+			"query_name":  q.GetName(),
+			"normalizing": stats.Normalizing,
+			"execution":   stats.Execution,
+			"model_build": stats.ModelBuild,
+			"joining":     stats.Joining,
+			"total":       stats.Total,
+		}).Debugf("Executed query %v on collection %v in %v ms", q.GetName(), q.GetCollection(), stats.Total)
 	}
 
-	if !started.IsZero() {
-		timeTaken := time.Now().Sub(started)
-		ms := timeTaken.Nanoseconds() / 1000
-		b.backend.Logger().WithFields(logrus.Fields{
-			"backend":    b.name,
-			"action":     "query",
-			"query_name": q.GetName(),
-			"ms":         ms,
-		}).Debugf("Executed query %v on collection %v in %v ms", q.GetName(), q.GetCollection(), ms)
+	if len(targetSlice) > 0 {
+		SetSlicePointer(targetSlice[0], models)
 	}
 
 	return models, nil
@@ -729,7 +775,7 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 	baseModels := q.GetModels()
 
 	// If baseModels is empty, check if we need to load them first.
-	if len(baseModels) < 1 && !b.HasNativeJoins {
+	if len(baseModels) < 1 && !b.backend.HasNativeJoins() {
 		// No baseModels, and backend does not have native joins, so execute
 		// base query first.
 		var err apperror.Error
@@ -842,6 +888,7 @@ func (b *BaseBackend) persistBelongsToRelation(
 
 	// Create or update belongs-to relation after persist.
 	if (action == "create" || action == "update") && !beforePersist {
+
 		hasId, err := relatedInfo.ModelHasId(related.AddrInterface())
 		if err != nil {
 			// Should never happen, just be save.
@@ -851,8 +898,6 @@ func (b *BaseBackend) persistBelongsToRelation(
 		isNew := !hasId
 		if isNew && !relation.AutoCreate() {
 			// Auto-create disabled, so ignore.
-			return nil
-		} else if !isNew && !relation.AutoUpdate() {
 			return nil
 		}
 
@@ -879,7 +924,6 @@ func (b *BaseBackend) persistBelongsToRelation(
 //
 // action may be either "create", "update" or "delete"
 func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *ModelInfo, model interface{}) apperror.Error {
-
 	r, err := reflector.Reflect(model).Struct()
 	if err != nil {
 		return apperror.Wrap(err, "invalid_model")
@@ -887,17 +931,17 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 
 	for _, relation := range info.Relations() {
 		relatedInfo := relation.RelatedModel()
-
 		// Handle has-one.
 		// Only need to check has-one before persist, since we can do everything there.
 		if relation.RelationType() == RELATION_TYPE_HAS_ONE && beforePersist {
 			relatedVal := r.Field(relation.Name())
-			if relatedVal.IsZero() {
+			if relatedVal.IsPtr() && relatedVal.IsZero() {
 				continue
 			}
+
 			related, err := relatedVal.Struct()
 			if err != nil {
-				continue
+				panic(err)
 			}
 
 			if action == "create" || action == "update" {
@@ -906,12 +950,12 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 				hasId, err := relatedInfo.ModelHasId(related.AddrInterface())
 				if err != nil {
 					// Should never happen, just be save.
-					return apperror.Wrap(err, "invalid_related_model")
+					panic(err)
 				}
 
 				isNew := !hasId
 
-				if !isNew {
+				if isNew {
 					// Related model is new.
 					if !relation.AutoCreate() {
 						// Auto-create disabled, so ignore.
@@ -947,12 +991,13 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 
 		if relation.RelationType() == RELATION_TYPE_BELONGS_TO {
 			relatedVal := r.Field(relation.Name())
-			if relatedVal.IsZero() {
-				return nil
+			if relatedVal.IsPtr() && relatedVal.IsZero() {
+				continue
 			}
 			related, err := relatedVal.Struct()
 			if err != nil {
-				return nil
+				// Should never happen, just be save.
+				panic(err)
 			}
 
 			if err := b.persistBelongsToRelation(action, beforePersist, info, r, relation, related); err != nil {
@@ -964,7 +1009,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 			slice, err := r.Field(relation.Name()).Slice()
 			if err != nil {
 				// This should never happen, just be save.
-				return apperror.Wrap(err, "invalid_slice_field")
+				panic(err)
 			}
 
 			for _, item := range slice.Items() {
@@ -1052,6 +1097,74 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 				}
 			}
 		}
+	}
+
+	return nil
+}
+
+func (b *BaseBackend) buildJoin(relation *Relation, jq *RelationQuery) (*JoinStmt, apperror.Error) {
+	baseInfo := relation.Model()
+	info := relation.RelatedModel()
+
+	localField := baseInfo.Attribute(relation.LocalField())
+	fkField := info.Attribute(relation.ForeignField())
+
+	condition := NewFieldFilter(
+		baseInfo.BackendName(),
+		localField.BackendName(),
+		OPERATOR_EQ,
+		NewColFieldIdExpr(info.BackendName(), fkField.BackendName()))
+
+	s := jq.GetStatement()
+	s.SetJoinCondition(condition)
+	s.SetName(relation.Name())
+
+	for _, field := range s.Fields() {
+		// Set proper field names prefixed with the relation name.
+		if named, ok := field.(NamedExpression); ok {
+			_, right := utils.StrSplitLeft(named.Name(), ".")
+			named.SetName(relation.Name() + "." + right)
+		}
+	}
+	return s, nil
+}
+
+func (b *BaseBackend) BuildJoins(info *ModelInfo, q *Query) apperror.Error {
+	stmt := q.GetStatement()
+	// Recusively normalize all joins.
+	for _, join := range q.joins {
+		if join.GetRelationName() == "" {
+			// Custom join, so just add it to the statement.
+			stmt.AddJoin(join.GetStatement())
+			continue
+		}
+
+		// Relation is ensured to exist, since it was checked in
+		// query.Normalize() earlier.
+		relation := info.Relation(join.GetRelationName())
+
+		join.SetCollection(relation.RelatedModel().Collection())
+
+		// Normalize now.
+		join.SetBackend(b.backend)
+		if err := join.Normalize(); err != nil {
+			return err
+		}
+
+		if b.backend.HasNativeJoins() && !relation.IsMany() {
+			// to-one join, and backend supports native joins, so
+			// we can just add it to the main query.
+			joinStmt, err := b.buildJoin(relation, join)
+			if err != nil {
+				return err
+			}
+
+			stmt.AddJoin(joinStmt)
+		} else {
+			// Nothing to do here.
+			// Join will be executed separately.
+		}
+
 	}
 
 	return nil
@@ -1263,11 +1376,17 @@ func (b *BaseBackend) Save(model interface{}) apperror.Error {
 }
 
 func (b *BaseBackend) UpdateByMap(query *Query, data map[string]interface{}) apperror.Error {
+	collection := query.GetCollection()
+	info := b.ModelInfo(collection)
+	if info != nil {
+		collection = info.BackendName()
+	}
+
 	values := make([]*FieldValueExpr, 0)
 	for key, val := range data {
 		values = append(values, NewFieldVal(key, val))
 	}
-	stmt := NewUpdateStmt(query.modelInfo.BackendName(), values, query.GetStatement())
+	stmt := NewUpdateStmt(collection, values, query.GetStatement())
 
 	return b.backend.Exec(stmt)
 }
@@ -1319,7 +1438,13 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 }
 
 func (b *BaseBackend) DeleteMany(query *Query) apperror.Error {
-	stmt := NewDeleteStmt(query.modelInfo.BackendName(), query.GetStatement())
+	collection := query.GetCollection()
+	info := b.ModelInfo(collection)
+	if info != nil {
+		collection = info.BackendName()
+	}
+
+	stmt := NewDeleteStmt(collection, query.GetStatement())
 	return b.backend.Exec(stmt)
 }
 
@@ -1327,34 +1452,32 @@ func (b *BaseBackend) DeleteMany(query *Query) apperror.Error {
  * Join logic.
  */
 
-func (b *BaseBackend) DoJoins(q *Query, models []interface{}) apperror.Error {
+func (b *BaseBackend) DoJoins(baseInfo *ModelInfo, q *Query, models []interface{}) apperror.Error {
 	if len(models) < 1 {
 		return nil
 	}
 	for _, jq := range q.GetJoins() {
-		if err := b.DoJoin(models, jq); err != nil {
+		if err := b.DoJoin(baseInfo, models, jq); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *BaseBackend) DoJoin(objs []interface{}, joinQ *RelationQuery) apperror.Error {
-	if len(objs) == 0 {
-		return nil
-	}
+func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *RelationQuery) apperror.Error {
 	if joinQ.GetRelationName() == "" {
 		return nil
 	}
 
-	parentModelInfo := joinQ.GetBaseQuery().modelInfo
-	if parentModelInfo == nil {
-		return nil
-	}
-	relation := parentModelInfo.Relation(joinQ.relationName)
+	relation := baseInfo.Relation(joinQ.relationName)
 	if relation == nil {
-		msg := fmt.Sprintf("Collection %v does not have a relation %v", parentModelInfo.Collection(), joinQ.GetRelationName())
+		msg := fmt.Sprintf("Collection %v does not have a relation %v", baseInfo.Collection(), joinQ.GetRelationName())
 		return apperror.New("invalid_relationship", msg)
+	}
+
+	if b.backend.HasNativeJoins() && !relation.IsMany() {
+		// Ignore to-one joins, which can be handled natively.
+		return nil
 	}
 
 	resultQuery, err := b.BuildRelationQuery(joinQ)
@@ -1382,7 +1505,7 @@ func (b *BaseBackend) DoJoin(objs []interface{}, joinQ *RelationQuery) apperror.
 
 	// Process nested joins.
 	for _, jq := range joinQ.GetJoins() {
-		if err := b.DoJoin(res, jq); err != nil {
+		if err := b.DoJoin(baseInfo, res, jq); err != nil {
 			return nil
 		}
 	}

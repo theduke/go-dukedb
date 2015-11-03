@@ -195,7 +195,7 @@ func (m *ModelInfo) Relation(name string) *Relation {
 }
 
 func (m *ModelInfo) FindRelation(name string) *Relation {
-	for _, relation := range m.relations {
+	for _, relation := range m.Relations() {
 		if relation.Name() == name || relation.BackendName() == name || relation.MarshalName() == name {
 			return relation
 		}
@@ -539,33 +539,66 @@ func (info *ModelInfo) UpdateModelFromData(model interface{}, data map[string]in
 		r = x
 	}
 
+	nestedData := make(map[string]map[string]interface{})
+
 	for key, val := range data {
 		if val == nil {
 			continue
 		}
+
 		attr := info.FindAttribute(key)
-		if attr == nil {
-			continue
-		}
+		if attr != nil {
+			// Key is a regular attribute.
 
-		if attr.BackendMarshal() {
-			var js []byte
-			if slice, ok := val.([]uint8); ok {
-				js = []byte(slice)
-			} else if str, ok := val.(string); ok {
-				js = []byte(str)
-			}
-			if js != nil {
-				if err := json.Unmarshal(js, r.Field(attr.Name()).Addr().Interface()); err != nil {
-					return apperror.Wrap(err, "json_unmarshal_error")
+			// Check if it is a marshalled attribute.
+			if attr.BackendMarshal() {
+				// Marshalled attribute, so try to unmarshal it.
+				var js []byte
+				if slice, ok := val.([]uint8); ok {
+					js = []byte(slice)
+				} else if str, ok := val.(string); ok {
+					js = []byte(str)
 				}
-				continue
+				if js != nil {
+					if err := json.Unmarshal(js, r.Field(attr.Name()).Addr().Interface()); err != nil {
+						return apperror.Wrap(err, "json_unmarshal_error")
+					}
+					continue
+				}
+			}
+
+			if err := r.SetFieldValue(attr.Name(), val, true); err != nil {
+				msg := fmt.Sprintf("Data for field %v (%v) could not be converted to %v", attr.Name(), val, attr.Type())
+				return apperror.Wrap(err, "unconvertable_field_value", msg)
+			}
+		} else {
+			// Check if key might be relation data.
+			left, right := utils.StrSplitLeft(key, ".")
+			relation := info.FindRelation(left)
+
+			if relation != nil {
+				if !relation.IsMany() {
+					if mapData, ok := val.(map[string]interface{}); ok {
+						// Value is map, so just store it in nested data.
+						nestedData[relation.Name()] = mapData
+					} else {
+						if _, ok := nestedData[relation.Name()]; !ok {
+							nestedData[relation.Name()] = make(map[string]interface{})
+						}
+						nestedData[relation.Name()][right] = val
+					}
+				}
 			}
 		}
+	}
 
-		if err := r.SetFieldValue(attr.Name(), val, true); err != nil {
-			msg := fmt.Sprintf("Data for field %v (%v) could not be converted to %v", attr.Name(), val, attr.Type())
-			return apperror.Wrap(err, "unconvertable_field_value", msg)
+	// Process nested data.
+	for relationName, data := range nestedData {
+		relation := info.Relation(relationName)
+		nestedR := r.Field(relationName).MustStruct()
+
+		if err := relation.RelatedModel().UpdateModelFromData(nestedR, data); err != nil {
+			return err
 		}
 	}
 

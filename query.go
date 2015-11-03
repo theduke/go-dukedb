@@ -2,7 +2,8 @@ package dukedb
 
 import (
 	"fmt"
-	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/theduke/go-apperror"
 	"github.com/theduke/go-utils"
@@ -20,8 +21,8 @@ type Query struct {
 	// backend holds the queries backend.
 	backend Backend
 
+	// Name of the collection.
 	collection string
-	modelInfo  *ModelInfo
 
 	// Models attached to this query.
 	models []interface{}
@@ -38,19 +39,13 @@ type Query struct {
 	// For example, the SQL backend will use a closure to keep track of the raw query
 	// result and assign based on it.
 	joinResultAssigner JoinAssigner
-
-	// errors holds errors that might have occurred while creating the query.
-	// Must be checked by backends before executing the query.
-	errors []apperror.Error
 }
 
-func newQuery(backend Backend, collection string) *Query {
-	info := backend.ModelInfo(collection)
+func NewQuery(collection string, backend Backend) *Query {
 	return &Query{
 		backend:    backend,
-		modelInfo:  backend.ModelInfo(collection),
 		collection: collection,
-		statement:  NewSelectStmt(info.BackendName()),
+		statement:  NewSelectStmt(collection),
 		joins:      make(map[string]*RelationQuery),
 	}
 }
@@ -59,8 +54,17 @@ func (q *Query) GetStatement() *SelectStmt {
 	return q.statement
 }
 
+func (q *Query) SetStatement(stmt *SelectStmt) {
+	q.statement = stmt
+}
+
 func (q *Query) GetCollection() string {
-	return q.statement.Collection()
+	return q.collection
+}
+
+func (q *Query) SetCollection(collection string) {
+	q.collection = collection
+	q.statement.SetCollection(collection)
 }
 
 func (q *Query) GetModels() []interface{} {
@@ -90,14 +94,6 @@ func (q *Query) GetJoinResultAssigner() JoinAssigner {
 
 func (q *Query) SetJoinResultAssigner(x JoinAssigner) {
 	q.joinResultAssigner = x
-}
-
-func (q *Query) addError(code, msg string) {
-	q.errors = append(q.errors, apperror.New(code, msg))
-}
-
-func (q *Query) GetErrors() []apperror.Error {
-	return q.errors
 }
 
 /**
@@ -132,45 +128,7 @@ func (q *Query) GetOffset() int {
 
 func (q *Query) Field(fields ...string) *Query {
 	for _, field := range fields {
-		// If field contains a . separator, check if a corresponding parent join exists.
-		left, right := utils.StrSplitLeft(field, ".")
-		if right != "" {
-			// Possibly a nested field.
-			parentJoin := q.GetJoin(left)
-			if parentJoin == nil {
-				// Parent join does not exist yet.
-				// Auto-join if the relationship exists.
-				relation := q.modelInfo.FindRelation(left)
-				if relation != nil {
-					q.Join(relation.Name())
-					parentJoin = q.GetJoin(relation.Name())
-				}
-			}
-			if parentJoin != nil {
-				parentJoin.Field(right)
-				return q
-			}
-		}
-
-		// No parent join found, add the field.
-
-		// Check if the field exists.
-		attr := q.modelInfo.FindAttribute(field)
-		var typ reflect.Type
-		if attr != nil {
-			// Field exists, so use it's backend name.
-			field = attr.BackendName()
-			typ = attr.Type()
-		}
-
-		// Still add the field, even if it is not found on the model info.
-		// Maybe the backend still supports it!
-
-		// Use a named expression to allow join queries without extra work.
-		// Named queries will construct a SQL query with '"collection"."field" AS "collection.field"'
-		fieldName := q.modelInfo.BackendName() + "." + field
-		expr := NewFieldSelector(fieldName, q.modelInfo.BackendName(), field, typ)
-		q.statement.AddField(expr)
+		q.statement.AddField(NewIdExpr(field))
 	}
 	return q
 }
@@ -195,34 +153,7 @@ func (q *Query) SetFieldExpressions(expressions []Expression) *Query {
  */
 
 func (q *Query) Sort(field string, asc bool) *Query {
-	parent := StrBeforeLast(field, ".")
-	if parent != field {
-		// Possibly nested field, check if parent join exists.
-		join := q.GetJoin(parent)
-		if join != nil {
-			attr := join.modelInfo.FindAttribute(StrAfterLast(field, "."))
-			if attr != nil {
-				// Joined collection contains a field with the given name, so properly add the sort
-				// with the right backend names.
-				field = attr.BackendName()
-				// Even if the attr is not found, we do not return, but
-			}
-			q.statement.AddSort(NewSortExpr(NewColFieldIdExpr(join.modelInfo.BackendName(), field), asc))
-			return q
-		}
-	}
-
-	// No parent join found, so assume field is on the current collection.
-
-	// Try to find attribute.
-	attr := q.modelInfo.FindAttribute(field)
-	if attr != nil {
-		// Field found, so use its backend name.
-		field = attr.BackendName()
-	}
-	// Even if the field was not found, still add it to the query, because
-	// maybe the backend still supports it.
-	q.statement.AddSort(NewSortExpr(NewColFieldIdExpr(q.GetCollection(), field), asc))
+	q.statement.AddSort(NewSortExpr(NewIdExpr(field), asc))
 	return q
 }
 
@@ -262,17 +193,18 @@ func (q *Query) SetFilters(expressions ...Expression) *Query {
 }
 
 func (q *Query) FilterCond(field string, condition string, val interface{}) *Query {
-	operator := MapOperator(condition)
-	if operator == "" {
-		q.addError("unknown_operator", fmt.Sprintf("Unknown operator %v", condition))
-		return q
+	left, right := utils.StrSplitLeft(field, ".")
+	if right != "" {
+		// Nested join.
+		// If the join exists, add the filter to the join.
+		join := q.joins[left]
+		if join != nil {
+			join.FilterCond(right, condition, val)
+			return q
+		}
 	}
 
-	if attr := q.modelInfo.FindAttribute(field); attr != nil {
-		field = attr.BackendName()
-	}
-
-	return q.FilterExpr(NewFieldValFilter(q.modelInfo.BackendName(), field, operator, val))
+	return q.FilterExpr(NewFieldValFilter(q.collection, field, condition, val))
 }
 
 func (q *Query) Filter(field string, val interface{}) *Query {
@@ -299,11 +231,18 @@ func (q *Query) OrExpr(filters ...Expression) *Query {
 }
 
 func (q *Query) OrCond(field string, condition string, val interface{}) *Query {
-	operator := MapOperator(condition)
-	if operator == "" {
-		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
+	left, right := utils.StrSplitLeft(field, ".")
+	if right != "" {
+		// Nested join.
+		// If the join exists, add the filter to the join.
+		join := q.joins[left]
+		if join != nil {
+			join.OrCond(right, condition, val)
+			return q
+		}
 	}
-	return q.OrExpr(NewFieldValFilter(q.GetCollection(), field, operator, val))
+
+	return q.OrExpr(NewFieldValFilter(q.collection, field, condition, val))
 }
 
 func (q *Query) Or(field string, val interface{}) *Query {
@@ -318,15 +257,22 @@ func (q *Query) NotExpr(filters ...Expression) *Query {
 }
 
 func (q *Query) Not(field string, val interface{}) *Query {
-	return q.FilterExpr(NewNotExpr(Eq(q.GetCollection(), field, val)))
+	return q.NotCond(field, OPERATOR_EQ, val)
 }
 
 func (q *Query) NotCond(field string, condition string, val interface{}) *Query {
-	operator := MapOperator(condition)
-	if operator == "" {
-		panic(fmt.Sprintf("Unknown operator: '%v'", operator))
+	left, right := utils.StrSplitLeft(field, ".")
+	if right != "" {
+		// Nested join.
+		// If the join exists, add the filter to the join.
+		join := q.joins[left]
+		if join != nil {
+			join.NotCond(right, condition, val)
+			return q
+		}
 	}
-	return q.NotExpr(NewFieldValFilter(q.GetCollection(), field, operator, val))
+
+	return q.NotExpr(NewFieldValFilter(q.collection, field, condition, val))
 }
 
 /**
@@ -335,48 +281,11 @@ func (q *Query) NotCond(field string, condition string, val interface{}) *Query 
 
 func (q *Query) JoinQ(jqs ...*RelationQuery) *Query {
 	for _, jq := range jqs {
-		relationName := jq.GetRelationName()
-
-		left, right := utils.StrSplitLeft(relationName, ".")
-		if right != "" {
-			parentJoin := q.GetJoin(left)
-			if parentJoin == nil {
-				// Parent join does not exist yet, so join it.
-				q.Join(left, jq.GetJoinType())
-				parentJoin = q.GetJoin(left)
-			}
-			// parentJoin surely exists now, so join sub-join.
-			jq.SetRelationName(right)
-			parentJoin.JoinQ(jq)
-			return q
+		name := jq.GetRelationName()
+		if name == "" {
+			name = "custom_join_" + strconv.Itoa(len(q.joins))
 		}
-
-		// Not a nested join.
-
-		// Check if join already exists.
-		join := q.GetJoin(relationName)
-		if join != nil {
-			// Join already exists.
-			return q
-		}
-
-		// Join does not exist yet.
-
-		// Check if relation exists.
-		relation := q.modelInfo.FindRelation(relationName)
-		if relation == nil {
-			// Relation does not exist, so add an error.
-			q.addError("invalid_join_unknown_relation", fmt.Sprintf("The relation %v does not exist", relationName))
-			// Do not return but add join even if the relation does not exist
-			// to prevent errors.
-		} else {
-			jq.SetRelationName(relation.Name())
-			jq.GetStatement().SetCollection(relation.Model().BackendName())
-		}
-
-		jq.SetBaseQuery(q)
-		q.statement.AddJoin(jq.GetStatement())
-		q.joins[jq.GetRelationName()] = jq
+		q.joins[name] = jq
 	}
 	return q
 }
@@ -384,9 +293,6 @@ func (q *Query) JoinQ(jqs ...*RelationQuery) *Query {
 func (q *Query) Join(relationName string, joinType ...string) *Query {
 	typ := JOIN_LEFT
 	if len(joinType) > 0 {
-		if len(joinType) > 1 {
-			panic("Called Query.Join() with more than one joinType")
-		}
 		typ = joinType[0]
 	}
 
@@ -405,11 +311,13 @@ func (q *Query) GetJoin(relationName string) *RelationQuery {
 	if right != "" {
 		parentJoin, ok := q.joins[left]
 		if ok {
-			return parentJoin.GetJoin(right)
+			join := parentJoin.GetJoin(right)
+			if join != nil {
+				return join
+			}
 		}
 	}
 
-	// Not a nested join.
 	return q.joins[relationName]
 }
 
@@ -427,12 +335,7 @@ func (q *Query) GetJoins() map[string]*RelationQuery {
  */
 
 func (q *Query) Related(name string) *RelationQuery {
-	relation := q.modelInfo.FindRelation(name)
-	if relation == nil {
-		return nil
-	}
-
-	relQ := RelQ(q, relation.Name(), relation.Model().BackendName(), JOIN_INNER)
+	relQ := RelQ(q, name, "", JOIN_INNER)
 	return relQ
 }
 
@@ -491,28 +394,22 @@ func (q *Query) Delete() apperror.Error {
 
 type RelationQuery struct {
 	Query
-
-	baseQuery    *Query
 	relationName string
+	baseQuery    *Query
 	statement    *JoinStmt
 }
 
-func RelQ(q *Query, name, backendName string, joinType string) *RelationQuery {
-	stmt := NewJoinStmt(backendName, joinType, nil)
-	stmt.SetName(name)
+func RelQ(q *Query, relationName string, collection string, joinType string) *RelationQuery {
+	joinStmt := NewJoinStmt(collection, joinType, nil)
+	newQ := NewQuery(collection, q.backend)
+	newQ.SetStatement(joinStmt.SelectStatement())
 
 	relQ := &RelationQuery{
-		Query: Query{
-			joins: make(map[string]*RelationQuery),
-		},
+		Query:        *newQ,
+		relationName: relationName,
 		baseQuery:    q,
-		relationName: name,
-		statement:    stmt,
+		statement:    joinStmt,
 	}
-	// Set relQ.Query.statement to the join statements select, since all the
-	// query methods operate on reQ.Query.statement.
-	relQ.Query.statement = stmt.SelectStatement()
-	relQ.SetBackend(q.GetBackend())
 
 	return relQ
 }
@@ -531,17 +428,15 @@ func RelQCustom(q *Query, collection, joinKey, foreignKey, typ string) *Relation
 // RelQExpr creates a new relation query for a collection with an arbitrary
 // join condition.
 func RelQExpr(q *Query, collection, typ string, joinCondition Expression) *RelationQuery {
-	stmt := NewJoinStmt(collection, typ, joinCondition)
+	joinStmt := NewJoinStmt(collection, typ, joinCondition)
+	newQ := NewQuery(collection, q.backend)
+	newQ.SetStatement(joinStmt.SelectStatement())
 
 	relQ := &RelationQuery{
+		Query:     *newQ,
 		baseQuery: q,
-		statement: stmt,
+		statement: joinStmt,
 	}
-
-	// Set relQ.Query.statement to the join statements select, since all the
-	// query methods operate on reQ.Query.statement.
-	relQ.Query.statement = stmt.SelectStatement()
-	relQ.SetBackend(q.GetBackend())
 
 	return relQ
 }
@@ -579,7 +474,7 @@ func (q *RelationQuery) SetJoinType(typ string) *RelationQuery {
 
 func (q *RelationQuery) Build() (*Query, apperror.Error) {
 	if q.backend == nil {
-		panic("Callind .Find() on a query without backend")
+		panic("Calling .Build() on a query without backend")
 	}
 	return q.backend.BuildRelationQuery(q)
 }
@@ -690,13 +585,6 @@ func (q *RelationQuery) SetFieldExpressions(expressions []Expression) *RelationQ
 	return q
 }
 
-/*
-func (q *RelationQuery) LimitFields(fields ...string) *RelationQuery {
-	q.Query.LimitFields(fields...)
-	return q
-}
-*/
-
 /**
  * Sort methods.
  */
@@ -797,4 +685,270 @@ func (q *RelationQuery) JoinQ(jqs ...*RelationQuery) *RelationQuery {
 func (q *RelationQuery) Join(fieldName string, joinType ...string) *RelationQuery {
 	q.Query.Join(fieldName, joinType...)
 	return q
+}
+
+func (q *Query) Normalize() apperror.Error {
+	if q.backend == nil {
+		panic("Called .Normalize() on a query without a backend.")
+	}
+
+	info := q.backend.ModelInfos().Find(q.collection)
+	if info == nil {
+		return &apperror.Err{
+			Public:  true,
+			Code:    "unknown_collection",
+			Message: fmt.Sprintf("Collection %v was not registered with the backend", q.collection),
+		}
+	}
+
+	// Normalize joins.
+
+	nestedJoins := make([]*RelationQuery, 0)
+	// First, process all non-nested joins.
+	for _, join := range q.GetJoins() {
+		relationName := join.GetRelationName()
+		if relationName == "" {
+			// Ignore custom joins.
+			continue
+		}
+
+		if strings.Contains(relationName, ".") {
+			// Process nested joins later.
+			nestedJoins = append(nestedJoins, join)
+			continue
+		}
+
+		relation := info.FindRelation(relationName)
+		if relation == nil {
+			return &apperror.Err{
+				Public:  true,
+				Code:    "unknown_relation",
+				Message: fmt.Sprintf("Collection '%v' does not have a relation '%v'", info.Collection(), relationName),
+			}
+		}
+
+		if relation.Name() != relationName {
+			join.SetRelationName(relationName)
+			delete(q.joins, relationName)
+			q.joins[relation.Name()] = join
+		}
+	}
+
+	// Now, move nested joins to their parent.
+	for _, join := range nestedJoins {
+		relationName := join.GetRelationName()
+		left, right := utils.StrSplitLeft(relationName, ".")
+
+		relation := info.FindRelation(left)
+		if relation == nil {
+			return &apperror.Err{
+				Public:  true,
+				Code:    "unknown_relation",
+				Message: fmt.Sprintf("Collection '%v' does not have a relation '%v'", info.Collection(), relationName),
+			}
+		}
+
+		parentJoin := q.joins[relation.Name()]
+		if parentJoin == nil {
+			// Parent join does not exist, so auto join it.
+			q.Join(relation.Name())
+			parentJoin = q.GetJoin(relation.Name())
+		}
+
+		// Parent join definitely exists now.
+		// Add the nested join.
+		join.SetRelationName(right)
+		parentJoin.JoinQ(join)
+	}
+
+	// Normalize the statement now.
+
+	s := q.GetStatement()
+
+	// Normalize fields.
+	fields := make([]Expression, 0)
+	for _, field := range s.Fields() {
+		id, ok := field.(*IdentifierExpr)
+		if !ok {
+			// Custom field, so just accept it.
+			fields = append(fields, field)
+			continue
+		}
+
+		fieldName := id.Identifier()
+
+		left, right := utils.StrSplitLeft(fieldName, ".")
+		if right == "" {
+			// Not a nested field.
+			attr := info.FindAttribute(fieldName)
+			if attr == nil {
+				return &apperror.Err{
+					Public:  true,
+					Code:    "unknown_field",
+					Message: fmt.Sprintf("The collection %v does not have a field %v", info.Collection(), fieldName),
+				}
+			}
+
+			// Field exists, so add it to the statement.
+			sel := NewFieldSelector(attr.Name(), info.BackendName(), attr.BackendName(), attr.Type())
+			fields = append(fields, sel)
+			continue
+		}
+
+		relation := info.FindRelation(left)
+		if relation != nil {
+			// Nested field. Check if parent join exists.
+			join := q.GetJoin(relation.Name())
+			if join == nil {
+				// Parent not joined.
+				// Auto-join it.
+				q.Join(relation.Name())
+				join = q.GetJoin(relation.Name())
+			}
+
+			// Add field to join.
+			join.Field(right)
+			continue
+		}
+
+		// Check if an embedded attribute exists.
+		attr := info.FindAttribute(left)
+		if attr != nil && attr.BackendEmbed() {
+			// Embedded attribute.
+			// Maybe the backend supports selecting fields from it, so add
+			// it to the statement.
+			sel := NewFieldSelector(attr.Name()+"."+right, info.BackendName(), attr.BackendName()+"."+right, attr.Type())
+			fields = append(fields, sel)
+			continue
+		}
+
+		// Unknown field!
+		return &apperror.Err{
+			Public:  true,
+			Code:    "unknown_field",
+			Message: fmt.Sprintf("Collection %v does not have a field %v", info.Collection(), fieldName),
+		}
+	}
+	s.SetFields(fields)
+
+	// Normalize Filters.
+	if err := q.normalizeFilter(info, s.Filter()); err != nil {
+		return err
+	}
+
+	// Normalize sorts.
+	sorts := make([]*SortExpr, 0)
+	for _, sort := range s.Sorts() {
+		expr := sort.Expression()
+		id, ok := expr.(*IdentifierExpr)
+		if !ok {
+			// Custom sort, just add it.
+			sorts = append(sorts, sort)
+		}
+
+		fieldName := id.Identifier()
+		left, right := utils.StrSplitLeft(fieldName, ".")
+		if right == "" {
+			// Not a nested field.
+			attr := info.FindAttribute(fieldName)
+			if attr == nil {
+				return &apperror.Err{
+					Public:  true,
+					Code:    "unknown_field",
+					Message: fmt.Sprintf("The collection %v does not have a field %v", info.Collection(), fieldName),
+				}
+			}
+
+			// Field exists, so add it to the statement.
+			sort.SetExpression(NewColFieldIdExpr(info.BackendName(), attr.BackendName()))
+			sorts = append(sorts, sort)
+			continue
+		}
+
+		// Nested field.
+		relation := info.FindRelation(left)
+		if relation != nil {
+			// Check if parent join exists.
+			join := q.GetJoin(relation.Name())
+			if join == nil {
+				// Parent not joined.
+				// Auto-join it.
+				q.Join(relation.Name())
+				join = q.GetJoin(relation.Name())
+			}
+
+			// Add field to join.
+			join.Sort(right, sort.Ascending())
+			continue
+		}
+
+		// Check if an embedded attribute exists.
+		attr := info.FindAttribute(left)
+		if attr != nil && attr.BackendEmbed() {
+			// Embedded attribute.
+			// Maybe the backend supports selecting fields from it, so add
+			// it to the statement.
+			sort.SetExpression(NewColFieldIdExpr(info.BackendName(), attr.BackendName()))
+			sorts = append(sorts, sort)
+			continue
+		}
+
+		// Unknown field!
+		return &apperror.Err{
+			Public:  true,
+			Code:    "unknown_field",
+			Message: fmt.Sprintf("Collection %v does not have a field %v", info.Collection(), fieldName),
+		}
+	}
+
+	return nil
+}
+
+func (q *Query) normalizeFilter(info *ModelInfo, filter Expression) apperror.Error {
+	switch f := filter.(type) {
+	case MultiExpression:
+		for _, e := range f.Expressions() {
+			if err := q.normalizeFilter(info, e); err != nil {
+				return err
+			}
+		}
+
+	case NestedExpression:
+		if err := q.normalizeFilter(info, f.Expression()); err != nil {
+			return err
+		}
+
+	case *ColFieldIdentifierExpr:
+		if f.Collection() != "" {
+			i := q.backend.ModelInfos().Find(f.Collection())
+			if i != nil {
+				return apperror.New("unknown_collection",
+					fmt.Sprintf("The collection %v was not registered with the backend.", f.Collection()),
+					true)
+			}
+
+			f.SetCollection(i.BackendName())
+
+			info = i
+		}
+
+		field := f.Field()
+		left, right := utils.StrSplitLeft(field, ".")
+		attr := info.FindAttribute(left)
+		if attr == nil || (right != "" && !attr.BackendEmbed()) {
+			return &apperror.Err{
+				Public:  true,
+				Code:    "unknown_field",
+				Message: fmt.Sprintf("The collection %v does not have a field %v", info.Collection(), field),
+			}
+		} else if right == "" {
+			// Non-nested field that exists.
+			f.SetField(attr.BackendName())
+		} else {
+			// Embedded field, so maybe the backend can handle the filter.
+			f.SetField(attr.BackendName() + "." + right)
+		}
+	}
+
+	return nil
 }

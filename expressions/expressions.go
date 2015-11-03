@@ -1004,6 +1004,10 @@ func (s *SortExpr) SetAscending(asc bool) {
 	s.ascending = asc
 }
 
+func (s *SortExpr) SetExpression(expr Expression) {
+	s.expression = expr
+}
+
 func (e *SortExpr) Validate() apperror.Error {
 	if e.expression == nil {
 		return apperror.New("empty_field_expression")
