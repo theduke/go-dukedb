@@ -207,12 +207,6 @@ func (b *Backend) SqlQuery(query string, args ...interface{}) (*sql.Rows, error)
 }
 
 func (b *Backend) Exec(statement Expression) apperror.Error {
-	if s, ok := statement.(*CreateCollectionStmt); ok {
-		if len(s.Constraints()) > 0 {
-			b.Logger().Infof("%+v\n", s.Constraints()[0])
-		}
-	}
-
 	dialect := b.dialect.New()
 	if err := dialect.PrepareExpression(statement); err != nil {
 		return err
@@ -303,8 +297,6 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 	if err := rows.Err(); err != nil {
 		return nil, apperror.Wrap(err, "sql_rows_error")
 	}
-
-	b.Logger().Infof("result: %+v\n", result)
 
 	return result, nil
 }
