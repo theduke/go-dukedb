@@ -66,23 +66,6 @@ func (d *PostgresDialect) PrepareExpression(expression Expression) apperror.Erro
 				}
 			}
 		}
-
-		for _, join := range e.Joins() {
-			if len(join.Fields()) == 0 {
-				name := join.Name()
-				// If no fields are specified, add all model attributes.
-				info := d.modelInfo.Find(join.Collection())
-				if info != nil {
-					for attrName, attr := range info.Attributes() {
-						if name != "" {
-							attrName = name + "." + attrName
-						}
-						join.AddField(NewFieldSelector(attrName, info.BackendName(), attr.BackendName(), attr.Type()))
-					}
-				}
-			}
-		}
-
 	}
 
 	d.SqlTranslator.PrepareExpression(expression)

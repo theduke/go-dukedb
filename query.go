@@ -518,6 +518,7 @@ func (q *RelationQuery) First(targetModel ...interface{}) (interface{}, apperror
 	if err != nil {
 		return nil, err
 	}
+	q.backend.Logger().Infof("new query: %+v", newQ)
 	return newQ.First(targetModel...)
 }
 

@@ -818,6 +818,7 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 	b.Logger().Errorf("join query: models: %v - filterArgs: %v", len(baseModels), filterArgs)
 
 	resultQuery := &q.Query
+	resultQuery.SetCollection(relation.RelatedModel().Collection())
 
 	if relation.RelationType() != RELATION_TYPE_M2M {
 		if len(baseModels) > 0 {
@@ -862,6 +863,10 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 		q.localField = relation.ForeignField()
 		q.foreignField = baseInfo.BackendName() + "." + baseInfo.Attribute(relation.localField).BackendName()
 		q.SetJoinResultAssigner(assignM2MJoinModels)
+
+		// Add required field to join statement.
+		fieldSel := NewFieldSelector(q.foreignField, relation.BackendName(), baseInfo.BackendName()+"."+baseInfo.Attribute(relation.localField).BackendName(), nil)
+		relQ.GetStatement().AddField(fieldSel)
 
 		resultQuery.JoinQ(relQ)
 
@@ -1144,11 +1149,19 @@ func (b *BaseBackend) buildJoin(relation *Relation, jq *RelationQuery) (*JoinStm
 	s.SetJoinCondition(condition)
 	s.SetName(relation.Name())
 
-	for _, field := range s.Fields() {
-		// Set proper field names prefixed with the relation name.
-		if named, ok := field.(NamedExpression); ok {
-			_, right := utils.StrSplitLeft(named.Name(), ".")
-			named.SetName(relation.Name() + "." + right)
+	if len(s.Fields()) > 0 {
+		for _, field := range s.Fields() {
+			// Set proper field names prefixed with the relation name.
+			if named, ok := field.(NamedExpression); ok {
+				_, right := utils.StrSplitLeft(named.Name(), ".")
+				named.SetName(relation.Name() + "." + right)
+			}
+		}
+	} else {
+		// No fields set, so add all fields.
+		for attrName, attr := range info.Attributes() {
+			attrName = relation.Name() + "." + attrName
+			s.AddField(NewFieldSelector(attrName, info.BackendName(), attr.BackendName(), attr.Type()))
 		}
 	}
 	return s, nil
@@ -1585,6 +1598,7 @@ func assignM2MJoinModels(relation *Relation, joinQ *RelationQuery, resultQuery *
 
 	resultMap := make(map[interface{}][]interface{})
 	for _, row := range resultQuery.rawResult {
+		joinQ.backend.Logger().Infof("foreign field: %v", joinQ.foreignField)
 		id, err := reflector.Reflect(row[joinQ.foreignField]).ConvertToType(localFieldInfo.Type())
 		if err != nil {
 			panic(err)

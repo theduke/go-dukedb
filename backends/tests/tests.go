@@ -567,6 +567,44 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m.(*Task).Project.Id).To(Equal(t.Project.Id))
 			})
+
+			It("Should .Related() with model", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("tasks").Relation("Project")
+				rel.SetAutoCreate(true)
+
+				t := &Task{
+					Name: "T1",
+					Project: Project{
+						Name: "test",
+					},
+				}
+
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q(t).Related("Project").First()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m.(*Project).Id).To(Equal(t.Project.Id))
+			})
+
+			It("Should .Related() with id", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("tasks").Relation("Project")
+				rel.SetAutoCreate(true)
+
+				t := &Task{
+					Name: "T1",
+					Project: Project{
+						Name: "test",
+					},
+				}
+
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("tasks", t.Id).Related("Project").First()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m.(*Project).Id).To(Equal(t.Project.Id))
+			})
 		})
 
 		Describe("Belongs to", func() {
@@ -695,6 +733,44 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				Expect(m.(*Task).File).ToNot(BeNil())
 				Expect(m.(*Task).File.ID).To(Equal(t.File.ID))
 			})
+
+			It("Should .Related() with model", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("tasks").Relation("File")
+				rel.SetAutoCreate(true)
+
+				t := &Task{
+					Name: "T1",
+					File: &File{
+						Filename: "test",
+					},
+				}
+
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q(t).Related("File").First()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m.(*File).ID).To(Equal(t.File.ID))
+			})
+
+			It("Should .Related() with id", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("tasks").Relation("File")
+				rel.SetAutoCreate(true)
+
+				t := &Task{
+					Name: "T1",
+					File: &File{
+						Filename: "test",
+					},
+				}
+
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("tasks", t.Id).Related("File").First()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(m.(*File).ID).To(Equal(t.File.ID))
+			})
 		})
 
 		Describe("has-many", func() {
@@ -820,6 +896,42 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 				todos := m.(*Project).Todos
 				Expect(todos).To(HaveLen(2))
+			})
+
+			It("Should .Related() with model", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				m, err := backend.Q(p).Related("Todos").Find()
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(m).To(BeEquivalentTo([]interface{}{&p.Todos[0], &p.Todos[1]}))
+			})
+
+			It("Should .Related() with id", func() {
+				// Enable auto-create.
+				rel := backend.ModelInfo("projects").Relation("Todos")
+				rel.SetAutoCreate(true)
+
+				p := &Project{
+					Name:  "P1",
+					Todos: []Task{Task{Name: "T1"}, Task{Name: "T2"}},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("projects", p.Id).Related("Todos").Find()
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(m).To(BeEquivalentTo([]interface{}{&p.Todos[0], &p.Todos[1]}))
 			})
 		})
 
@@ -1095,138 +1207,46 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				taskTags := m.(*Task).Tags
 				Expect(taskTags).To(HaveLen(2))
 			})
+
+			It("Should .Related() with model", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoDelete(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q(t).Related("Tags").Find()
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(m).To(BeEquivalentTo([]interface{}{&tags[0], &tags[1]}))
+			})
+
+			It("Should .Related() with id", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoDelete(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("tasks", t.Id).Related("Tags").Find()
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(m).To(BeEquivalentTo([]interface{}{&tags[0], &tags[1]}))
+			})
+
 		})
-
-		/*
-			It("Should auto-persist has-one", func() {
-				model := NewTestParent(1, true)
-				model.ChildPtr = nil
-				model.ChildSlice = nil
-				model.ChildSlicePtr = nil
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(model.Child.ID).ToNot(BeZero())
-				Expect(model.ChildID).ToNot(BeZero())
-
-				m, err := backend.FindOne("test_parents", model.ID)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m.(*TestParent).ChildID).To(Equal(model.Child.ID))
-
-				m, err = backend.FindOne("test_models", model.Child.ID)
-				Expect(m).ToNot(BeNil())
-			})
-
-			It("Should join has-one", func() {
-				model := NewTestParent(2, true)
-				model.ChildPtr = nil
-				model.ChildSlice = nil
-				model.ChildSlicePtr = nil
-
-				model.Child.ID = 0
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-
-				m, err := backend.Q("test_parents").Filter("id", model.ID).Join("Child").First()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m.(*TestParent).Child).ToNot(BeZero())
-				Expect(m.(*TestParent).Child.ID).To(Equal(model.ChildID))
-			})
-
-			It("Should auto-persist single belongs-to", func() {
-				model := NewTestParent(3, true)
-				model.ChildSlice = nil
-				model.ChildSlicePtr = nil
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-
-				m, err := backend.FindOne("test_models", model.ChildPtr.ID)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m).ToNot(BeNil())
-				Expect(m.(*TestModel).TestParentID).To(Equal(model.ID))
-			})
-
-			It("Should join single belongs-to", func() {
-				model := NewTestParent(4, true)
-				model.ChildSlice = nil
-				model.ChildSlicePtr = nil
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(model.ChildPtr.ID).ToNot(BeZero())
-
-				m, err := backend.Q("test_parents").Filter("id", model.ID).Join("ChildPtr").First()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m.(*TestParent).ChildPtr).ToNot(BeNil())
-				Expect(m.(*TestParent).ChildPtr.ID).To(Equal(model.ChildPtr.ID))
-			})
-
-			It("Should auto-persist mutli belongs-to", func() {
-				model := NewTestParent(5, true)
-				model.ChildPtr = nil
-				model.ChildSlicePtr = nil
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-
-				models, err := backend.Q("test_models").Filter("test_parent_id", model.ID).Find()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(models)).To(Equal(2))
-			})
-
-			It("Should join multi belongs-to", func() {
-				model := NewTestParent(6, true)
-				model.ChildPtr = nil
-				model.ChildSlicePtr = nil
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-
-				m, err := backend.Q("test_parents").Filter("id", model.ID).Join("ChildSlice").First()
-				Expect(err).ToNot(HaveOccurred())
-
-				m2 := m.(*TestParent)
-
-				Expect(len(m2.ChildSlice)).To(Equal(2))
-			})
-
-			It("Should auto-persist m2m", func() {
-				model := NewTestParent(7, true)
-				model.ChildPtr = nil
-				model.ChildSlice = nil
-				model.ChildSlicePtr = model.ChildSlicePtr[:1]
-
-				Expect(backend.Create(&model)).ToNot(HaveOccurred())
-
-				m2m, err := backend.M2M(&model, "ChildSlicePtr")
-				Expect(err).ToNot(HaveOccurred())
-				Expect(m2m.Count()).To(Equal(1))
-				res, err := m2m.All()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(res[0].(*TestModel).ID).To(Equal(model.ChildSlicePtr[0].ID))
-			})
-
-			It("Should join m2m", func() {
-				model := NewTestParent(8, true)
-				model.ChildPtr = nil
-				model.ChildSlice = nil
-				model.ChildSlicePtr = model.ChildSlicePtr[0:1]
-
-				err := backend.Create(&model)
-				Expect(err).ToNot(HaveOccurred())
-
-				result, err := backend.Q("test_parents").Filter("id", model.ID).Join("ChildSlicePtr").First()
-				Expect(err).ToNot(HaveOccurred())
-
-				m := result.(*TestParent)
-
-				Expect(len(m.ChildSlicePtr)).To(Equal(1))
-				Expect(m.ChildSlicePtr[0].ID).To(Equal(model.ChildSlicePtr[0].ID))
-			})
-
-		*/
 	})
 
 	Describe("Transactions", func() {
