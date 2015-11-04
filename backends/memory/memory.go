@@ -6,14 +6,14 @@ import (
 	"strconv"
 
 	"github.com/theduke/go-apperror"
+	"github.com/theduke/go-reflector"
 
 	db "github.com/theduke/go-dukedb"
+	. "github.com/theduke/go-dukedb/expressions"
 )
 
 type Backend struct {
 	db.BaseBackend
-
-	name string
 
 	data map[string]map[string]interface{}
 
@@ -26,348 +26,495 @@ var _ db.Backend = (*Backend)(nil)
 var _ db.MigrationBackend = (*Backend)(nil)
 
 func New() *Backend {
-	b := Backend{}
+	b := &Backend{}
+	b.BaseBackend = db.NewBaseBackend(b)
 	b.SetName("memory")
 
-	b.SetAllModelInfo(make(map[string]*db.ModelInfo))
 	b.data = make(map[string]map[string]interface{})
 
-	b.MigrationHandler = db.NewMigrationHandler(&b)
+	b.MigrationHandler = db.NewMigrationHandler(b)
 	b.MigrationVersion = 0
-
 	b.RegisterModel(&MigrationAttempt{})
 
 	b.BuildLogger()
 
-	return &b
+	return b
 }
 
-func (b *Backend) HasStringIDs() bool {
+func (b *Backend) HasStringIds() bool {
 	return false
 }
 
-func (b *Backend) SetDebug(d bool) {
-	b.Debug = d
+func (b *Backend) HasNativeJoins() bool {
+	return false
 }
 
-func (b *Backend) Copy() db.Backend {
-	copied := Backend{}
-
-	copied.SetAllModelInfo(b.AllModelInfo())
-	copied.data = b.data
-	copied.SetDebug(b.GetDebug())
-	return &copied
-}
-
-func (b *Backend) RegisterModel(m interface{}) {
-	b.BaseBackend.RegisterModel(m)
-	collection := db.MustGetModelCollection(m)
-	b.data[collection] = make(map[string]interface{})
-}
-
-func (b *Backend) CreateModel(collection string) (interface{}, apperror.Error) {
-	return db.BackendCreateModel(b, collection)
-}
-
-func (b *Backend) MustCreateModel(collection string) interface{} {
-	return db.BackendMustCreateModel(b, collection)
-}
-
-func (b *Backend) MergeModel(model db.Model) {
-	db.BackendMergeModel(b, model)
-}
-
-func (b *Backend) ModelToMap(m interface{}, marshal, includeRelations bool) (map[string]interface{}, apperror.Error) {
-	info, err := b.InfoForModel(m)
-	if err != nil {
-		return nil, err
+func (b *Backend) Clone() db.Backend {
+	copied := &Backend{
+		BaseBackend:      b.BaseBackend,
+		data:             b.data,
+		MigrationHandler: b.MigrationHandler,
+		MigrationVersion: b.MigrationVersion,
 	}
 
-	return db.ModelToMap(info, m, false, marshal, includeRelations)
+	return copied
 }
 
-func (b *Backend) CreateCollection(collection string) apperror.Error {
-	_, err := b.InfoForCollection(collection)
-	if err != nil {
-		return err
-	}
-
-	b.data[collection] = make(map[string]interface{})
-
-	return nil
+func (b *Backend) RegisterModel(m interface{}) *db.ModelInfo {
+	info := b.BaseBackend.RegisterModel(m)
+	b.data[info.Collection()] = make(map[string]interface{})
+	return info
 }
 
-func (b *Backend) CreateCollections(names ...string) apperror.Error {
-	for _, name := range names {
-		if err := b.CreateCollection(name); err != nil {
-			return &apperror.Err{
-				Code:    "create_collection_error",
-				Message: fmt.Sprintf("Could not create collection %v: %v", name, err),
+func (b *Backend) Build() {
+	b.BaseBackend.Build()
+
+	// Add an id field to m2m collections.
+	for _, info := range b.ModelInfos() {
+		for _, relation := range info.Relations() {
+			if relation.RelationType() != db.RELATION_TYPE_M2M {
+				continue
 			}
+
+			m2mCol := b.ModelInfo(relation.BackendName())
+			attr := &db.Attribute{}
+			attr.SetName("id")
+			attr.SetBackendName("id")
+			attr.SetMarshalName("id")
+			attr.SetIsPrimaryKey(true)
+			attr.SetIsUnique(true)
+			attr.SetType(reflect.TypeOf(""))
+			m2mCol.AddAttribute(attr)
+
+			b.data[relation.BackendName()] = make(map[string]interface{})
 		}
+	}
+}
+
+func (b *Backend) sort(info *db.ModelInfo, items *reflector.SliceReflector, field Expression, asc bool) apperror.Error {
+	fieldName := ""
+	if id, ok := field.(*IdentifierExpr); ok {
+		fieldName = id.Identifier()
+	} else if id, ok := field.(*ColFieldIdentifierExpr); ok {
+		if id.Collection() != info.Collection() {
+			return apperror.New("unsupported_sort", fmt.Sprint("The memory backend does not support sorting with joined collections"))
+		}
+		fieldName = id.Field()
+	} else {
+		return apperror.New("unsupported_sort", fmt.Sprintf("The memory backend does not support sorting with custom field expressions"))
+	}
+
+	attr := info.FindAttribute(fieldName)
+	if attr == nil {
+		return apperror.New("invalid_sort", fmt.Sprintf("Invalid sort for inexistant field %v", fieldName))
+	}
+
+	if err := items.SortByField(attr.Name(), asc); err != nil {
+		return apperror.Wrap(err, "sort_error")
 	}
 
 	return nil
 }
 
-func (b *Backend) DropCollection(collection string) apperror.Error {
-	_, err := b.InfoForCollection(collection)
+func (b *Backend) filter(info *db.ModelInfo, items *reflector.SliceReflector, filter Expression) (*reflector.SliceReflector, apperror.Error) {
+	filtered, err := items.FilterBy(func(item *reflector.Reflector) (bool, error) {
+		return b.filterItem(info, item, filter)
+	})
+
 	if err != nil {
-		return err
+		return nil, apperror.Wrap(err, "filter_error")
 	}
-
-	if _, ok := b.data[collection]; ok {
-		b.data[collection] = make(map[string]interface{})
-	}
-
-	return nil
+	return filtered, nil
 }
 
-func (b *Backend) DropAllCollections() apperror.Error {
-	info := b.AllModelInfo()
-	for name := range info {
-		if err := b.DropCollection(name); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (b *Backend) Q(model string) db.Query {
-	q := db.Q(model)
-	q.SetBackend(b)
-	return q
-}
-
-func filterStruct(info *db.ModelInfo, item interface{}, filter db.Filter) (bool, apperror.Error) {
-	filterType := filter.Type()
-
-	if filterType == "and" {
-		and := filter.(*db.AndCondition)
-
-		// Check each and filter.
-		for _, andFilter := range and.Filters {
-			if ok, err := filterStruct(info, item, andFilter); err != nil {
-				// Error occurred, return it.
+func (b *Backend) filterItem(info *db.ModelInfo, item *reflector.Reflector, filter Expression) (bool, apperror.Error) {
+	switch f := filter.(type) {
+	case *AndExpr:
+		// Check each filter.
+		for _, e := range f.Expressions() {
+			flag, err := b.filterItem(info, item, e)
+			if err != nil {
 				return false, err
-			} else if !ok {
-				// No match, return false.
+			} else if !flag {
+				// One filter does not match, so return false.
 				return false, nil
 			}
 		}
-
-		// All filters matched, return true.
+		// All filters matched, we can return true.
 		return true, nil
-	}
 
-	if filterType == "or" {
-		or := filter.(*db.OrCondition)
-
-		// Check each or filter.
-		for _, orFilter := range or.Filters {
-			if ok, err := filterStruct(info, item, orFilter); err != nil {
-				// Error occurred, return it.
+	case *OrExpr:
+		// Check each filter.
+		for _, e := range f.Expressions() {
+			flag, err := b.filterItem(info, item, e)
+			if err != nil {
 				return false, err
-			} else if ok {
-				// One positivie match is enough. Return true.
+			} else if flag {
+				// One match is enough, so return true.
 				return true, nil
 			}
 		}
-
-		// No or clause matched, return false.
+		// No filters matched, so return false.
 		return false, nil
+
+	case *NotExpr:
+		// Reverse nested filter.
+		flag, err := b.filterItem(info, item, f.Not())
+		if err != nil {
+			return false, err
+		} else {
+			return !flag, nil
+		}
+
+	case FilterExpression:
+		field := f.Field()
+
+		fieldName := ""
+
+		if id, ok := field.(*IdentifierExpr); ok {
+			fieldName = id.Identifier()
+		} else if id, ok := field.(*ColFieldIdentifierExpr); ok {
+			if id.Collection() != info.Collection() {
+				return false, apperror.New("unsupported_filter", fmt.Sprint("The memory backend does not support filtering with joined collections"))
+			}
+			fieldName = id.Field()
+		} else {
+			return false, apperror.New("unsupported_filter", fmt.Sprintf("The memory backend does not support filtering with custom field expressions"))
+		}
+
+		attr := info.FindAttribute(fieldName)
+		if attr == nil {
+			return false, apperror.New("invalid_filter", fmt.Sprintf("Invalid filter for inexistant field %v", fieldName))
+		}
+
+		operator := f.Operator()
+
+		var clauseValue interface{}
+
+		if valExpr, ok := f.Clause().(*ValueExpr); ok {
+			clauseValue = valExpr.Value()
+		} else {
+			return false, apperror.New("unsupported_filter_clause", fmt.Sprintf("The memory backend does not support filtering with custom clause expressions"))
+		}
+
+		if info.StructName() != "" {
+			b.Logger().Infof("filtering item with %v %v %v", fieldName, operator, clauseValue)
+			s, err := item.Struct()
+			if err != nil {
+				return false, apperror.Wrap(err, "invalid_model_error")
+			}
+			flag, err := s.Field(attr.Name()).CompareTo(clauseValue, operator)
+			if err != nil {
+				return false, apperror.Wrap(err, "compare_error")
+			}
+			return flag, nil
+		} else {
+			// Assume a map.
+			if !item.IsMap() {
+				return false, apperror.New("filter_invalid_model", "Could not filter because model value is neither struct nor map.")
+			}
+			flag, err := reflector.R(item.Value().MapIndex(reflect.ValueOf(attr.BackendName()))).CompareTo(clauseValue, operator)
+			if err != nil {
+				return false, apperror.Wrap(err, "compare_error")
+			}
+			return flag, nil
+		}
+
+	default:
+		b.Logger().Panicf("Unhandled filter expression: %v", reflect.TypeOf(filter))
 	}
 
-	if filterType == "not" {
-		not := filter.(*db.NotCondition)
+	return false, nil
+}
 
-		for _, notFilter := range not.Filters {
-			if ok, err := filterStruct(info, item, notFilter); err != nil {
-				// Error occurred, return it.
-				return false, err
-			} else if ok {
-				// One positivie match means a NOT condition is true, so return false
-				return false, nil
+func (b *Backend) exec(statement Expression) ([]interface{}, apperror.Error) {
+	switch s := statement.(type) {
+	case *CreateCollectionStmt:
+		col := s.Collection()
+
+		if _, ok := b.data[col]; !ok {
+			b.data[col] = make(map[string]interface{})
+		}
+
+	case *RenameCollectionStmt:
+		b.data[s.NewName()] = b.data[s.Collection()]
+		delete(b.data, s.Collection())
+
+	case *DropFieldStmt:
+		// No-op.
+
+	case *DropCollectionStmt:
+		delete(b.data, s.Collection())
+
+	case *CreateFieldStmt:
+		// No-op.
+
+	case *RenameFieldStmt:
+		// No-op.
+
+	case *CreateIndexStmt:
+		// No-op.
+
+	case *DropIndexStmt:
+		// No-op.
+
+	case *SelectStmt:
+		info := b.ModelInfos().Find(s.Collection())
+		if info == nil {
+			return nil, apperror.New("unknown_collection", fmt.Sprintf("Collection %v was not registered with backend", s.Collection()))
+		}
+
+		collection := info.Collection()
+		b.Logger().Infof("all data: %+v", b.data)
+		allData := b.data[collection]
+		items := reflector.R(info.Item()).NewSlice()
+		for _, item := range allData {
+			if err := items.AppendValue(item); err != nil {
+				return nil, apperror.Wrap(err, "slice_append_error")
 			}
 		}
 
-		return true, nil
-	}
+		b.Logger().Infof("Executing select with all data: %v", len(allData))
 
-	if condition, ok := filter.(*db.FieldCondition); ok {
-		val := condition.Value
-		// The actual value for the filtered field.
-
-		fieldName := condition.Field
-		if mappedName := info.MapFieldName(fieldName); mappedName != "" {
-			fieldName = mappedName
+		if filter := s.Filter(); filter != nil {
+			b.Logger().Infof("filtering with %+v", filter)
+			if filteredItems, err := b.filter(info, items, filter); err != nil {
+				return nil, err
+			} else {
+				items = filteredItems
+			}
 		}
 
-		structVal, err := db.GetStructFieldValue(item, fieldName)
-		if err != nil {
-			return false, err
+		if sorts := s.Sorts(); len(sorts) > 1 {
+			panic("Memory backend does not support sorting by more than one field")
+		} else if len(sorts) == 1 {
+			b.Logger().Infof("Sorting with %+v", sorts[0])
+			if err := b.sort(info, items, sorts[0].Expression(), sorts[0].Ascending()); err != nil {
+				return nil, err
+			}
 		}
 
-		match, err := db.CompareValues(condition.Type(), structVal, val)
-		if err != nil {
-			return false, err
+		if offset := s.Offset(); offset > 0 {
+			if offset > items.Len() {
+				offset = items.Len()
+			}
+			var err error
+			items, err = items.Slice(offset, -1)
+			if err != nil {
+				// Should never happen, just be save.
+				panic(err)
+			}
 		}
 
-		return match, nil
-	}
+		if limit := s.Limit(); limit > 0 {
+			if limit > items.Len() {
+				limit = items.Len()
+			}
+			var err error
+			items, err = items.Slice(0, limit)
+			if err != nil {
+				// Should never happen, just be save.
+				panic(err)
+			}
+		}
 
-	// If execution comes here, filter type is unsupported.
-	return false, &apperror.Err{
-		Code:    "unsupported_filter",
-		Message: fmt.Sprintf("The filter %v is not supported by the memory backend", filter.Type()),
-	}
-}
+		b.Logger().Infof("select result: %+v", items.Len())
 
-func (b *Backend) executeQuery(q db.Query) ([]interface{}, apperror.Error) {
-	info, err := b.InfoForCollection(q.GetCollection())
-	if err != nil {
-		return nil, err
-	}
+		if len(s.Joins()) > 0 {
+			panic("Memory backend does not support native joins.")
+		}
 
-	if err := db.NormalizeQuery(info, q); err != nil {
-		return nil, err
-	}
+		ifSlice := make([]interface{}, items.Len(), items.Len())
+		for i, item := range items.Items() {
+			ifSlice[i] = item.Interface()
+		}
+		b.Logger().Infof("if slice %+v", ifSlice)
+		return ifSlice, nil
 
-	items := make([]interface{}, 0)
+	case *JoinStmt:
+		panic("Memory backend does not support native joins.")
 
-	for _, item := range b.data[q.GetCollection()] {
-		isMatched := true
+	case *CreateStmt:
+		collection := s.Collection()
+		info := b.ModelInfos().Find(collection)
+		if info == nil {
+			return nil, apperror.New("unknown_collection", fmt.Sprintf("Collection %v was not registered with backend", s.Collection()))
+		}
+		collection = info.Collection()
 
-		// Filter items.
-		if q.GetFilters() != nil {
-			for _, filter := range q.GetFilters() {
-				if ok, err := filterStruct(info, item, filter); err != nil {
+		obj := s.RawValue()
+
+		collection = info.Collection()
+
+		b.Logger().Infof("Creating with alldata: %+v", b.data[collection])
+
+		var newId string
+
+		if info.HasStruct() {
+			id, err := info.DetermineModelStrId(obj)
+			if err != nil {
+				return nil, err
+			}
+			if id == "" {
+				// Empty id, so create a new one and update the model.
+				intId := len(b.data[collection]) + 1
+				id = strconv.Itoa(intId)
+				if err := info.SetModelId(obj, id); err != nil {
 					return nil, err
-				} else if !ok {
-					isMatched = false
-					break
+				}
+			}
+			newId = id
+		} else {
+			// Map instead of struct.
+			mapObj := obj.(map[string]interface{})
+			rawId := mapObj[info.PkAttribute().BackendName()]
+			idRefl := reflector.R(rawId)
+
+			id := ""
+			if idRefl.IsZero() {
+				intId := len(b.data[collection]) + 1
+				id = strconv.Itoa(intId)
+				mapObj[info.PkAttribute().BackendName()] = id
+			} else {
+				strId, err := idRefl.ConvertTo("")
+				if err != nil {
+					return nil, apperror.Wrap(err, "id_conversion_error")
+				}
+				mapObj[info.PkAttribute().BackendName()] = strId.(string)
+			}
+
+			obj = mapObj
+			newId = id
+		}
+
+		b.data[collection][newId] = obj
+		b.Logger().Infof("created model %+v", obj)
+
+	case *UpdateStmt:
+
+		obj := s.RawValue()
+		info, err := b.InfoForModel(obj)
+		if err == nil {
+			// Direct update for one model.
+			// So just update the model in the data.
+			id, err := info.DetermineModelStrId(obj)
+			if err != nil {
+				return nil, err
+			}
+			b.data[info.Collection()][id] = obj
+
+			// All done.
+			return nil, nil
+		}
+
+		// Must be a custom update with a select.
+
+		info = b.ModelInfos().Find(s.Collection())
+		if info == nil {
+			return nil, apperror.New("unknown_collection", fmt.Sprintf("Collection %v was not registered with backend", s.Collection()))
+		}
+
+		// Execute select query to find items.
+		items, err := b.exec(s.Select())
+		if err != nil {
+			return nil, err
+		}
+
+		slice := reflector.R(items).MustSlice()
+
+		// Determine update data.
+		var data map[string]interface{}
+		if d, ok := s.RawValue().(map[string]interface{}); ok {
+			// Data supplied as raw value.
+			data = d
+		} else {
+			// Build a map with the fields values to update.
+			data = make(map[string]interface{})
+			for _, field := range s.Values() {
+				expr, ok := field.Field().(*IdentifierExpr)
+				if !ok {
+					return nil, apperror.New("unsupported_field_expression",
+						"The memory backend does not support custom field expressions")
+				}
+				valExpr, ok := field.Value().(*ValueExpr)
+				if !ok {
+					return nil, apperror.New("unsupported_field_value_expression",
+						"The memory backend does not support custom field value expressions")
+				}
+
+				attr := info.FindAttribute(expr.Identifier())
+				if attr == nil {
+					return nil, apperror.New("unknown_field",
+						fmt.Sprintf("The collection %v does not have a field %v", info.Collection(), expr.Identifier()))
+				}
+
+				data[attr.Name()] = valExpr.Value()
+			}
+		}
+
+		// Update each item with the new data.
+		for _, item := range slice.Items() {
+			if item.IsStruct() || item.IsStructPtr() {
+				s := item.MustStruct()
+
+				for key, val := range data {
+					if err := s.Field(key).SetValue(val); err != nil {
+						return nil, apperror.Wrap(err, "struct_field_update_error")
+					}
+				}
+			} else if item.IsMap() {
+				for key, val := range data {
+					if err := item.SetStrMapKeyValue(key, val, true); err != nil {
+						return nil, apperror.Wrap(err, "struct_field_update_error")
+					}
 				}
 			}
 		}
 
-		if isMatched {
-			items = append(items, item)
+	case *DeleteStmt:
+		info := b.ModelInfos().Find(s.Collection())
+
+		// Execute select query to find items.
+		items, err := b.exec(s.SelectStmt())
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	// Handle field specificiaton.
-	if len(q.GetFields()) > 0 {
-		return nil, &apperror.Err{
-			Code:    "memory_backend_unsupported_feature_fieldspec",
-			Message: "The memory backend does not support limiting fields",
-		}
-	}
-
-	// Ordering.
-	if len(q.GetOrders()) == 0 {
-		q.Order(info.PkField, true)
-	}
-
-	// Set default order.
-	if len(q.GetOrders()) > 0 {
-		if len(q.GetOrders()) > 1 {
-			return nil, &apperror.Err{
-				Code:    "memory_backend_unsupported_feature_multiple_orders",
-				Message: "The memory backend does not support multiple orderings",
+		slice := reflector.R(items).MustSlice()
+		for _, item := range slice.Items() {
+			id, err := info.DetermineModelStrId(item.Interface())
+			if err != nil {
+				return nil, err
 			}
+
+			delete(b.data[info.Collection()], id)
 		}
 
-		// Ensure the field exists.
-		field := q.GetOrders()[0].Field
-		if !info.HasField(field) {
-			field = info.MapFieldName(field)
-		}
-		if !info.HasField(field) {
-			return nil, &apperror.Err{
-				Code:    "cant_sort_on_inexistant_field",
-				Message: fmt.Sprintf("Trying to sort on non-existant field %v", field),
-			}
-		}
-
-		db.SortStructSlice(items, field, q.GetOrders()[0].Ascending)
+	default:
+		panic(fmt.Sprintf("Unhandled statement type: %v", reflect.TypeOf(statement)))
 	}
 
-	// Limit & Offset.
-
-	itemCount := len(items)
-
-	if offset := q.GetOffset(); offset > 0 {
-		if offset > itemCount {
-			items = []interface{}{}
-		} else {
-			items = items[q.GetOffset():]
-		}
-	}
-
-	if limit := q.GetLimit(); limit > 0 {
-		if limit > itemCount {
-			limit = itemCount
-		}
-		items = items[:limit]
-	}
-
-	return items, nil
+	return nil, nil
 }
 
-func (b *Backend) BuildRelationQuery(q db.RelationQuery) (db.Query, apperror.Error) {
-	return db.BuildRelationQuery(b, nil, q)
+func (b *Backend) Exec(statement Expression) apperror.Error {
+	_, err := b.exec(statement)
+	return err
 }
 
-func (b *Backend) doQuery(q db.Query) ([]interface{}, apperror.Error) {
+func (b *Backend) ExecQuery(statement FieldedExpression) ([]interface{}, apperror.Error) {
+	return b.exec(statement)
+}
 
-	res, err := b.executeQuery(q)
+func (b *Backend) Count(q *db.Query) (int, apperror.Error) {
+	items, err := b.Query(q)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	slice, err2 := db.ConvertInterfaceToSlice(res)
-	if err2 != nil {
-		return nil, apperror.Wrap(err2, "interface_conversion_error")
-	}
-	return slice, nil
+	return len(items), nil
 }
 
-// Perform a query.
-func (b *Backend) Query(q db.Query, targetSlices ...interface{}) ([]interface{}, apperror.Error) {
-	res, err := b.doQuery(q)
-	return db.BackendQuery(b, q, targetSlices, res, err)
-}
-
-func (b *Backend) QueryOne(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
-	return db.BackendQueryOne(b, q, targetModel)
-}
-
-func (b *Backend) Count(q db.Query) (int, apperror.Error) {
-	result, err := b.executeQuery(q)
-	if err != nil {
-		return 0, apperror.Wrap(err, "memory_count_error")
-	}
-
-	return len(result), nil
-}
-
-func (b *Backend) Last(q db.Query, targetModel ...interface{}) (interface{}, apperror.Error) {
-	return db.BackendLast(b, q, targetModel)
-}
-
-// Find first model with primary key ID.
-func (b *Backend) FindOne(modelType string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
-	return db.BackendFindOne(b, modelType, id, targetModel)
-}
-
-func (b *Backend) FindBy(modelType, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error) {
-	return db.BackendFindBy(b, modelType, field, value, targetSlice)
-}
-
-func (b *Backend) FindOneBy(modelType, field string, value interface{}, targetModel ...interface{}) (interface{}, apperror.Error) {
-	return db.BackendFindOneBy(b, modelType, field, value, targetModel)
-}
-
+/*
 // Convenience methods.
 
 // Store the model.
@@ -443,28 +590,17 @@ func (b *Backend) Delete(m interface{}) apperror.Error {
 	})
 }
 
-func (b *Backend) DeleteMany(q db.Query) apperror.Error {
-	result, err := b.executeQuery(q)
-	if err != nil {
-		return err
-	}
-
-	for _, item := range result {
-		if err := b.Delete(item); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (b *Backend) Related(model interface{}, name string) (db.RelationQuery, apperror.Error) {
 	return db.BackendRelated(b, model, name)
 }
 
+*/
+
 /**
  * M2M
  */
+
+/*
 
 func (b *Backend) M2M(obj interface{}, name string) (db.M2MCollection, apperror.Error) {
 	collection, err := db.GetModelCollection(obj)
@@ -585,3 +721,4 @@ func (c *M2MCollection) Replace(items []interface{}) apperror.Error {
 	c.items.Set(reflect.ValueOf(slice).Convert(reflect.SliceOf(c.itemType)))
 	return nil
 }
+*/

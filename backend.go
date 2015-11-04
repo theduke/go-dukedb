@@ -128,6 +128,9 @@ func (c *DefaultM2MCollection) ContainsId(id interface{}) (bool, apperror.Error)
 
 func (c *DefaultM2MCollection) Q() *Query {
 	q := c.backend.Q(c.relation.RelatedModel().Collection())
+	//q.Join(c.relation.BackendName(), JOIN_INNER)
+	//jq := RelQ(q, c.relation.BackendName(), "", JOIN_INNER)
+	//jq.FilterExpr()
 	localField := c.relation.RelatedModel().Attribute(c.relation.ForeignField()).BackendName()
 	jq := RelQCustom(q, c.relation.BackendName(), localField, c.foreignFieldName, JOIN_INNER)
 	q.JoinQ(jq)
@@ -607,7 +610,7 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 
 	if len(result) > 0 {
 		_, isMapData := result[0].(map[string]interface{})
-		if isMapData {
+		if isMapData && info.HasStruct() {
 			// Received map data, so convert to models first.
 			models = make([]interface{}, len(result), len(result))
 			for i, data := range result {
@@ -988,6 +991,11 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 
 	for _, relation := range info.Relations() {
 		relatedInfo := relation.RelatedModel()
+
+		if !relatedInfo.HasStruct() {
+			continue
+		}
+
 		// Handle has-one.
 		// Only need to check has-one before persist, since we can do everything there.
 		if relation.RelationType() == RELATION_TYPE_HAS_ONE && beforePersist {
@@ -1367,7 +1375,7 @@ func (b *BaseBackend) Create(models ...interface{}) apperror.Error {
 
 func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}) (interface{}, apperror.Error) {
 	info := b.backend.ModelInfo(collection)
-	if info != nil && info.Item() != nil {
+	if info != nil && info.Reflector() != nil {
 		// Known collection which has a struct.
 
 		// Create new model instance and fill it with data.
@@ -1603,7 +1611,7 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 		return err
 	}
 
-	if len(res) > 0 {
+	if len(res) > 0 && relation.relatedModel.HasStruct() {
 		if assigner := resultQuery.GetJoinResultAssigner(); assigner != nil {
 			assigner(relation, joinQ, resultQuery, objs, res)
 		} else {

@@ -23,6 +23,7 @@ import (
 
 type ModelInfo struct {
 	item      interface{}
+	itemType  reflect.Type
 	reflector *reflector.StructReflector
 
 	structName     string
@@ -63,6 +64,10 @@ func (m *ModelInfo) SetItem(val interface{}) {
 /**
  * StructName.
  */
+
+func (m *ModelInfo) HasStruct() bool {
+	return m.structName != ""
+}
 
 func (m *ModelInfo) StructName() string {
 	return m.structName
@@ -144,6 +149,10 @@ func (m *ModelInfo) SetAttributes(attrs map[string]*Attribute) {
 	m.attributes = attrs
 }
 
+func (m *ModelInfo) AddAttribute(attr *Attribute) {
+	m.attributes[attr.Name()] = attr
+}
+
 func (m *ModelInfo) HasAttribute(name string) bool {
 	_, ok := m.attributes[name]
 	return ok
@@ -219,6 +228,7 @@ func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 	info := &ModelInfo{
 		reflector:      structReflector,
 		item:           structReflector.New().Value().Interface(),
+		itemType:       structReflector.Type(),
 		fullStructName: structReflector.FullName(),
 		structName:     structReflector.Name(),
 		collection:     collection,
@@ -1034,13 +1044,74 @@ func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
 	col := &ModelInfo{
 		collection:  colName,
 		backendName: colName,
+		item:        map[string]interface{}{},
+		itemType:    reflect.TypeOf(map[string]interface{}{}),
 		attributes: map[string]*Attribute{
 			localFieldName: localAttr,
 			fkName:         fkAttr,
 		},
 	}
 
+	col.relations = map[string]*Relation{
+		"BaseItem": &Relation{
+			Field: Field{
+				name:        "BaseItem",
+				backendName: "base_item",
+				marshalName: "base_item",
+			},
+			model:        col,
+			relatedModel: relation.Model(),
+			relationType: RELATION_TYPE_HAS_ONE,
+			localField:   localFieldName,
+			foreignField: relation.LocalField(),
+		},
+
+		"RelatedItem": &Relation{
+			Field: Field{
+				name:        "RelatedItem",
+				backendName: "related_item",
+				marshalName: "related_item",
+			},
+			model:        col,
+			relatedModel: relation.RelatedModel(),
+			relationType: RELATION_TYPE_HAS_ONE,
+			localField:   fkName,
+			foreignField: relation.ForeignField(),
+		},
+	}
+
 	m[colName] = col
+
+	// Add new relationships to infos.
+	info := relation.Model()
+	info.relations[colName] = &Relation{
+		Field: Field{
+			name:        colName,
+			backendName: colName,
+			marshalName: colName,
+		},
+
+		model:        info,
+		relatedModel: col,
+		relationType: RELATION_TYPE_HAS_MANY,
+		localField:   relation.LocalField(),
+		foreignField: localFieldName,
+	}
+
+	info = relation.RelatedModel()
+	info.relations[colName] = &Relation{
+		Field: Field{
+			name:        colName,
+			backendName: colName,
+			marshalName: colName,
+		},
+
+		model:        info,
+		relatedModel: col,
+		relationType: RELATION_TYPE_HAS_MANY,
+		localField:   relation.ForeignField(),
+		foreignField: fkName,
+	}
 
 	return nil
 }

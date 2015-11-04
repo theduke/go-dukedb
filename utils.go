@@ -128,6 +128,7 @@ func GetModelCollection(model interface{}) (string, apperror.Error) {
 
 	// Check if it is a struct.
 	if typ.Kind() != reflect.Struct {
+		panic("invalid_model")
 		return "", &apperror.Err{
 			Code:    "invalid_model",
 			Message: fmt.Sprintf("Expected model struct or pointer to struct, got %v", typ),

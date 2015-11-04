@@ -83,7 +83,8 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 	})
 
 	It("Should count with 1 entry", func() {
-		Expect(backend.Q("test_models").Count()).To(Equal(1))
+		Expect(backend.Create(&Project{Name: "Test"})).ToNot(HaveOccurred())
+		Expect(backend.Q("projects").Count()).To(Equal(1))
 	})
 
 	It("Should update", func() {
@@ -242,7 +243,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			m2 := NewTestModel(1)
 
 			m.IntVal = 70
-			m2.IntVal = 70
+			m2.IntVal = 71
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 			Expect(backend.Create(&m2)).ToNot(HaveOccurred())
 
