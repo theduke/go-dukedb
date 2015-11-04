@@ -75,6 +75,23 @@ type TestModel struct {
 	IntVal int64
 }
 
+/**
+ * MarshalledModel.
+ */
+
+type MarshalledData struct {
+	IntVal    int
+	StringVal string
+}
+
+type MarshalledModel struct {
+	ID uint64
+
+	MapVal       map[string]interface{} `db:"marshal"`
+	StructVal    MarshalledData         `db:"marshal"`
+	StructPtrVal *MarshalledData        `db:"marshal"`
+}
+
 type HooksModel struct {
 	TestModel
 	CalledHooks []string `db:"-"`

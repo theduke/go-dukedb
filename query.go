@@ -922,6 +922,7 @@ func (q *Query) Normalize() apperror.Error {
 }
 
 func (q *Query) normalizeFilter(info *ModelInfo, filter Expression) apperror.Error {
+
 	switch f := filter.(type) {
 	case MultiExpression:
 		for _, e := range f.Expressions() {
@@ -935,10 +936,18 @@ func (q *Query) normalizeFilter(info *ModelInfo, filter Expression) apperror.Err
 			return err
 		}
 
+	case FilterExpression:
+		if err := q.normalizeFilter(info, f.Field()); err != nil {
+			return err
+		}
+		if err := q.normalizeFilter(info, f.Clause()); err != nil {
+			return err
+		}
+
 	case *ColFieldIdentifierExpr:
 		if f.Collection() != "" {
 			i := q.backend.ModelInfos().Find(f.Collection())
-			if i != nil {
+			if i == nil {
 				return apperror.New("unknown_collection",
 					fmt.Sprintf("The collection %v was not registered with the backend.", f.Collection()),
 					true)
@@ -953,11 +962,7 @@ func (q *Query) normalizeFilter(info *ModelInfo, filter Expression) apperror.Err
 		left, right := utils.StrSplitLeft(field, ".")
 		attr := info.FindAttribute(left)
 		if attr == nil || (right != "" && !attr.BackendEmbed()) {
-			return &apperror.Err{
-				Public:  true,
-				Code:    "unknown_field",
-				Message: fmt.Sprintf("The collection %v does not have a field %v", info.Collection(), field),
-			}
+			return nil
 		} else if right == "" {
 			// Non-nested field that exists.
 			f.SetField(attr.BackendName())

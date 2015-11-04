@@ -37,6 +37,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 		backend.RegisterModel(&TestParent{})
 		backend.RegisterModel(&HooksModel{})
 		backend.RegisterModel(&ValidationsModel{})
+		backend.RegisterModel(&MarshalledModel{})
 		backend.Build()
 	})
 
@@ -49,7 +50,17 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 	It("Should create collections", func() {
 		doSkip = true
-		err := backend.CreateCollection("test_models", "test_parents", "hooks_models", "validations_models", "tags", "projects", "tasks", "files")
+		err := backend.CreateCollection(
+			"test_models",
+			"test_parents",
+			"hooks_models",
+			"validations_models",
+			"marshalled_models",
+			"tags",
+			"projects",
+			"tasks",
+			"files",
+		)
 		Expect(err).ToNot(HaveOccurred())
 		doSkip = false
 	})
@@ -123,23 +134,8 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 	})
 
 	Describe("Marshalled fields", func() {
-		type MarshalledData struct {
-			IntVal    int
-			StringVal string
-		}
-
-		type MarshalledModel struct {
-			ID uint64
-
-			MapVal       map[string]interface{} `db:"marshal"`
-			StructVal    MarshalledData         `db:"marshal"`
-			StructPtrVal *MarshalledData        `db:"marshal"`
-		}
-
-		It("Should create collection with marshalled fields", func() {
-			backend.RegisterModel(&MarshalledModel{})
-			backend.Build()
-			Expect(backend.CreateCollection("marshalled_models")).ToNot(HaveOccurred())
+		BeforeEach(func() {
+			Expect(backend.Q("marshalled_models").Delete()).ToNot(HaveOccurred())
 		})
 
 		It("Should persist marshalled field with MAP and unmarshal on query", func() {

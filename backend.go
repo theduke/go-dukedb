@@ -623,6 +623,13 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 		}
 	}
 
+	// Call after query hook.
+	for _, model := range models {
+		if err := CallModelHook(b.backend, model, "AfterQuery"); err != nil {
+			return nil, err
+		}
+	}
+
 	if stats != nil {
 		stats.Finished = time.Now()
 		stats.Joining = stats.Finished.Sub(stats.Started) - stats.Normalizing - stats.Execution - stats.ModelBuild
