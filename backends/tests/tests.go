@@ -432,6 +432,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Q("projects").Delete()).ToNot(HaveOccurred())
 			Expect(backend.Q("tasks").Delete()).ToNot(HaveOccurred())
 			Expect(backend.Q("files").Delete()).ToNot(HaveOccurred())
+			Expect(backend.Q("tasks_tags").Delete()).ToNot(HaveOccurred())
 
 			// Rebuild relation info.
 			backend.Build()
@@ -819,6 +820,280 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 				todos := m.(*Project).Todos
 				Expect(todos).To(HaveLen(2))
+			})
+		})
+
+		Describe("M2M Collection", func() {
+
+			It("Should error when building col for unpersisted model", func() {
+				t := &Task{Name: "test"}
+
+				_, err := backend.M2M(t, "Tags")
+				Expect(err).To(HaveOccurred())
+				Expect(err.GetCode()).To(Equal("unpersisted_model"))
+			})
+
+			It("Should retrieve collection", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				_, err := backend.M2M(t, "Tags")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("Should .Add()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.Add(tags[0], tags[1])).ToNot(HaveOccurred())
+
+				Expect(col.All()).To(BeEquivalentTo([]interface{}{&tags[0], &tags[1]}))
+			})
+
+			It("Should .Remove()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+				Expect(col.Add(tags[0], tags[1], tags[2], tags[3])).ToNot(HaveOccurred())
+
+				Expect(col.Remove(tags[1], tags[2])).ToNot(HaveOccurred())
+
+				Expect(col.All()).To(BeEquivalentTo([]interface{}{&tags[0], &tags[3]}))
+			})
+
+			It("Should .Clear()", func() {
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t1 := &Task{Name: "test"}
+				Expect(backend.Create(t1)).ToNot(HaveOccurred())
+				col1, _ := backend.M2M(t1, "Tags")
+				Expect(col1.Add(tags[0], tags[1])).ToNot(HaveOccurred())
+
+				t2 := &Task{Name: "test2"}
+				Expect(backend.Create(t2)).ToNot(HaveOccurred())
+				col2, _ := backend.M2M(t2, "Tags")
+				Expect(col2.Add(tags[0], tags[1])).ToNot(HaveOccurred())
+
+				Expect(col1.Clear()).ToNot(HaveOccurred())
+
+				Expect(col1.Count()).To(Equal(0))
+				Expect(col2.All()).To(BeEquivalentTo([]interface{}{&tags[0], &tags[1]}))
+			})
+
+			It("Should .Replace()", func() {
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t1 := &Task{Name: "test"}
+				Expect(backend.Create(t1)).ToNot(HaveOccurred())
+				col1, _ := backend.M2M(t1, "Tags")
+				Expect(col1.Add(tags[0], tags[1])).ToNot(HaveOccurred())
+
+				Expect(col1.Replace(tags[2], tags[3])).ToNot(HaveOccurred())
+
+				Expect(col1.All()).To(BeEquivalentTo([]interface{}{&tags[2], &tags[3]}))
+			})
+
+			It("Should .Count()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.Count()).To(Equal(0))
+				Expect(col.Add(tags[0])).ToNot(HaveOccurred())
+				Expect(col.Count()).To(Equal(1))
+				Expect(col.Add(tags[1], tags[2])).ToNot(HaveOccurred())
+				Expect(col.Count()).To(Equal(3))
+				Expect(col.Clear()).ToNot(HaveOccurred())
+				Expect(col.Count()).To(Equal(0))
+			})
+
+			It("Should .Contains()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.Contains(tags[0])).To(BeFalse())
+
+				Expect(col.Add(tags[0], tags[3])).ToNot(HaveOccurred())
+				Expect(col.Contains(tags[0])).To(BeTrue())
+				Expect(col.Contains(&tags[3])).To(BeTrue())
+			})
+
+			It("Should .ContainsId()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.ContainsId(tags[0].Id)).To(BeFalse())
+
+				Expect(col.Add(tags[0], tags[3])).ToNot(HaveOccurred())
+				Expect(col.ContainsId(tags[0].Id)).To(BeTrue())
+				Expect(col.ContainsId(tags[3].Id)).To(BeTrue())
+			})
+
+			It("Should .GetById()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.ContainsId(tags[0].Id)).To(BeFalse())
+
+				Expect(col.Add(tags[0], tags[3])).ToNot(HaveOccurred())
+				Expect(col.ContainsId(tags[0].Id)).To(BeTrue())
+				Expect(col.ContainsId(tags[3].Id)).To(BeTrue())
+			})
+
+			It("Should .All()", func() {
+				t := &Task{Name: "test"}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+
+				Expect(col.All()).To(HaveLen(0))
+
+				Expect(col.Add(tags[0], tags[3])).ToNot(HaveOccurred())
+				Expect(col.All()).To(BeEquivalentTo([]interface{}{&tags[0], &tags[3]}))
+
+				Expect(col.Add(tags[1], tags[2])).ToNot(HaveOccurred())
+				Expect(col.All()).To(BeEquivalentTo([]interface{}{&tags[0], &tags[3], &tags[1], &tags[2]}))
+
+				Expect(col.Clear()).ToNot(HaveOccurred())
+				Expect(col.All()).To(HaveLen(0))
+			})
+		})
+
+		Describe("m2m", func() {
+			It("Should ignore unpersisted m2m", func() {
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+				Expect(col.Count()).To(Equal(0))
+			})
+
+			It("Should save m2m", func() {
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+				Expect(col.Count()).To(Equal(2))
+			})
+
+			It("Should auto-persist m2m", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoCreate(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+				Expect(col.Count()).To(Equal(2))
+			})
+
+			It("Should auto-update m2m", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoCreate(true)
+				rel.SetAutoUpdate(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				tags[0].Tag = "X1"
+				tags[1].Tag = "X2"
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				col, _ := backend.M2M(t, "Tags")
+				all, err := col.All()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(all).To(HaveLen(2))
+				Expect(all[0].(*Tag).Tag).To(Equal("X1"))
+				Expect(all[1].(*Tag).Tag).To(Equal("X2"))
+			})
+
+			It("Should auto-delete m2m", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoDelete(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				Expect(backend.Delete(t)).ToNot(HaveOccurred())
+
+				// If a m2m collection exists, check that is was cleared properly.
+				if backend.HasCollection("tasks_tags") {
+					q := backend.Q("tasks_tags").Filter("tasks.id", t.Id)
+					Expect(q.Count()).To(Equal(0))
+				}
+			})
+
+			It("Should join m2m", func() {
+				rel := backend.ModelInfo("tasks").Relation("Tags")
+				rel.SetAutoDelete(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				t := &Task{
+					Name: "test",
+					Tags: []Tag{tags[0], tags[1]},
+				}
+				Expect(backend.Create(t)).ToNot(HaveOccurred())
+
+				m, err := backend.Q("tasks").Filter("id", t.Id).Join("Tags").First()
+				Expect(err).ToNot(HaveOccurred())
+
+				taskTags := m.(*Task).Tags
+				Expect(taskTags).To(HaveLen(2))
 			})
 		})
 

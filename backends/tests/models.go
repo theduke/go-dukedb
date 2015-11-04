@@ -49,7 +49,7 @@ type Task struct {
 	File *File
 
 	// m2m with struct slice.
-	tags []Tag `db:"m2m"`
+	Tags []Tag `db:"m2m"`
 
 	// m2m with struct pointer slice.
 	categories []*Tag `db:"m2m"`

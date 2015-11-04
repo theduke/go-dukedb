@@ -374,6 +374,13 @@ func (q *Query) Last(targetModel ...interface{}) (interface{}, apperror.Error) {
 	return q.backend.Last(q, targetModel...)
 }
 
+func (q *Query) Pluck() ([]map[string]interface{}, apperror.Error) {
+	if q.backend == nil {
+		panic("Calling .Pluck() on query without backend")
+	}
+	return q.backend.Pluck(q)
+}
+
 func (q *Query) Count() (int, apperror.Error) {
 	if q.backend == nil {
 		panic("Calling .Count() on query without backend")

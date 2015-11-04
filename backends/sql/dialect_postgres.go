@@ -51,7 +51,9 @@ func (d *PostgresDialect) PrepareExpression(expression Expression) apperror.Erro
 		info := d.modelInfo.Find(e.Collection())
 		if info != nil {
 			pk := info.PkAttribute()
-			e.AddField(NewFieldSelector(pk.Name(), info.BackendName(), pk.BackendName(), pk.Type()))
+			if pk != nil && pk.AutoIncrement() {
+				e.AddField(NewFieldSelector(pk.Name(), info.BackendName(), pk.BackendName(), pk.Type()))
+			}
 		}
 
 	case *SelectStmt:

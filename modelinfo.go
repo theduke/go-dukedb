@@ -614,7 +614,7 @@ func (info *ModelInfo) BuildCreateStmt(withReferences bool) *CreateCollectionStm
 
 		// Add unique fields constraint to collection if specified.
 		if len(attr.isUniqueWith) > 0 {
-			fields := make([]Expression, 0)
+			fields := []Expression{NewIdExpr(attr.BackendName())}
 			for _, name := range attr.isUniqueWith {
 				fields = append(fields, NewIdExpr(name))
 			}

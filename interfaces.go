@@ -31,7 +31,7 @@ type Cursor interface {
 	Next(targetModel ...interface{}) (interface{}, apperror.Error)
 }
 
-type JoinAssigner func(objs, joinedModels []interface{}, joinQ *RelationQuery)
+type JoinAssigner func(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{})
 
 type Backend interface {
 	// Returns the name of the backend.
@@ -208,7 +208,7 @@ type Backend interface {
 	// C(r)UD methods.
 
 	// Create creates the model in the backend.
-	Create(model interface{}) apperror.Error
+	Create(model ...interface{}) apperror.Error
 
 	CreateByMap(collection string, data map[string]interface{}) (result interface{}, err apperror.Error)
 
@@ -235,12 +235,11 @@ type M2MCollection interface {
 	Add(models ...interface{}) apperror.Error
 	Remove(models ...interface{}) apperror.Error
 	Clear() apperror.Error
-	Replace(models []interface{}) apperror.Error
+	Replace(models ...interface{}) apperror.Error
 
 	Count() (int, apperror.Error)
 	Contains(model interface{}) (bool, apperror.Error)
 	ContainsId(id interface{}) (bool, apperror.Error)
-	GetById(id interface{}) (interface{}, apperror.Error)
 	All() ([]interface{}, apperror.Error)
 
 	Q() *Query

@@ -92,10 +92,10 @@ func (c *DefaultM2MCollection) Remove(models ...interface{}) apperror.Error {
 }
 
 func (c *DefaultM2MCollection) Clear() apperror.Error {
-	return c.backend.Q(c.relation.BackendName()).Delete()
+	return c.backend.Q(c.relation.BackendName()).Filter(c.localFieldName, c.localFieldValue).Delete()
 }
 
-func (c *DefaultM2MCollection) Replace(models []interface{}) apperror.Error {
+func (c *DefaultM2MCollection) Replace(models ...interface{}) apperror.Error {
 	if err := c.Clear(); err != nil {
 		return err
 	}
@@ -126,19 +126,10 @@ func (c *DefaultM2MCollection) ContainsId(id interface{}) (bool, apperror.Error)
 	return count > 0, nil
 }
 
-func (c *DefaultM2MCollection) GetById(id interface{}) (interface{}, apperror.Error) {
-	flag, err := c.ContainsId(id)
-	if err != nil {
-		return nil, err
-	} else if !flag {
-		return nil, nil
-	}
-	return c.backend.FindOne(c.relation.RelatedModel().Collection(), id)
-}
-
 func (c *DefaultM2MCollection) Q() *Query {
 	q := c.backend.Q(c.relation.RelatedModel().Collection())
-	jq := RelQCustom(q, c.relation.BackendName(), c.relation.ForeignField(), c.foreignFieldName, JOIN_INNER)
+	localField := c.relation.RelatedModel().Attribute(c.relation.ForeignField()).BackendName()
+	jq := RelQCustom(q, c.relation.BackendName(), localField, c.foreignFieldName, JOIN_INNER)
 	q.JoinQ(jq)
 	return q
 }
@@ -858,25 +849,32 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 	} else {
 		// M2M query!
 
+		//localField := baseInfo.Attribute(relation.LocalField()).BackendName()
+		foreignField := relatedInfo.Attribute(relation.ForeignField()).BackendName()
+
 		// Relation.BackendName holds the name of the m2m collection.
-		localField := relatedInfo.BackendName() + "_" + relation.ForeignField()
-		foreignField := baseInfo.BackendName() + "_" + relation.LocalField()
-		relQ := RelQCustom(resultQuery, relation.BackendName(), localField, foreignField, JOIN_INNER)
+		localFieldName := relatedInfo.BackendName() + "." + foreignField
+
+		relQ := RelQCustom(resultQuery, relation.BackendName(), foreignField, localFieldName, JOIN_INNER)
 
 		resultQuery.JoinQ(relQ)
 
 		if len(baseModels) > 0 {
 			// Basemodels present, so limit with them.
 			operator := OPERATOR_EQ
+			var filterVal interface{}
 			if len(filterArgs) > 1 {
 				operator = OPERATOR_IN
+				filterVal = filterArgs
+			} else {
+				filterVal = filterArgs[0]
 			}
-			filter := NewFieldValFilter(relation.BackendName(), relation.LocalField(), operator, filterArgs)
+
+			localField := baseInfo.Attribute(relation.LocalField()).BackendName()
+			localFieldName := baseInfo.BackendName() + "." + localField
+			filter := NewFieldValFilter(relation.BackendName(), localFieldName, operator, filterVal)
 			resultQuery.FilterExpr(filter)
 		}
-	}
-
-	if relation.RelationType() == RELATION_TYPE_HAS_ONE {
 	}
 
 	return resultQuery, nil
@@ -1036,7 +1034,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 				related, err := item.Struct()
 				if err != nil {
 					// This should never happen, just be save.
-					return apperror.Wrap(err, "invalid_has_many_struct")
+					panic(err)
 				}
 
 				if err := b.persistBelongsToRelation(action, beforePersist, info, r, relation, related); err != nil {
@@ -1046,7 +1044,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 		}
 
 		if relation.RelationType() == RELATION_TYPE_M2M {
-			if (action == "create" && relation.AutoCreate()) || (action == "update" && relation.AutoUpdate()) && !beforePersist {
+			if (action == "create" || action == "update") && !beforePersist {
 				slice, err := r.Field(relation.Name()).Slice()
 				if err != nil {
 					// This should never happen, just be save.
@@ -1064,7 +1062,6 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 					if item.IsPtr() && item.IsZero() {
 						continue
 					}
-
 					related, err := item.Struct()
 					if err != nil {
 						// Should never happen, just be save.
@@ -1074,11 +1071,11 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 					hasId, err2 := relatedInfo.ModelHasId(related.AddrInterface())
 					if err2 != nil {
 						// Should never happen, just be save.
-						return err2
+						panic(err2)
 					}
 
 					if !hasId {
-						// Related model does is new.
+						// Related model is new.
 						if !relation.AutoCreate() {
 							// No auto-create enabled, so ignore.
 							continue
@@ -1088,9 +1085,14 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 						if err := b.backend.Create(related.AddrInterface()); err != nil {
 							return err
 						}
+					} else if relation.AutoUpdate() {
+						// Auto-update enabled, so update item.
+						if err := b.backend.Update(related.AddrInterface()); err != nil {
+							return err
+						}
 					}
 
-					newModels = append(newModels, item.Interface())
+					newModels = append(newModels, related.AddrInterface())
 				}
 
 				m2m, err2 := b.backend.M2M(model, relation.Name())
@@ -1098,7 +1100,7 @@ func (b *BaseBackend) PersistRelations(action string, beforePersist bool, info *
 					return err2
 				}
 
-				if err := m2m.Replace(newModels); err != nil {
+				if err := m2m.Replace(newModels...); err != nil {
 					return err
 				}
 			}
@@ -1216,6 +1218,15 @@ func (b *BaseBackend) M2M(model interface{}, name string) (M2MCollection, apperr
 		}
 	}
 
+	if flag, err := info.ModelHasId(model); err != nil {
+		return nil, err
+	} else if !flag {
+		return nil, &apperror.Err{
+			Code:    "unpersisted_model",
+			Message: "Can't retrieve a m2m collection for an unpersisted model.",
+		}
+	}
+
 	return NewM2MCollection(b.backend, info.Relation(name), model)
 }
 
@@ -1223,12 +1234,7 @@ func (b *BaseBackend) M2M(model interface{}, name string) (M2MCollection, apperr
  * Create, update, delete.
  */
 
-func (b *BaseBackend) Create(model interface{}) apperror.Error {
-	info, err := b.backend.InfoForModel(model)
-	if err != nil {
-		return err
-	}
-
+func (b *BaseBackend) doCreate(info *ModelInfo, model interface{}) apperror.Error {
 	// Call BeforeCreate hook on model.
 	if err := CallModelHook(b.backend, model, "BeforeCreate"); err != nil {
 		return err
@@ -1277,6 +1283,25 @@ func (b *BaseBackend) Create(model interface{}) apperror.Error {
 	// Call backend-wide after_create hooks.
 	for _, handler := range b.GetHooks("after_create") {
 		handler(b.backend, model)
+	}
+
+	return nil
+}
+
+func (b *BaseBackend) Create(models ...interface{}) apperror.Error {
+	if len(models) < 1 {
+		return apperror.New("no_models")
+	}
+
+	info, err := b.backend.InfoForModel(models[0])
+	if err != nil {
+		return err
+	}
+
+	for _, model := range models {
+		if err := b.doCreate(info, model); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1519,7 +1544,7 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 
 	if len(res) > 0 {
 		if assigner := resultQuery.GetJoinResultAssigner(); assigner != nil {
-			assigner(objs, res, joinQ)
+			assigner(relation, joinQ, objs, res)
 		} else {
 			assignJoinModels(relation, joinQ, objs, res)
 		}
@@ -1537,6 +1562,10 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 	}
 
 	return nil
+}
+
+func assignM2MJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{}) {
+
 }
 
 func assignJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{}) {

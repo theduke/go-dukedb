@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/theduke/go-apperror"
+	"github.com/theduke/go-reflector"
 )
 
 type ExpressionTranslator interface {
@@ -304,8 +305,38 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 			return err
 		}
 		t.W(" ", e.Operator(), " ")
-		if err := t.translator.Translate(e.Clause()); err != nil {
-			return err
+
+		if e.Operator() != OPERATOR_IN {
+			if err := t.translator.Translate(e.Clause()); err != nil {
+				return err
+			}
+		} else {
+			val, ok := e.Clause().(*ValueExpr)
+			if !ok {
+				return apperror.New("invalid_in_filter")
+			}
+
+			r, err := reflector.Reflect(val.Value()).Slice()
+			if err != nil {
+				return apperror.New("invalid_in_filter_value")
+			}
+
+			if r.Len() < 1 {
+				return apperror.New("invalid_in_filter_no_values")
+			}
+
+			t.W("(")
+
+			lastIndex := r.Len() - 1
+			for i, item := range r.Items() {
+				t.W(t.translator.Placeholder())
+				if i < lastIndex {
+					t.W(",")
+				}
+
+				t.Arg(NewValueExpr(item.Interface(), item.Type()))
+			}
+			t.W(")")
 		}
 
 	case *SortExpr:
