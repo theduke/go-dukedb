@@ -40,7 +40,7 @@ type Query struct {
 	// result and assign based on it.
 	joinResultAssigner JoinAssigner
 
-	rawResult []map[string]interface{}
+	rawResult []interface{}
 }
 
 func NewQuery(collection string, backend Backend) *Query {

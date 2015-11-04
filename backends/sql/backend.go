@@ -226,7 +226,7 @@ func (b *Backend) Exec(statement Expression) apperror.Error {
 	return nil
 }
 
-func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]map[string]interface{}, apperror.Error) {
+func (b *Backend) ExecQuery(statement FieldedExpression) ([]interface{}, apperror.Error) {
 	dialect := b.dialect.New()
 	if err := dialect.PrepareExpression(statement); err != nil {
 		return nil, err
@@ -264,7 +264,7 @@ func (b *Backend) ExecQuery(statement FieldedExpression, resultAsMap bool) ([]ma
 		}
 	}
 
-	result := make([]map[string]interface{}, 0)
+	result := make([]interface{}, 0)
 	for rows.Next() {
 		//values := make([]reflect.Value, len(cols), len(cols))
 		values := make([]interface{}, len(cols), len(cols))

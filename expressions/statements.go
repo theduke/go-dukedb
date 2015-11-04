@@ -601,6 +601,8 @@ type mutationStmt struct {
 	fieldedExprMixin
 	collection string
 	values     []*FieldValueExpr
+
+	rawValue interface{}
 }
 
 func (e *mutationStmt) Validate() apperror.Error {
@@ -626,6 +628,14 @@ func (e mutationStmt) Values() []*FieldValueExpr {
 
 func (e *mutationStmt) SetValues(vals []*FieldValueExpr) {
 	e.values = vals
+}
+
+func (e *mutationStmt) RawValue() interface{} {
+	return e.rawValue
+}
+
+func (e *mutationStmt) SetRawValue(x interface{}) {
+	e.rawValue = x
 }
 
 func (s mutationStmt) GetIdentifiers() []Expression {

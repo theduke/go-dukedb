@@ -592,7 +592,7 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 	}
 
 	stmt := q.GetStatement()
-	result, err := b.backend.ExecQuery(stmt, false)
+	result, err := b.backend.ExecQuery(stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -603,24 +603,33 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 		stats.Execution = time.Now().Sub(stats.Started) - stats.Normalizing
 	}
 
-	models := make([]interface{}, 0)
+	models := result
 
-	for _, data := range result {
-		model, err := info.ModelFromMap(data)
-		if err != nil {
-			return nil, err
+	if len(result) > 0 {
+		_, isMapData := result[0].(map[string]interface{})
+		if isMapData {
+			// Received map data, so convert to models first.
+			models = make([]interface{}, len(result), len(result))
+			for i, data := range result {
+				model, err := info.ModelFromMap(data.(map[string]interface{}))
+				if err != nil {
+					return nil, err
+				}
+				models[i] = model
+			}
 		}
-		models = append(models, model)
 	}
 
 	if stats != nil {
 		stats.ModelBuild = time.Now().Sub(stats.Started) - stats.Normalizing - stats.Execution
 	}
-
 	if len(q.GetJoins()) > 0 {
 		if err := b.DoJoins(info, q, models); err != nil {
 			return nil, err
 		}
+	}
+	if stats != nil {
+		stats.Joining = stats.Finished.Sub(stats.Started) - stats.Normalizing - stats.Execution - stats.ModelBuild
 	}
 
 	// Call after query hook.
@@ -632,7 +641,6 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 
 	if stats != nil {
 		stats.Finished = time.Now()
-		stats.Joining = stats.Finished.Sub(stats.Started) - stats.Normalizing - stats.Execution - stats.ModelBuild
 		stats.Total = stats.Finished.Sub(stats.Started)
 
 		b.backend.Logger().WithFields(logrus.Fields{
@@ -758,7 +766,30 @@ func (b *BaseBackend) Count(q *Query) (int, apperror.Error) {
 }
 
 func (b *BaseBackend) Pluck(q *Query) ([]map[string]interface{}, apperror.Error) {
-	return b.backend.ExecQuery(q.GetStatement(), true)
+	res, err := b.backend.ExecQuery(q.GetStatement())
+	if err != nil {
+		return nil, err
+	}
+
+	info := b.ModelInfos().Find(q.GetCollection())
+
+	maps := make([]map[string]interface{}, len(res), len(res))
+	for i, item := range res {
+		if m, ok := item.(map[string]interface{}); ok {
+			maps[i] = m
+		} else {
+			if info == nil {
+				panic("No map data and no collection info")
+			}
+			m, err := info.ModelToMap(item, false, false, true)
+			if err != nil {
+				return nil, err
+			}
+			maps[i] = m
+		}
+	}
+
+	return maps, nil
 }
 
 /**
@@ -1287,14 +1318,15 @@ func (b *BaseBackend) doCreate(info *ModelInfo, model interface{}) apperror.Erro
 
 	// Build a CreateStatement.
 	stmt := NewCreateStmt(info.BackendName(), values)
+	stmt.SetRawValue(model)
 
-	res, err := b.backend.ExecQuery(stmt, true)
+	res, err := b.backend.ExecQuery(stmt)
 	if err != nil {
 		return err
 	}
 
 	if len(res) == 1 {
-		if err := info.UpdateModelFromData(model, res[0]); err != nil {
+		if err := info.UpdateModelFromData(model, res[0].(map[string]interface{})); err != nil {
 			return err
 		}
 	}
@@ -1355,8 +1387,9 @@ func (b *BaseBackend) CreateByMap(collection string, data map[string]interface{}
 	for name, val := range data {
 		values = append(values, NewFieldVal(name, val))
 	}
-	stmt := NewCreateStmt(collection, values)
-	res, err := b.backend.ExecQuery(stmt, true)
+	stmt := NewCreateStmt(info.BackendName(), values)
+	stmt.SetRawValue(data)
+	res, err := b.backend.ExecQuery(stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -1377,7 +1410,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 	if err != nil {
 		return err
 	}
-	if reflector.Reflect(id).IsZero() {
+	if id == nil {
 		return apperror.New("cant_update_model_without_id",
 			fmt.Sprintf("Trying to update model %v with zero id", info.Collection()))
 	}
@@ -1405,6 +1438,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 
 	// Build a update statement.
 	stmt := NewUpdateStmt(info.BackendName(), values, info.ModelSelect(model))
+	stmt.SetRawValue(model)
 
 	if err := b.backend.Exec(stmt); err != nil {
 		return err
@@ -1455,6 +1489,7 @@ func (b *BaseBackend) UpdateByMap(query *Query, data map[string]interface{}) app
 		values = append(values, NewFieldVal(key, val))
 	}
 	stmt := NewUpdateStmt(collection, values, query.GetStatement())
+	stmt.SetRawValue(data)
 
 	return b.backend.Exec(stmt)
 }
@@ -1604,8 +1639,9 @@ func assignM2MJoinModels(relation *Relation, joinQ *RelationQuery, resultQuery *
 	}
 
 	resultMap := make(map[interface{}][]interface{})
-	for _, row := range resultQuery.rawResult {
-		joinQ.backend.Logger().Infof("foreign field: %v", joinQ.foreignField)
+	for _, rawRow := range resultQuery.rawResult {
+		row := rawRow.(map[string]interface{})
+
 		id, err := reflector.Reflect(row[joinQ.foreignField]).ConvertToType(localFieldInfo.Type())
 		if err != nil {
 			panic(err)

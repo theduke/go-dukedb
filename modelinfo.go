@@ -391,7 +391,12 @@ func (info *ModelInfo) DetermineModelId(model interface{}) (interface{}, apperro
 	if err != nil {
 		return nil, apperror.Wrap(err, "invalid_model")
 	}
-	return r.Field(info.PkAttribute().Name()).Interface(), nil
+	field := r.Field(info.PkAttribute().Name())
+
+	if field.IsZero() {
+		return nil, nil
+	}
+	return field.Interface(), nil
 }
 
 func (info *ModelInfo) MustDetermineModelId(model interface{}) interface{} {
