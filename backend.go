@@ -597,6 +597,8 @@ func (b *BaseBackend) Query(q *Query, targetSlice ...interface{}) ([]interface{}
 		return nil, err
 	}
 
+	q.rawResult = result
+
 	if stats != nil {
 		stats.Execution = time.Now().Sub(stats.Started) - stats.Normalizing
 	}
@@ -856,6 +858,10 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 		localFieldName := relatedInfo.BackendName() + "." + foreignField
 
 		relQ := RelQCustom(resultQuery, relation.BackendName(), foreignField, localFieldName, JOIN_INNER)
+
+		q.localField = relation.ForeignField()
+		q.foreignField = baseInfo.BackendName() + "." + baseInfo.Attribute(relation.localField).BackendName()
+		q.SetJoinResultAssigner(assignM2MJoinModels)
 
 		resultQuery.JoinQ(relQ)
 
@@ -1544,7 +1550,7 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 
 	if len(res) > 0 {
 		if assigner := resultQuery.GetJoinResultAssigner(); assigner != nil {
-			assigner(relation, joinQ, objs, res)
+			assigner(relation, joinQ, resultQuery, objs, res)
 		} else {
 			assignJoinModels(relation, joinQ, objs, res)
 		}
@@ -1564,8 +1570,52 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 	return nil
 }
 
-func assignM2MJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{}) {
+func assignM2MJoinModels(relation *Relation, joinQ *RelationQuery, resultQuery *Query, objs, joinedModels []interface{}) {
+	localFieldInfo := relation.Model().Attribute(relation.LocalField())
+	foreignFieldInfo := relation.RelatedModel().Attribute(relation.ForeignField())
 
+	joinedModelMap := make(map[interface{}]interface{})
+	for _, model := range joinedModels {
+		val, err := reflector.Reflect(model).MustStruct().FieldValue(joinQ.localField)
+		if err != nil {
+			panic(err)
+		}
+		joinedModelMap[val] = model
+	}
+
+	resultMap := make(map[interface{}][]interface{})
+	for _, row := range resultQuery.rawResult {
+		id, err := reflector.Reflect(row[joinQ.foreignField]).ConvertToType(localFieldInfo.Type())
+		if err != nil {
+			panic(err)
+		}
+		foreignId, err := reflector.Reflect(row[joinQ.localField]).ConvertToType(foreignFieldInfo.Type())
+		if err != nil {
+			panic(err)
+		}
+		resultMap[id] = append(resultMap[id], joinedModelMap[foreignId])
+	}
+
+	for _, model := range objs {
+		r := reflector.Reflect(model).MustStruct()
+
+		val, err := r.FieldValue(relation.LocalField())
+		if err != nil {
+			panic("Join result assignment error: " + err.Error())
+		}
+
+		if joins, ok := resultMap[val]; ok && len(joins) > 0 {
+			if relation.IsMany() {
+				if err := r.Field(relation.Name()).SetValue(joins, true); err != nil {
+					panic(err)
+				}
+			} else {
+				if err := r.Field(relation.Name()).SetValue(joins[0], true); err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
 }
 
 func assignJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{}) {
@@ -1593,9 +1643,6 @@ func assignJoinModels(relation *Relation, joinQ *RelationQuery, objs, joinedMode
 		r := reflector.Reflect(model).MustStruct()
 
 		val, err := r.FieldValue(joinedField)
-		if err != nil {
-			panic(err)
-		}
 		if err != nil {
 			panic("Join result assignment error: " + err.Error())
 		}

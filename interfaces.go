@@ -31,7 +31,7 @@ type Cursor interface {
 	Next(targetModel ...interface{}) (interface{}, apperror.Error)
 }
 
-type JoinAssigner func(relation *Relation, joinQ *RelationQuery, objs, joinedModels []interface{})
+type JoinAssigner func(relation *Relation, joinQ *RelationQuery, resultQuery *Query, objs, joinedModels []interface{})
 
 type Backend interface {
 	// Returns the name of the backend.

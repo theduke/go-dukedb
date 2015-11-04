@@ -39,6 +39,8 @@ type Query struct {
 	// For example, the SQL backend will use a closure to keep track of the raw query
 	// result and assign based on it.
 	joinResultAssigner JoinAssigner
+
+	rawResult []map[string]interface{}
 }
 
 func NewQuery(collection string, backend Backend) *Query {
