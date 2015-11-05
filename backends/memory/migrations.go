@@ -27,7 +27,7 @@ func (b Backend) DetermineMigrationVersion() (int, apperror.Error) {
 }
 
 type MigrationAttempt struct {
-	db.BaseMigrationAttemptIntID
+	db.BaseMigrationAttemptIntId
 }
 
 func (b Backend) NewMigrationAttempt() db.MigrationAttempt {

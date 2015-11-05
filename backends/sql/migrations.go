@@ -59,7 +59,7 @@ func (b Backend) IsMigrationLocked() (bool, apperror.Error) {
 		lastAttempt = model.(*MigrationAttempt)
 	}
 
-	if lastAttempt.ID != 0 && lastAttempt.FinishedAt.IsZero() {
+	if lastAttempt.Id != 0 && lastAttempt.FinishedAt.IsZero() {
 		// Last attempt was aborted. DB is locked.
 		return true, nil
 	}
@@ -78,7 +78,7 @@ func (b Backend) DetermineMigrationVersion() (int, apperror.Error) {
 }
 
 type MigrationAttempt struct {
-	db.BaseMigrationAttemptIntID
+	db.BaseMigrationAttemptIntId
 }
 
 func (b Backend) NewMigrationAttempt() db.MigrationAttempt {

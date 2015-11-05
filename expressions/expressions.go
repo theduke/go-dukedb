@@ -753,6 +753,10 @@ func NewAndExpr(exprs ...Expression) *AndExpr {
 	return e
 }
 
+func And(exprs ...Expression) *AndExpr {
+	return NewAndExpr(exprs...)
+}
+
 /**
  * Or.
  */
@@ -772,6 +776,10 @@ func NewOrExpr(exprs ...Expression) *OrExpr {
 	or := &OrExpr{}
 	or.expressions = exprs
 	return or
+}
+
+func Or(exprs ...Expression) *OrExpr {
+	return NewOrExpr(exprs...)
 }
 
 /**

@@ -8,19 +8,19 @@ import (
 )
 
 /**
- * StrIDModel.
+ * StrIdModel.
  */
 
-// Base model with a string ID.
+// Base model with a string Id.
 type StrIdModel struct {
 	Id string
 }
 
-func (m *StrIdModel) GetID() interface{} {
+func (m *StrIdModel) GetId() interface{} {
 	return m.Id
 }
 
-func (m *StrIdModel) SetID(id interface{}) error {
+func (m *StrIdModel) SetId(id interface{}) error {
 	if strId, ok := id.(string); ok {
 		m.Id = strId
 		return nil
@@ -34,29 +34,29 @@ func (m *StrIdModel) SetID(id interface{}) error {
 	return nil
 }
 
-func (m *StrIdModel) GetStrID() string {
+func (m *StrIdModel) GetStrId() string {
 	return m.Id
 }
 
-func (m *StrIdModel) SetStrID(rawId string) error {
+func (m *StrIdModel) SetStrId(rawId string) error {
 	m.Id = rawId
 	return nil
 }
 
 /**
- * IntIDModel.
+ * IntIdModel.
  */
 
-// Base model with a integer ID.
+// Base model with a integer Id.
 type IntIdModel struct {
 	Id uint64
 }
 
-func (m *IntIdModel) GetID() interface{} {
+func (m *IntIdModel) GetId() interface{} {
 	return m.Id
 }
 
-func (m *IntIdModel) SetID(id interface{}) error {
+func (m *IntIdModel) SetId(id interface{}) error {
 	if intId, ok := id.(uint64); ok {
 		m.Id = intId
 		return nil
@@ -70,14 +70,14 @@ func (m *IntIdModel) SetID(id interface{}) error {
 	return nil
 }
 
-func (m *IntIdModel) GetStrID() string {
+func (m *IntIdModel) GetStrId() string {
 	if m.Id == 0 {
 		return ""
 	}
 	return strconv.FormatUint(m.Id, 10)
 }
 
-func (m *IntIdModel) SetStrID(rawId string) error {
+func (m *IntIdModel) SetStrId(rawId string) error {
 	id, err := strconv.ParseUint(rawId, 10, 64)
 	if err != nil {
 		return err
@@ -92,8 +92,8 @@ func (m *IntIdModel) SetStrID(rawId string) error {
  */
 
 type TimeStampedModel struct {
-	CreatedAt time.Time `db:"not-null"`
-	UpdatedAt time.Time `db:"not-null"`
+	CreatedAt time.Time `db:"required"`
+	UpdatedAt time.Time `db:"required"`
 }
 
 func (m *TimeStampedModel) BeforeCreate(b Backend) error {

@@ -524,7 +524,7 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 	return db.BackendCreate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
 		collection := info.Collection
 
-		id := b.MustModelStrID(m)
+		id := b.MustModelStrId(m)
 		if !db.IsZero(id) {
 			if _, ok := b.data[collection][id]; ok {
 				return &apperror.Err{
@@ -535,7 +535,7 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 		} else {
 			// Generate new id.
 			id = strconv.Itoa(len(b.data[collection]) + 1)
-			if err := b.SetModelID(m, id); err != nil {
+			if err := b.SetModelId(m, id); err != nil {
 				return &apperror.Err{
 					Code:    "set_id_error",
 					Message: fmt.Sprintf("Error while setting the id %v on model %v", id, collection),
@@ -550,7 +550,7 @@ func (b *Backend) Create(m interface{}) apperror.Error {
 
 func (b *Backend) Update(m interface{}) apperror.Error {
 	return db.BackendUpdate(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
-		b.data[info.Collection][b.MustModelStrID(m)] = m
+		b.data[info.Collection][b.MustModelStrId(m)] = m
 		return nil
 	})
 }
@@ -569,13 +569,13 @@ func (b *Backend) UpdateByMap(m interface{}, data map[string]interface{}) apperr
 		return err
 	}
 
-	b.data[info.Collection][b.MustModelStrID(m)] = m
+	b.data[info.Collection][b.MustModelStrId(m)] = m
 	return nil
 }
 
 func (b *Backend) Delete(m interface{}) apperror.Error {
 	return db.BackendDelete(b, m, func(info *db.ModelInfo, m interface{}) apperror.Error {
-		id := b.MustModelStrID(m)
+		id := b.MustModelStrId(m)
 		collection := info.Collection
 
 		if _, ok := b.data[collection][id]; !ok {
@@ -655,11 +655,11 @@ func (c M2MCollection) Count() int {
 }
 
 func (c M2MCollection) Contains(m interface{}) bool {
-	return c.GetByID(c.Backend.MustModelID(m)) != nil
+	return c.GetById(c.Backend.MustModelId(m)) != nil
 }
 
-func (c M2MCollection) ContainsID(id interface{}) bool {
-	return c.GetByID(id) != nil
+func (c M2MCollection) ContainsId(id interface{}) bool {
+	return c.GetById(id) != nil
 }
 
 func (c M2MCollection) All() []interface{} {
@@ -667,10 +667,10 @@ func (c M2MCollection) All() []interface{} {
 	return slice
 }
 
-func (c M2MCollection) GetByID(id interface{}) interface{} {
+func (c M2MCollection) GetById(id interface{}) interface{} {
 	for i := 0; i < c.items.Len(); i++ {
 		model := c.items.Index(i).Interface()
-		if c.Backend.MustModelID(model) == id {
+		if c.Backend.MustModelId(model) == id {
 			return model
 		}
 	}
@@ -690,11 +690,11 @@ func (c *M2MCollection) Add(items ...interface{}) apperror.Error {
 
 func (c *M2MCollection) Delete(items ...interface{}) apperror.Error {
 	for _, item := range items {
-		itemId := c.Backend.MustModelID(item)
+		itemId := c.Backend.MustModelId(item)
 
 		for i := 0; i < c.items.Len(); i++ {
 			curItem := c.items.Index(i).Elem().Interface()
-			curItemId := c.Backend.MustModelID(curItem)
+			curItemId := c.Backend.MustModelId(curItem)
 
 			if curItemId == itemId {
 				// Replace all items after the one to delete.

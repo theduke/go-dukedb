@@ -214,20 +214,20 @@ func (a *BaseMigrationAttempt) SetComplete(x bool) {
 	a.Complete = x
 }
 
-type BaseMigrationAttemptIntID struct {
+type BaseMigrationAttemptIntId struct {
 	BaseMigrationAttempt
-	ID uint64
+	Id uint64
 }
 
-func (a *BaseMigrationAttemptIntID) GetID() string {
-	return strconv.FormatUint(a.ID, 10)
+func (a *BaseMigrationAttemptIntId) GetId() string {
+	return strconv.FormatUint(a.Id, 10)
 }
 
-func (a *BaseMigrationAttemptIntID) SetID(x string) error {
+func (a *BaseMigrationAttemptIntId) SetId(x string) error {
 	id, err := strconv.ParseUint(x, 10, 64)
 	if err != nil {
 		return err
 	}
-	a.ID = id
+	a.Id = id
 	return nil
 }

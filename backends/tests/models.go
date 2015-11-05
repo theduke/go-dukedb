@@ -43,7 +43,7 @@ type Task struct {
 
 	// has-one with struct pointer.
 	Project2   *Project
-	Project2ID *Project
+	Project2Id *Project
 
 	// belongs-to with struct.
 	File *File
@@ -56,20 +56,20 @@ type Task struct {
 }
 
 type File struct {
-	ID       uint64
+	Id       uint64
 	TaskId   uint64
 	Filename string `db:"required"`
 }
 
 type TestModel struct {
-	ID uint64
+	Id uint64
 
 	// For inferred belongs-to
-	TestParentID uint64 `db:"ignore-zero"`
+	TestParentId uint64 `db:"ignore-zero"`
 
 	// For explicit has-one/belongs-to
-	MyParent   *TestParent `db:"has-one:MyParentID:ID"`
-	MyParentID uint64      `db:"ignore-zero"`
+	MyParent   *TestParent `db:"has-one:MyParentId:Id"`
+	MyParentId uint64      `db:"ignore-zero"`
 
 	StrVal string
 	IntVal int64
@@ -85,7 +85,7 @@ type MarshalledData struct {
 }
 
 type MarshalledModel struct {
-	ID uint64
+	Id uint64
 
 	MapVal       map[string]interface{} `db:"marshal"`
 	StructVal    MarshalledData         `db:"marshal"`
@@ -160,19 +160,19 @@ func (m *ValidationsModel) Collection() string {
 type TestParent struct {
 	TestModel
 
-	Child   TestModel `db:"has-one:ChildID:ID;auto-persist;"`
-	ChildID uint64
+	Child   TestModel `db:"has-one:ChildId:Id;auto-persist;"`
+	ChildId uint64
 
-	ChildPtr *TestModel `db:"belongs-to:ID:ID;auto-persist;"`
+	ChildPtr *TestModel `db:"belongs-to:Id:Id;auto-persist;"`
 
 	ChildSlice    []TestModel
-	ChildSlice2   []TestModel  `db:"belongs-to:ID:MyParentID"`
+	ChildSlice2   []TestModel  `db:"belongs-to:Id:MyParentId"`
 	ChildSlicePtr []*TestModel `db:"m2m"`
 }
 
 func NewTestModel(index int) TestModel {
 	return TestModel{
-		//ID:     uint64(index),
+		//Id:     uint64(index),
 		StrVal: fmt.Sprintf("str%v", index),
 		IntVal: int64(index),
 	}

@@ -283,8 +283,8 @@ func BuildModelInfo(model interface{}) (*ModelInfo, apperror.Error) {
 
 	// Ensure primary key exists.
 	if info.PkAttribute() == nil {
-		// No explicit primary key found, check for ID field.
-		if attr := info.Attribute("ID"); attr != nil {
+		// No explicit primary key found, check for Id field.
+		if attr := info.Attribute("Id"); attr != nil {
 			attr.SetIsPrimaryKey(true)
 		} else if attr := info.Attribute("Id"); attr != nil {
 			attr.SetIsPrimaryKey(true)
@@ -345,6 +345,12 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 		var structType reflect.Type
 
 		fieldR := modelVal.Field(name)
+
+		// Ignore invalid fields (for example fields that only contain an interface{} variable).
+		if fieldR == nil {
+			continue
+		}
+
 		if fieldR.IsStruct() {
 			structType = fieldR.Type()
 		} else if fieldR.IsStructPtr() {
@@ -409,8 +415,8 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 }
 
 func (info *ModelInfo) DetermineModelId(model interface{}) (interface{}, apperror.Error) {
-	if hook, ok := model.(ModelIDGetterHook); ok {
-		return hook.GetID(), nil
+	if hook, ok := model.(ModelIdGetterHook); ok {
+		return hook.GetId(), nil
 	}
 
 	r, err := reflector.Reflect(model).Struct()
@@ -433,10 +439,10 @@ func (info *ModelInfo) MustDetermineModelId(model interface{}) interface{} {
 	return id
 }
 
-// Determine the  ID for a model and convert it to string.
+// Determine the  Id for a model and convert it to string.
 func (info *ModelInfo) DetermineModelStrId(model interface{}) (string, apperror.Error) {
-	if hook, ok := model.(ModelStrIDGetterHook); ok {
-		return hook.GetStrID(), nil
+	if hook, ok := model.(ModelStrIdGetterHook); ok {
+		return hook.GetStrId(), nil
 	}
 
 	id, err := info.DetermineModelId(model)
@@ -451,7 +457,7 @@ func (info *ModelInfo) DetermineModelStrId(model interface{}) (string, apperror.
 	return fmt.Sprint(id), nil
 }
 
-// Determine the  ID for a model and convert it to string. Panics on error.
+// Determine the  Id for a model and convert it to string. Panics on error.
 func (info *ModelInfo) MustDetermineModelStrId(model interface{}) string {
 	id, err := info.DetermineModelStrId(model)
 	if err != nil {
@@ -470,21 +476,21 @@ func (info *ModelInfo) ModelHasId(model interface{}) (bool, apperror.Error) {
 }
 
 func (info *ModelInfo) SetModelId(model, id interface{}) apperror.Error {
-	// If ID is string, check if model implements SetStrID.
+	// If Id is string, check if model implements SetStrId.
 	if strId, ok := id.(string); ok {
-		if hook, ok := model.(ModelStrIDSetterHook); ok {
+		if hook, ok := model.(ModelStrIdSetterHook); ok {
 			// String id and hook implemented, so use it.
-			err := hook.SetStrID(strId)
+			err := hook.SetStrId(strId)
 			if err != nil {
 				return apperror.Wrap(err, "model_set_id_error")
 			}
 		}
 	}
 
-	// Check if model implements SetID.
+	// Check if model implements SetId.
 	// If so, use it.
-	if hook, ok := model.(ModelIDSetterHook); ok {
-		err := hook.SetID(id)
+	if hook, ok := model.(ModelIdSetterHook); ok {
+		err := hook.SetId(id)
 		if err != nil {
 			return apperror.Wrap(err, "model_set_id_error")
 		}
@@ -933,8 +939,8 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			relField := ""
 			if relation.ForeignField() == "" {
 				// Try to find foreign key field.
-				// We check modelNameID, modelNameId.
-				relField = modelName + "ID"
+				// We check modelNameId, modelNameId.
+				relField = modelName + "Id"
 				if !relatedInfo.HasAttribute(relField) {
 					relField = modelName + "Id"
 					if !relatedInfo.HasAttribute(relField) {
@@ -961,13 +967,13 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 
 		// Check has-one first.
 
-		// Try to fiend ID field.
-		// we check: fieldNameID, fieldNameId, relationNameID and relationNameId
-		relField := fieldName + "ID"
+		// Try to fiend Id field.
+		// we check: fieldNameId, fieldNameId, relationNameId and relationNameId
+		relField := fieldName + "Id"
 		if !model.HasAttribute(relField) {
 			relField = fieldName + "Id"
 			if !model.HasAttribute(relField) {
-				relField = relatedName + "ID"
+				relField = relatedName + "Id"
 				if !model.HasAttribute(relField) {
 					relField = relatedName + "Id"
 					if !model.HasAttribute(relField) {
@@ -990,8 +996,8 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 
 		// Not has-one, so must be belongs to.
 		// Try to find foreign key field.
-		// We check modelNameID, modelNameId
-		relField = modelName + "ID"
+		// We check modelNameId, modelNameId
+		relField = modelName + "Id"
 		if !relatedInfo.HasAttribute(relField) {
 			relField = modelName + "Id"
 			if !relatedInfo.HasAttribute(relField) {
@@ -1024,7 +1030,7 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 
 func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
 	colName := relation.BackendName()
-	if colName == "" || colName == relation.RelatedModel().BackendName() {
+	if colName == utils.CamelCaseToUnderscore(relation.Name()) {
 		colName = relation.Model().BackendName() + "_" + relation.RelatedModel().BackendName()
 	}
 	relation.SetBackendName(colName)

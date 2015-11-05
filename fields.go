@@ -145,10 +145,9 @@ func (f *Field) parseTag(tagContent string) apperror.Error {
 
 		case "index":
 			tag.index = true
-			if value == "" {
-				return apperror.New("invalid_index_tag", "index must be in format: index:index_name")
+			if value != "" {
+				tag.indexName = value
 			}
-			tag.indexName = value
 
 		case "default":
 			if value == "" {

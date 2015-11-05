@@ -1227,6 +1227,7 @@ func (b *BaseBackend) BuildJoins(info *ModelInfo, q *Query) apperror.Error {
 		// query.Normalize() earlier.
 		relation := info.Relation(join.GetRelationName())
 
+		b.Logger().Infof("relation: %+v %+v", join, relation)
 		join.SetCollection(relation.RelatedModel().Collection())
 
 		// Normalize now.
@@ -1339,7 +1340,7 @@ func (b *BaseBackend) doCreate(info *ModelInfo, model interface{}) apperror.Erro
 		}
 	}
 
-	// Persist relationships again since m2m can only be handled  when an ID is set.
+	// Persist relationships again since m2m can only be handled  when an Id is set.
 	if err := b.PersistRelations("create", false, info, model); err != nil {
 		return err
 	}
@@ -1413,7 +1414,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 		return err
 	}
 
-	// Verify that ID is not zero.
+	// Verify that Id is not zero.
 	id, err := info.DetermineModelId(model)
 	if err != nil {
 		return err
@@ -1452,7 +1453,7 @@ func (b *BaseBackend) Update(model interface{}) apperror.Error {
 		return err
 	}
 
-	// Persist relationships again since m2m can only be handled  when an ID is set.
+	// Persist relationships again since m2m can only be handled  when an Id is set.
 	if err := b.PersistRelations("update", false, info, model); err != nil {
 		return err
 	}
@@ -1508,7 +1509,7 @@ func (b *BaseBackend) Delete(model interface{}) apperror.Error {
 		return err
 	}
 
-	// Verify that ID is not zero.
+	// Verify that Id is not zero.
 	hasId, err := info.ModelHasId(model)
 	if err != nil {
 		return err

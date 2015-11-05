@@ -51,13 +51,13 @@ var _ = Describe("Modelinfo", func() {
 				Expect(rel.ForeignField()).To(Equal("Id"))
 			})
 
-			It("Should detect has-one relationship with same-name + 'ID' automatically", func() {
-				type Child struct{ ID uint64 }
+			It("Should detect has-one relationship with same-name + 'Id' automatically", func() {
+				type Child struct{ Id uint64 }
 				type Parent struct {
 					Id uint64
 
 					HasOne   Child
-					HasOneID uint64
+					HasOneId uint64
 				}
 
 				infos, err := buildInfo(&Parent{}, &Child{})
@@ -67,8 +67,8 @@ var _ = Describe("Modelinfo", func() {
 				Expect(rel).ToNot(BeNil())
 
 				Expect(rel.RelationType()).To(Equal(RELATION_TYPE_HAS_ONE))
-				Expect(rel.LocalField()).To(Equal("HasOneID"))
-				Expect(rel.ForeignField()).To(Equal("ID"))
+				Expect(rel.LocalField()).To(Equal("HasOneId"))
+				Expect(rel.ForeignField()).To(Equal("Id"))
 			})
 
 			It("Should error out when missing has-one key field", func() {

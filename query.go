@@ -731,7 +731,9 @@ func (q *Query) Normalize() apperror.Error {
 
 		if strings.Contains(relationName, ".") {
 			// Process nested joins later.
+			// Remove from main joins.
 			nestedJoins = append(nestedJoins, join)
+			delete(q.joins, relationName)
 			continue
 		}
 
@@ -777,6 +779,8 @@ func (q *Query) Normalize() apperror.Error {
 		join.SetRelationName(right)
 		parentJoin.JoinQ(join)
 	}
+
+	q.backend.Logger().Infof("joins: %+v", q.GetJoins())
 
 	// Normalize the statement now.
 

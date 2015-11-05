@@ -211,7 +211,7 @@ func (b *Backend) ExecQuery(statement FieldedExpression) ([]interface{}, apperro
 		data := make(map[string]interface{})
 
 		if info != nil && info.PkAttribute() != nil {
-			data[info.PkAttribute().Name()] = document.RID
+			data[info.PkAttribute().Name()] = document.RId
 		}
 
 		for _, docEntry := range document.Fields() {

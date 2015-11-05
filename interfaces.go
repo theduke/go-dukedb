@@ -38,7 +38,7 @@ type Backend interface {
 	Name() string
 	SetName(name string)
 
-	// Returns true if the backend uses string IDs like MongoDB.
+	// Returns true if the backend uses string Ids like MongoDB.
 	HasStringIds() bool
 
 	HasNativeJoins() bool
@@ -160,7 +160,7 @@ type Backend interface {
 	//
 	// Can be used with different signatures:
 	// backend.Q("collection_name") => Get a query for a collection.
-	// backend.Q("collection_name", ID) => Get a query for a model in a collection. ID must be numeric or string.
+	// backend.Q("collection_name", Id) => Get a query for a model in a collection. Id must be numeric or string.
 	// backend.Q(&myModel) => Get a query for a model.
 	Q(collectionOrModel interface{}, extraModels ...interface{}) *Query
 
@@ -178,10 +178,10 @@ type Backend interface {
 	// Perform a query and get the last result.
 	Last(q *Query, targetModel ...interface{}) (interface{}, apperror.Error)
 
-	// Find first model with primary key ID.
+	// Find first model with primary key Id.
 	FindBy(collection, field string, value interface{}, targetSlice ...interface{}) ([]interface{}, apperror.Error)
 
-	// Find a model in a collection by ID.
+	// Find a model in a collection by Id.
 	FindOne(collection string, id interface{}, targetModel ...interface{}) (interface{}, apperror.Error)
 
 	// Find a model  in a collection based on a field value.
@@ -295,20 +295,20 @@ type ModelMarshalNameHook interface {
 	MarshalName() string
 }
 
-type ModelIDGetterHook interface {
-	GetID() interface{}
+type ModelIdGetterHook interface {
+	GetId() interface{}
 }
 
-type ModelIDSetterHook interface {
-	SetID(id interface{}) error
+type ModelIdSetterHook interface {
+	SetId(id interface{}) error
 }
 
-type ModelStrIDGetterHook interface {
-	GetStrID() string
+type ModelStrIdGetterHook interface {
+	GetStrId() string
 }
 
-type ModelStrIDSetterHook interface {
-	SetStrID(id string) error
+type ModelStrIdSetterHook interface {
+	SetStrId(id string) error
 }
 
 type ModelValidateHook interface {

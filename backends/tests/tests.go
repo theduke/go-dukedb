@@ -69,15 +69,15 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 		Expect(backend.Q("test_models").Count()).To(Equal(0))
 	})
 
-	It("Should insert and set ID, then FindOne()", func() {
+	It("Should insert and set Id, then FindOne()", func() {
 		testModel := NewTestModel(1)
-		testModel.ID = 0
+		testModel.Id = 0
 
 		err := backend.Create(&testModel)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(testModel.ID).ToNot(Equal(0))
+		Expect(testModel.Id).ToNot(Equal(0))
 
-		m, err := backend.FindOne("test_models", testModel.ID)
+		m, err := backend.FindOne("test_models", testModel.Id)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(*m.(*TestModel)).To(Equal(testModel))
 	})
@@ -98,7 +98,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 		err = backend.Update(&testModel)
 		Expect(err).ToNot(HaveOccurred())
 
-		m, err := backend.FindOne("test_models", testModel.ID)
+		m, err := backend.FindOne("test_models", testModel.Id)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(m).To(Equal(&testModel))
 	})
@@ -112,7 +112,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 		err = backend.Delete(&testModel)
 		Expect(err).ToNot(HaveOccurred())
 
-		m, err := backend.FindOne("test_models", testModel.ID)
+		m, err := backend.FindOne("test_models", testModel.Id)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(m).To(BeNil())
 	})
@@ -147,7 +147,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			Expect(backend.Create(m)).ToNot(HaveOccurred())
 
-			rawModel, err := backend.FindOne("marshalled_models", m.ID)
+			rawModel, err := backend.FindOne("marshalled_models", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(rawModel.(*MarshalledModel).MapVal).To(Equal(data))
@@ -164,7 +164,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			Expect(backend.Create(m)).ToNot(HaveOccurred())
 
-			rawModel, err := backend.FindOne("marshalled_models", m.ID)
+			rawModel, err := backend.FindOne("marshalled_models", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(rawModel.(*MarshalledModel).StructVal).To(Equal(data))
@@ -181,7 +181,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			Expect(backend.Create(m)).ToNot(HaveOccurred())
 
-			rawModel, err := backend.FindOne("marshalled_models", m.ID)
+			rawModel, err := backend.FindOne("marshalled_models", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 
 			Expect(rawModel.(*MarshalledModel).StructPtrVal).To(Equal(data))
@@ -195,7 +195,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			m, err := backend.Q("test_models").Filter("int_val", 60).First()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(m.(*TestModel).ID).To(Equal(model.ID))
+			Expect(m.(*TestModel).Id).To(Equal(model.Id))
 		})
 
 		It("Should filter with struct field name", func() {
@@ -204,7 +204,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			m, err := backend.Q("test_models").Filter("IntVal", 61).First()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(m.(*TestModel).ID).To(Equal(model.ID))
+			Expect(m.(*TestModel).Id).To(Equal(model.Id))
 		})
 
 		It("Should filter with simple AND", func() {
@@ -213,7 +213,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			m, err := backend.Q("test_models").Filter("IntVal", 63).Filter("str_val", "str63").First()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(m.(*TestModel).ID).To(Equal(model.ID))
+			Expect(m.(*TestModel).Id).To(Equal(model.Id))
 		})
 
 		It("Should .Query() with target slice", func() {
@@ -222,7 +222,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			var models []TestModel
 
-			_, err := backend.Query(backend.Q("test_models").Filter("id", model.ID), &models)
+			_, err := backend.Query(backend.Q("test_models").Filter("id", model.Id), &models)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(models)).To(Equal(1))
 		})
@@ -233,7 +233,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			var models []*TestModel
 
-			_, err := backend.Query(backend.Q("test_models").Filter("id", model.ID), &models)
+			_, err := backend.Query(backend.Q("test_models").Filter("id", model.Id), &models)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(models[0]).To(Equal(&model))
 		})
@@ -258,7 +258,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			var model TestModel
 
-			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.Id), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -269,7 +269,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			var model *TestModel
 
-			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.QueryOne(backend.Q("test_models").Filter("id", m.Id), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -293,7 +293,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model TestModel
-			_, err := backend.Last(backend.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.Last(backend.Q("test_models").Filter("id", m.Id), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -303,7 +303,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model *TestModel
-			_, err := backend.Last(backend.Q("test_models").Filter("id", m.ID), &model)
+			_, err := backend.Last(backend.Q("test_models").Filter("id", m.Id), &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -366,7 +366,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			m := NewTestModel(1)
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
-			model, err := backend.FindOne("test_models", m.ID)
+			model, err := backend.FindOne("test_models", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -376,7 +376,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model TestModel
-			_, err := backend.FindOne("test_models", m.ID, &model)
+			_, err := backend.FindOne("test_models", m.Id, &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -386,7 +386,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model *TestModel
-			_, err := backend.FindOne("test_models", m.ID, &model)
+			_, err := backend.FindOne("test_models", m.Id, &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -395,7 +395,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			m := NewTestModel(1)
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
-			model, err := backend.FindOneBy("test_models", "id", m.ID)
+			model, err := backend.FindOneBy("test_models", "id", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -405,7 +405,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model TestModel
-			_, err := backend.FindOneBy("test_models", "id", m.ID, &model)
+			_, err := backend.FindOneBy("test_models", "id", m.Id, &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(m))
 		})
@@ -415,7 +415,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(&m)).ToNot(HaveOccurred())
 
 			var model *TestModel
-			_, err := backend.FindOneBy("test_models", "id", m.ID, &model)
+			_, err := backend.FindOneBy("test_models", "id", m.Id, &model)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(model).To(Equal(&m))
 		})
@@ -627,7 +627,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				Expect(backend.Create(t)).ToNot(HaveOccurred())
 				Expect(f.TaskId).To(Equal(t.Id))
 
-				dbFile, err := backend.FindOne("files", f.ID)
+				dbFile, err := backend.FindOne("files", f.Id)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(dbFile.(*File).TaskId).To(Equal(t.Id))
 			})
@@ -644,9 +644,9 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				}
 
 				Expect(backend.Create(t)).ToNot(HaveOccurred())
-				Expect(t.File.ID).ToNot(BeZero())
+				Expect(t.File.Id).ToNot(BeZero())
 
-				m, err := backend.FindOne("files", t.File.ID)
+				m, err := backend.FindOne("files", t.File.Id)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m).ToNot(BeNil())
 				Expect(m.(*File).TaskId).To(Equal(t.Id))
@@ -670,7 +670,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				t.File.Filename = "NewName"
 				Expect(backend.Update(t)).ToNot(HaveOccurred())
 
-				m, _ := backend.FindOne("files", t.File.ID)
+				m, _ := backend.FindOne("files", t.File.Id)
 				Expect(m.(*File).Filename).To(Equal("NewName"))
 			})
 
@@ -708,7 +708,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				Expect(backend.Create(t)).ToNot(HaveOccurred())
 				Expect(backend.Delete(t)).ToNot(HaveOccurred())
 
-				Expect(backend.FindOne("files", t.File.ID)).ToNot(BeNil())
+				Expect(backend.FindOne("files", t.File.Id)).ToNot(BeNil())
 			})
 
 			It("Should join belongs-to", func() {
@@ -728,7 +728,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 				m, err := backend.Q("tasks").Filter("id", t.Id).Join("File").First()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(m.(*Task).File).ToNot(BeNil())
-				Expect(m.(*Task).File.ID).To(Equal(t.File.ID))
+				Expect(m.(*Task).File.Id).To(Equal(t.File.Id))
 			})
 
 			It("Should .Related() with model", func() {
@@ -747,7 +747,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 				m, err := backend.Q(t).Related("File").First()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(m.(*File).ID).To(Equal(t.File.ID))
+				Expect(m.(*File).Id).To(Equal(t.File.Id))
 			})
 
 			It("Should .Related() with id", func() {
@@ -766,7 +766,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 				m, err := backend.Q("tasks", t.Id).Related("File").First()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(m.(*File).ID).To(Equal(t.File.ID))
+				Expect(m.(*File).Id).To(Equal(t.File.Id))
 			})
 		})
 
@@ -1263,7 +1263,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			Expect(tx.Commit()).ToNot(HaveOccurred())
 
-			m, err := backend.FindOne("test_models", model.ID)
+			m, err := backend.FindOne("test_models", model.Id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m).ToNot(BeNil())
 		})
@@ -1282,7 +1282,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 
 			Expect(tx.Rollback()).ToNot(HaveOccurred())
 
-			m, err := backend.FindOne("test_models", model.ID)
+			m, err := backend.FindOne("test_models", model.Id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m).To(BeNil())
 		})
@@ -1340,7 +1340,7 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			Expect(backend.Create(m)).ToNot(HaveOccurred())
 			m.CalledHooks = nil
 
-			m2, err := backend.FindOne("hooks_models", m.ID)
+			m2, err := backend.FindOne("hooks_models", m.Id)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(m2.(*HooksModel).CalledHooks).To(Equal([]string{"after_query"}))
 		})

@@ -22,11 +22,11 @@ var _ = Describe("Utils", func() {
 
 			BeforeEach(func() {
 				modelSlice = []interface{}{&TestModel{
-					ID:     1,
+					Id:     1,
 					StrVal: "str1",
 					IntVal: 1,
 				}, &TestModel{
-					ID:     2,
+					Id:     2,
 					StrVal: "str2",
 					IntVal: 2,
 				}}
