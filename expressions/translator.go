@@ -34,7 +34,7 @@ type BaseTranslator struct {
 	arguments []*ValueExpr
 
 	// Counter for the translations performed since last .Reset().
-	translationCounter int
+	TranslationCounter int
 
 	translator ExpressionTranslator
 }
@@ -87,7 +87,7 @@ func (t *BaseTranslator) WQ(str string) {
 // Reset the buffer.
 func (t *BaseTranslator) Reset() {
 	t.buffer.Reset()
-	t.translationCounter = 0
+	t.TranslationCounter = 0
 }
 
 func (t *BaseTranslator) Translate(expression Expression) apperror.Error {
@@ -466,7 +466,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 	case *SelectStmt:
 		// If counter is bigger than 0, this is a subquery and needs to be
 		// wrapped in parantheses.
-		isSubQuery := t.translationCounter > 0
+		isSubQuery := t.TranslationCounter > 0
 		if isSubQuery {
 			t.W("(")
 		}
@@ -662,7 +662,7 @@ func (t *SqlTranslator) Translate(expression Expression) apperror.Error {
 		panic(fmt.Sprintf("Unhandled statement type: %v", reflect.TypeOf(expression)))
 	}
 
-	t.translationCounter += 1
+	t.TranslationCounter += 1
 	return nil
 }
 
