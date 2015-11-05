@@ -82,8 +82,12 @@ func (b *Backend) DisableSqlProfiling() {
 func (b *Backend) Clone() db.Backend {
 	base := b.BaseBackend.Clone()
 	return &Backend{
-		BaseBackend: *base,
-		dialect:     b.dialect,
+		BaseBackend:         *base,
+		dialect:             b.dialect,
+		Db:                  b.Db,
+		Tx:                  b.Tx,
+		migrationHandler:    b.migrationHandler,
+		sqlProfilingEnabled: b.sqlProfilingEnabled,
 	}
 }
 

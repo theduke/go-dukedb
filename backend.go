@@ -418,7 +418,7 @@ func (b *BaseBackend) CreateField(collection, fieldName string) apperror.Error {
 	if info == nil {
 		return b.unknownColErr(collection)
 	}
-	attr := info.Attribute(fieldName)
+	attr := info.FindAttribute(fieldName)
 	if attr == nil {
 		return apperror.New("unknown_field", fmt.Sprintf("Collection %v does not have a field %v", collection, fieldName))
 	}
