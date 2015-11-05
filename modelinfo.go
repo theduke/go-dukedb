@@ -138,6 +138,18 @@ func (m *ModelInfo) NewSlice() *reflector.SliceReflector {
 }
 
 /**
+ * Transientfields.
+ */
+
+func (m *ModelInfo) TransientFields() map[string]*Field {
+	return m.transientFields
+}
+
+func (m *ModelInfo) SetTransientFields(x map[string]*Field) {
+	m.transientFields = x
+}
+
+/**
  * Attributes.
  */
 
@@ -192,6 +204,10 @@ func (m *ModelInfo) Relations() map[string]*Relation {
 
 func (m *ModelInfo) SetRelations(rels map[string]*Relation) {
 	m.relations = rels
+}
+
+func (m *ModelInfo) AddRelation(rel *Relation) {
+	m.relations[rel.Name()] = rel
 }
 
 func (m *ModelInfo) HasRelation(name string) bool {
@@ -373,7 +389,7 @@ func (info *ModelInfo) buildFields(modelVal *reflector.StructReflector, embedded
 			// relation and must be an attribute.
 			// Construct attribute now.
 
-			attr := buildAttribute(field)
+			attr := BuildAttribute(field)
 			// Add the attribute to attributes map.
 			info.attributes[attr.Name()] = attr
 		} else {
@@ -842,13 +858,13 @@ func (m ModelInfos) analyzeModelRelations(model *ModelInfo) apperror.Error {
 			// map.
 			//
 
-			attr := buildAttribute(field)
+			attr := BuildAttribute(field)
 			model.attributes[attr.Name()] = attr
 			continue
 		}
 
 		// Field is a relation, so build the relation struct.
-		relation := buildRelation(field)
+		relation := BuildRelation(field)
 		relation.SetModel(model)
 		relation.SetRelatedModel(relatedInfo)
 
@@ -1025,8 +1041,8 @@ func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
 			typ:         localField.Type(),
 			name:        localFieldName,
 			backendName: localFieldName,
+			isRequired:  true,
 		},
-		isRequired: true,
 	}
 
 	fk := relation.RelatedModel().Attribute(relation.ForeignField())
@@ -1036,8 +1052,8 @@ func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
 			typ:         fk.Type(),
 			name:        fkName,
 			backendName: fkName,
+			isRequired:  true,
 		},
-		isRequired:   true,
 		isUniqueWith: []string{localFieldName},
 	}
 
