@@ -466,7 +466,7 @@ func (b *BaseBackend) DropField(collection, field string) apperror.Error {
 	return b.backend.Exec(stmt)
 }
 
-func (b *BaseBackend) CreateIndex(collection, indexName string, fields ...string) apperror.Error {
+func (b *BaseBackend) CreateIndex(collection, indexName string, unique bool, fields ...string) apperror.Error {
 	info := b.backend.ModelInfo(collection)
 	if info != nil {
 		collection = info.BackendName()
@@ -483,7 +483,7 @@ func (b *BaseBackend) CreateIndex(collection, indexName string, fields ...string
 		fieldExprs = append(fieldExprs, NewIdExpr(field))
 	}
 
-	stmt := NewCreateIndexStmt(indexName, NewIdExpr(collection), fieldExprs, false, "")
+	stmt := NewCreateIndexStmt(indexName, NewIdExpr(collection), fieldExprs, unique, "")
 
 	return b.backend.Exec(stmt)
 }

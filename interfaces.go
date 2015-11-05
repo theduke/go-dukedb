@@ -148,7 +148,7 @@ type Backend interface {
 
 	// Create an index for fields on a collection.
 	// If you need more complex indexes, use Exec() with a CreateIndexStatement.
-	CreateIndex(collection, indexName string, fields ...string) apperror.Error
+	CreateIndex(collection, indexName string, unique bool, fields ...string) apperror.Error
 
 	// Drop an index.
 	DropIndex(indexName string) apperror.Error
