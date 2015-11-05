@@ -75,6 +75,8 @@ type Field struct {
 	embeddingStructName string
 	backendName         string
 	marshalName         string
+
+	isRequired bool
 }
 
 // Parse the information contained in a 'db:"xxx"' field tag.
@@ -319,6 +321,18 @@ func (f *Field) SetMarshalName(val string) {
 }
 
 /**
+ * IsRequired.
+ */
+
+func (f *Field) IsRequired() bool {
+	return f.isRequired
+}
+
+func (f *Field) SetIsRequired(val bool) {
+	f.isRequired = val
+}
+
+/**
  * Attribute.
  */
 
@@ -333,7 +347,6 @@ type Attribute struct {
 	autoIncrement  bool
 	isUnique       bool
 	isUniqueWith   []string
-	isRequired     bool
 	ignoreIfZero   bool
 	isIndex        bool
 	indexName      string
@@ -343,7 +356,7 @@ type Attribute struct {
 }
 
 // buildAttribute builds up an attribute based on a field.
-func buildAttribute(field *Field) *Attribute {
+func BuildAttribute(field *Field) *Attribute {
 	attr := &Attribute{}
 	attr.Field = *field
 
@@ -474,18 +487,6 @@ func (a *Attribute) SetIsUniqueWith(val []string) {
 }
 
 /**
- * IsRequired.
- */
-
-func (a *Attribute) IsRequired() bool {
-	return a.isRequired
-}
-
-func (a *Attribute) SetIsRequired(val bool) {
-	a.isRequired = val
-}
-
-/**
  * IgnoreIfZero.
  */
 
@@ -613,7 +614,7 @@ type Relation struct {
 }
 
 // buildRelation builds up a relation based on a field.
-func buildRelation(field *Field) *Relation {
+func BuildRelation(field *Field) *Relation {
 	relation := &Relation{}
 	relation.Field = *field
 
