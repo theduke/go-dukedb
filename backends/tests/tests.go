@@ -1244,6 +1244,32 @@ func TestBackend(skipFlag *bool, backendBuilder func() (db.Backend, apperror.Err
 			})
 
 		})
+
+		Describe("Complex relations", func() {
+			It("Should do a nested join", func() {
+				backend.ModelInfo("projects").Relation("Todos").SetAutoCreate(true)
+
+				tags := []Tag{Tag{Tag: "T1"}, {Tag: "T2"}, {Tag: "T3"}, {Tag: "T4"}}
+				Expect(backend.Create(&tags[0], &tags[1], &tags[2], &tags[3])).ToNot(HaveOccurred())
+
+				p := &Project{
+					Name: "P1",
+					Todos: []Task{
+						Task{Name: "Task 1", Tags: []Tag{tags[0], tags[1]}},
+						Task{Name: "Task 2", Tags: []Tag{tags[2], tags[3]}},
+					},
+				}
+
+				Expect(backend.Create(p)).ToNot(HaveOccurred())
+
+				raw, err := backend.Q("projects").Filter("id", p.Id).Join("Todos.Tags").First()
+				Expect(err).ToNot(HaveOccurred())
+				m := raw.(*Project)
+				Expect(m.Todos).To(HaveLen(2))
+				Expect(m.Todos[0].Tags).To(Equal([]Tag{tags[0], tags[1]}))
+				Expect(m.Todos[1].Tags).To(Equal([]Tag{tags[2], tags[3]}))
+			})
+		})
 	})
 
 	Describe("Transactions", func() {
