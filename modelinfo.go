@@ -126,7 +126,7 @@ func (m *ModelInfo) SetMarshalName(val string) {
 }
 
 func (m *ModelInfo) New() interface{} {
-	return m.reflector.New().Interface()
+	return m.reflector.New().Addr().Interface()
 }
 
 func (m *ModelInfo) NewReflector() *reflector.StructReflector {
@@ -1105,35 +1105,37 @@ func (m ModelInfos) buildM2MRelation(relation *Relation) apperror.Error {
 	m[colName] = col
 
 	// Add new relationships to infos.
-	info := relation.Model()
-	info.relations[colName] = &Relation{
-		Field: Field{
-			name:        colName,
-			backendName: colName,
-			marshalName: colName,
-		},
+	/*
+		info := relation.Model()
+		info.relations[colName] = &Relation{
+			Field: Field{
+				name:        colName,
+				backendName: colName,
+				marshalName: colName,
+			},
 
-		model:        info,
-		relatedModel: col,
-		relationType: RELATION_TYPE_HAS_MANY,
-		localField:   relation.LocalField(),
-		foreignField: localFieldName,
-	}
+			model:        info,
+			relatedModel: col,
+			relationType: RELATION_TYPE_HAS_MANY,
+			localField:   relation.LocalField(),
+			foreignField: localFieldName,
+		}
 
-	info = relation.RelatedModel()
-	info.relations[colName] = &Relation{
-		Field: Field{
-			name:        colName,
-			backendName: colName,
-			marshalName: colName,
-		},
+		info = relation.RelatedModel()
+		info.relations[colName] = &Relation{
+			Field: Field{
+				name:        colName,
+				backendName: colName,
+				marshalName: colName,
+			},
 
-		model:        info,
-		relatedModel: col,
-		relationType: RELATION_TYPE_HAS_MANY,
-		localField:   relation.ForeignField(),
-		foreignField: fkName,
-	}
+			model:        info,
+			relatedModel: col,
+			relationType: RELATION_TYPE_HAS_MANY,
+			localField:   relation.ForeignField(),
+			foreignField: fkName,
+		}
+	*/
 
 	return nil
 }

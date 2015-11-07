@@ -287,6 +287,7 @@ func (q *Query) JoinQ(jqs ...*RelationQuery) *Query {
 		if name == "" {
 			name = "custom_join_" + strconv.Itoa(len(q.joins))
 		}
+		jq.SetBaseQuery(q)
 		q.joins[name] = jq
 	}
 	return q
@@ -518,7 +519,6 @@ func (q *RelationQuery) First(targetModel ...interface{}) (interface{}, apperror
 	if err != nil {
 		return nil, err
 	}
-	q.backend.Logger().Infof("new query: %+v", newQ)
 	return newQ.First(targetModel...)
 }
 
@@ -779,8 +779,6 @@ func (q *Query) Normalize() apperror.Error {
 		join.SetRelationName(right)
 		parentJoin.JoinQ(join)
 	}
-
-	q.backend.Logger().Infof("joins: %+v", q.GetJoins())
 
 	// Normalize the statement now.
 

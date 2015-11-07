@@ -856,8 +856,6 @@ func (b *BaseBackend) BuildRelationQuery(q *RelationQuery) (*Query, apperror.Err
 		}
 	}
 
-	b.Logger().Errorf("join query: models: %v - filterArgs: %v", len(baseModels), filterArgs)
-
 	resultQuery := &q.Query
 	resultQuery.SetCollection(relation.RelatedModel().Collection())
 
@@ -1215,7 +1213,6 @@ func (b *BaseBackend) buildJoin(relation *Relation, jq *RelationQuery) (*JoinStm
 
 func (b *BaseBackend) BuildJoins(info *ModelInfo, q *Query) apperror.Error {
 	stmt := q.GetStatement()
-	// Recusively normalize all joins.
 	for _, join := range q.joins {
 		if join.GetRelationName() == "" {
 			// Custom join, so just add it to the statement.
@@ -1227,7 +1224,6 @@ func (b *BaseBackend) BuildJoins(info *ModelInfo, q *Query) apperror.Error {
 		// query.Normalize() earlier.
 		relation := info.Relation(join.GetRelationName())
 
-		b.Logger().Infof("relation: %+v %+v", join, relation)
 		join.SetCollection(relation.RelatedModel().Collection())
 
 		// Normalize now.
@@ -1571,13 +1567,14 @@ func (b *BaseBackend) DoJoins(baseInfo *ModelInfo, q *Query, models []interface{
 
 	// Set models on the query so BuildRelationQuery has access.
 	q.SetModels(models)
-	b.Logger().Infof("settings models: %v", len(models))
 
 	for _, jq := range q.GetJoins() {
+
 		if err := b.DoJoin(baseInfo, models, jq); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -1617,17 +1614,6 @@ func (b *BaseBackend) DoJoin(baseInfo *ModelInfo, objs []interface{}, joinQ *Rel
 			assigner(relation, joinQ, resultQuery, objs, res)
 		} else {
 			assignJoinModels(relation, joinQ, objs, res)
-		}
-
-		// Process nested joins.
-		if nestedJoins := joinQ.GetJoins(); len(nestedJoins) > 0 {
-			// Set models so BuildRelationQuery has access.
-			joinQ.SetModels(res)
-			for _, jq := range nestedJoins {
-				if err := b.DoJoin(relation.RelatedModel(), res, jq); err != nil {
-					return nil
-				}
-			}
 		}
 	}
 
